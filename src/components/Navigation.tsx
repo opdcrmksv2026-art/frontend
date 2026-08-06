@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { 
-  Search, Menu, X, LayoutDashboard, Users, FileText, 
-  Pill, Package, Factory, Stethoscope, Briefcase, MessagesSquare, 
+import {
+  Search, Menu, X, LayoutDashboard, Users, FileText,
+  Pill, Package, Factory, Stethoscope, Briefcase, MessagesSquare,
   Settings, Send, ChevronDown, Hexagon, UserPlus,
   type LucideIcon
 } from 'lucide-react'
@@ -31,14 +31,14 @@ const navigationGroups: NavGroup[] = [
     label: "Main",
     items: [
       { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-      { 
-        name: 'Patients', 
+      {
+        name: 'Patients',
         icon: Users,
         subItems: [
           { name: 'New Patient', href: '/patients/new' },
           { name: 'Patient List', href: '/patients' },
           { name: 'Patient History', href: '/patients/history' },
-          { name: 'Follow Ups', href: '/patients/followups', badge: { text: '22', color: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' } },
+          { name: 'Follow Ups', href: '/patients/followups' },
           { name: 'Referral Patients', href: '/patients/referrals' }
         ]
       },
@@ -48,9 +48,8 @@ const navigationGroups: NavGroup[] = [
         icon: FileText,
         subItems: [
           { name: 'Create Invoice', href: '/billing/new' },
-          { name: 'Orders', href: '/billing/orders' },
           { name: 'Payments', href: '/billing/payments' },
-          { name: 'Refunds', href: '/billing/refunds' }
+          // { name: 'Refunds', href: '/billing/refunds' }
         ]
       },
       { name: 'Medicine Orders', href: '/orders', icon: Pill },
@@ -107,13 +106,27 @@ export default function Navigation() {
     setExpandedMenus(prev => ({ ...prev, [name]: !prev[name] }))
   }
 
+  // Auto-expand menus containing the active sub-item when path changes
+  useEffect(() => {
+    navigationGroups.forEach(group => {
+      group.items.forEach(item => {
+        if (item.subItems?.some(sub => pathname === sub.href)) {
+          setExpandedMenus(prev => {
+            if (prev[item.name]) return prev
+            return { ...prev, [item.name]: true }
+          })
+        }
+      })
+    })
+  }, [pathname])
+
   return (
     <>
       {/* Mobile Top Bar */}
       <div className="md:hidden flex items-center justify-between bg-[#0B1220] text-white p-4 border-b border-white/5 relative z-50">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg flex items-center justify-center shadow-lg shadow-emerald-500/20">
-             <Hexagon className="w-5 h-5 text-white fill-emerald-500/50" />
+            <Hexagon className="w-5 h-5 text-white fill-emerald-500/50" />
           </div>
           <h2 className="text-lg font-bold tracking-tight">Karan Singh Vaidh</h2>
         </div>
@@ -125,9 +138,9 @@ export default function Navigation() {
       {/* Mobile Overlay */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-[#0B1220]/80 backdrop-blur-md z-40 md:hidden" 
+            className="fixed inset-0 bg-[#0B1220]/80 backdrop-blur-md z-40 md:hidden"
             onClick={() => setIsOpen(false)}
           />
         )}
@@ -201,13 +214,13 @@ export default function Navigation() {
                         >
                           {/* Active Indicator & Background */}
                           {isGroupActive && (
-                            <motion.div 
+                            <motion.div
                               layoutId="activeNavIndicator"
                               className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-transparent rounded-2xl border border-blue-500/20"
                             />
                           )}
                           {isGroupActive && (
-                            <motion.div 
+                            <motion.div
                               layoutId="activeNavLeftBorder"
                               className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-blue-500 rounded-r-full shadow-[0_0_12px_rgba(59,130,246,0.8)]"
                             />
@@ -231,19 +244,19 @@ export default function Navigation() {
                           </div>
                         </Link>
                       ) : (
-                        <button 
+                        <button
                           onClick={() => toggleMenu(item.name)}
                           className="relative w-full group outline-none cursor-pointer"
                         >
                           {/* Active Indicator & Background */}
-                          {isGroupActive && !isExpanded && (
-                            <motion.div 
+                          {isGroupActive && (
+                            <motion.div
                               layoutId="activeNavIndicator"
                               className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-transparent rounded-2xl border border-blue-500/10"
                             />
                           )}
-                          {isGroupActive && !isExpanded && (
-                            <motion.div 
+                          {isGroupActive && (
+                            <motion.div
                               layoutId="activeNavLeftBorder"
                               className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-blue-500/50 rounded-r-full"
                             />
@@ -272,7 +285,7 @@ export default function Navigation() {
                       {/* Submenus */}
                       <AnimatePresence initial={false}>
                         {item.subItems && isExpanded && (
-                          <motion.div 
+                          <motion.div
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
@@ -287,9 +300,8 @@ export default function Navigation() {
                                     key={subItem.name}
                                     href={subItem.href}
                                     onClick={() => setIsOpen(false)}
-                                    className={`flex items-center justify-between px-3 py-2 text-sm font-medium transition-all rounded-xl relative group ${
-                                      isSubActive ? 'text-blue-400 bg-white/5' : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
-                                    }`}
+                                    className={`flex items-center justify-between px-3 py-2 text-sm font-medium transition-all rounded-xl relative group ${isSubActive ? 'text-blue-400 bg-white/5' : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
+                                      }`}
                                   >
                                     <div className="flex items-center gap-3">
                                       <div className={`w-[5px] h-[5px] rounded-full transition-colors ${isSubActive ? 'bg-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.8)]' : 'bg-transparent group-hover:bg-slate-600'}`} />

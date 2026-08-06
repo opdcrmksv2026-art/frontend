@@ -74,3 +74,31 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Print CSS Stylesheet - Ensures only the clean clinic receipt card is printed without layout distortion */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  
+  #printable-receipt, #printable-receipt * {
+    visibility: visible !important;
+  }
+
+  #printable-receipt {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 24px !important;
+    background: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    color: #0f172a !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+}
