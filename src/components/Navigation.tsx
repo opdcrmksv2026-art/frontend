@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import {
   Search, Menu, X, LayoutDashboard, Users, FileText,
   Pill, Package, Factory, Stethoscope, Briefcase, MessagesSquare,
-  Settings, Send, ChevronDown, Hexagon, UserPlus,
+  Settings, Send, ChevronDown, Hexagon, UserPlus, LogOut,
   type LucideIcon
 } from 'lucide-react'
 
@@ -329,20 +329,31 @@ export default function Navigation() {
 
         </div>
 
-        {/* 4. User Profile */}
+        {/* 4. User Profile & Logout */}
         <div className="p-4 relative z-10 shrink-0 border-t border-white/5 bg-black/20 backdrop-blur-md">
-          <div className="flex items-center justify-between p-2 rounded-2xl hover:bg-white/5 cursor-pointer transition-colors group">
+          <div className="flex items-center justify-between p-2 rounded-2xl bg-white/5 border border-white/5">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4" alt="Dr. Admin" className="w-10 h-10 rounded-full border-2 border-[#0B1220] group-hover:border-slate-700 transition-colors" />
+                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4" alt="Dr. Admin" className="w-10 h-10 rounded-full border-2 border-emerald-500/40" />
                 <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0B1220] rounded-full" />
               </div>
               <div>
-                <p className="text-sm font-bold text-white leading-tight group-hover:text-blue-400 transition-colors">Dr. Vikas</p>
-                <p className="text-[11px] text-slate-400 font-medium">Administrator</p>
+                <p className="text-sm font-bold text-white leading-tight">Dr. Vikas</p>
+                <p className="text-[11px] text-emerald-400 font-medium">Chief Doctor</p>
               </div>
             </div>
-            <Settings className="w-5 h-5 text-slate-500 group-hover:text-white transition-colors group-hover:rotate-90 duration-300" />
+            <button
+              onClick={() => {
+                if (confirm("Kya aap Logout karna chahte hain?")) {
+                  localStorage.removeItem("ksv_user_auth")
+                  window.location.reload()
+                }
+              }}
+              className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all border border-transparent hover:border-rose-500/20 cursor-pointer"
+              title="Logout from Portal"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
