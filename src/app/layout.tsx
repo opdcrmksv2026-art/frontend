@@ -9,6 +9,9 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'KSV CRM',
   description: 'Clinic Inventory & OPD CRM System',
+  icons: {
+    icon: '/favicon.ico',
+  },
 }
 
 export default function RootLayout({

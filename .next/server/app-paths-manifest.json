@@ -1,8 +1,6 @@
 {
-  "/patients/new/page": "app/patients/new/page.js",
-  "/billing/new/page": "app/billing/new/page.js",
-  "/patients/followups/page": "app/patients/followups/page.js",
+  "/page": "app/page.js",
   "/patients/page": "app/patients/page.js",
-  "/billing/payments/page": "app/billing/payments/page.js",
-  "/page": "app/page.js"
+  "/billing/new/page": "app/billing/new/page.js",
+  "/billing/payments/page": "app/billing/payments/page.js"
 }

@@ -330,12 +330,12 @@ export default function PatientsListPage() {
                     className="px-6 py-4 cursor-pointer hover:bg-slate-100/50 hover:text-slate-600 transition-colors animate-in"
                   >
                     <div className="flex items-center gap-1">
-                      Age & Gender
+                      Age &amp; Gender
                       <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                     </div>
                   </th>
                   <th className="px-6 py-4">Contact Numbers</th>
-                  <th className="px-6 py-4">State & Pin</th>
+                  <th className="px-6 py-4">State &amp; Pin</th>
                   <th 
                     onClick={() => handleSort("createdAt")}
                     className="px-6 py-4 cursor-pointer hover:bg-slate-100/50 hover:text-slate-600 transition-colors"

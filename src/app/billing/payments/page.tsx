@@ -298,10 +298,10 @@ export default function PaymentsPage() {
           <div>
             <h1 className="text-xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-blue-600" />
-              Payments & Financial Records
+              Payments &amp; Financial Records
             </h1>
             <p className="text-xs text-slate-400 font-semibold mt-0.5">
-              View all transaction receipts, payment mode splits & invoices
+              View all transaction receipts, payment mode splits &amp; invoices
             </p>
           </div>
         </div>
@@ -497,7 +497,7 @@ export default function PaymentsPage() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-400 font-extrabold uppercase text-[10px] tracking-wider">
                   <tr>
-                    <th className="py-4 px-6">Invoice & Date</th>
+                    <th className="py-4 px-6">Invoice &amp; Date</th>
                     <th className="py-4 px-6">Patient Name</th>
                     <th className="py-4 px-6">Prescribed Kit / Disease</th>
                     <th className="py-4 px-6 text-right">Subtotal</th>
@@ -731,8 +731,8 @@ export default function PaymentsPage() {
                 {/* Header Letterhead */}
                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4">
                   <div>
-                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">KSV HEALTHCARE & AYURVEDA</h1>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">Specialized Medical Care & Ayurvedic OPD Clinic</p>
+                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">KSV HEALTHCARE &amp; AYURVEDA</h1>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">Specialized Medical Care &amp; Ayurvedic OPD Clinic</p>
                     <p className="text-[11px] text-slate-400 font-semibold mt-1">Helpline: +91 98765 43210 | GSTIN: 07AAAAA0000A1Z5</p>
                   </div>
                   <div className="text-right">
@@ -765,7 +765,7 @@ export default function PaymentsPage() {
 
                 {/* Treatment Items Table */}
                 <div>
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Prescribed Treatments & Medicine Kits</h3>
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Prescribed Treatments &amp; Medicine Kits</h3>
                   <div className="border border-slate-200 rounded-2xl overflow-hidden">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-100/80 border-b border-slate-200 text-slate-600 uppercase font-bold text-[10px] tracking-wider">
@@ -857,7 +857,7 @@ export default function PaymentsPage() {
 
                   <div className="text-center pt-6">
                     <div className="w-32 border-b border-slate-400 mb-1"></div>
-                    <p className="text-[10px] font-bold uppercase text-slate-400">Authorized Stamp & Sign</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Authorized Stamp &amp; Sign</p>
                   </div>
                 </div>
 

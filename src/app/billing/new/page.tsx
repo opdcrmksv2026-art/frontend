@@ -397,7 +397,7 @@ export default function CreateInvoicePage() {
         
         <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3.5">
           <User className="w-5 h-5 text-blue-500" />
-          Patient Selection & Identification
+          Patient Selection &amp; Identification
         </h2>
 
         {/* Live Search Patient */}
@@ -520,7 +520,7 @@ export default function CreateInvoicePage() {
           onClick={handleNextStep}
           className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold px-6 py-3.5 rounded-2xl flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all text-sm"
         >
-          Next: Disease & Kit Details
+          Next: Disease &amp; Kit Details
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
@@ -535,7 +535,7 @@ export default function CreateInvoicePage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
           <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
             <Pill className="w-5 h-5 text-emerald-500" />
-            Disease Treatment & Kit Prescriptions ({treatments.length})
+            Disease Treatment &amp; Kit Prescriptions ({treatments.length})
           </h2>
           <span className="text-xs font-extrabold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
             Total Subtotal: ₹{priceVal.toLocaleString("en-IN")}
@@ -638,7 +638,7 @@ export default function CreateInvoicePage() {
           </div>
 
           <div className="flex flex-col">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Prescription & Consultation Notes</label>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Prescription &amp; Consultation Notes</label>
             <textarea
               name="notes"
               rows={3}
@@ -667,7 +667,7 @@ export default function CreateInvoicePage() {
           onClick={handleNextStep}
           className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold px-6 py-3.5 rounded-2xl flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all text-sm"
         >
-          Next: Billing & Payment Split
+          Next: Billing &amp; Payment Split
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
@@ -942,7 +942,7 @@ export default function CreateInvoicePage() {
           ) : (
             <>
               <CheckCircle2 className="w-5 h-5" />
-              Confirm & Generate Bill
+              Confirm &amp; Generate Bill
             </>
           )}
         </button>
@@ -1110,8 +1110,8 @@ export default function CreateInvoicePage() {
                 {/* Header Letterhead */}
                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4">
                   <div>
-                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">KSV HEALTHCARE & AYURVEDA</h1>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">Specialized Medical Care & Ayurvedic OPD Clinic</p>
+                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">KSV HEALTHCARE &amp; AYURVEDA</h1>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">Specialized Medical Care &amp; Ayurvedic OPD Clinic</p>
                     <p className="text-[11px] text-slate-400 font-semibold mt-1">Helpline: +91 98765 43210 | GSTIN: 07AAAAA0000A1Z5</p>
                   </div>
                   <div className="text-right">
@@ -1144,7 +1144,7 @@ export default function CreateInvoicePage() {
 
                 {/* Treatment Items Table */}
                 <div>
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Prescribed Treatments & Medicine Kits</h3>
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Prescribed Treatments &amp; Medicine Kits</h3>
                   <div className="border border-slate-200 rounded-2xl overflow-hidden">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-100/80 border-b border-slate-200 text-slate-600 uppercase font-bold text-[10px] tracking-wider">
@@ -1236,7 +1236,7 @@ export default function CreateInvoicePage() {
 
                   <div className="text-center pt-6">
                     <div className="w-32 border-b border-slate-400 mb-1"></div>
-                    <p className="text-[10px] font-bold uppercase text-slate-400">Authorized Stamp & Sign</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Authorized Stamp &amp; Sign</p>
                   </div>
                 </div>
 
@@ -1255,7 +1255,7 @@ export default function CreateInvoicePage() {
                 className="w-full py-3 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-extrabold rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer text-xs shadow-sm active:scale-[0.99]"
               >
                 <X className="w-4 h-4" />
-                Close Receipt & Return to Directory
+                Close Receipt &amp; Return to Directory
               </button>
             </div>
 

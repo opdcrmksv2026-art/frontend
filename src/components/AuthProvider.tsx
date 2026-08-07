@@ -106,7 +106,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
             <div>
               <span className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-blue-50 border border-blue-100 text-blue-600 font-extrabold text-[10px] uppercase tracking-wider rounded-full shadow-xs">
-                <ShieldCheck className="w-3.5 h-3.5" /> OPD & Clinic Portal
+                <ShieldCheck className="w-3.5 h-3.5" /> OPD &amp; Clinic Portal
               </span>
             </div>
           </div>
@@ -200,7 +200,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
           {/* Footer Copyright */}
           <p className="text-center text-[10px] text-slate-400 mt-5 font-bold uppercase tracking-wider">
-            © 2026 KSV Healthcare & Ayurveda Portal
+            © 2026 KSV Healthcare &amp; Ayurveda Portal
           </p>
 
         </div>
