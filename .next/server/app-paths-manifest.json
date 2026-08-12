@@ -1,6 +1,4 @@
 {
   "/page": "app/page.js",
-  "/patients/page": "app/patients/page.js",
-  "/billing/new/page": "app/billing/new/page.js",
-  "/billing/payments/page": "app/billing/payments/page.js"
+  "/inventory/kiyba/page": "app/inventory/kiyba/page.js"
 }

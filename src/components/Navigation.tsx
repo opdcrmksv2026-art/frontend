@@ -56,13 +56,10 @@ const navigationGroups: NavGroup[] = [
       {
         name: 'Inventory',
         icon: Package,
-        badge: { text: '5', color: 'bg-rose-500/20 text-rose-400 border border-rose-500/20' },
         subItems: [
-          { name: 'Medicine Stock', href: '/inventory/medicine' },
-          { name: 'Plant', href: '/inventory/plant' },
-          { name: 'Transfers', href: '/inventory/transfers', badge: { text: '12', color: 'bg-blue-500/20 text-blue-400 border border-blue-500/20' } },
-          { name: 'Low Stock', href: '/inventory/low-stock' },
-          { name: 'Expiry', href: '/inventory/expiry' }
+          { name: 'Kiyba', href: '/inventory/kiyba' },
+          { name: 'Karan Singh Vaidh (KSV)', href: '/inventory/ksv' },
+          { name: 'Maxxi Pharma', href: '/inventory/maxxi-pharma' }
         ]
       }
     ]
@@ -70,9 +67,6 @@ const navigationGroups: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { name: 'Manufacturing Plant', href: '/plant', icon: Factory },
-      { name: 'OPD Inventory', href: '/opd-inventory', icon: Package },
-      { name: 'Transfers', href: '/transfers', icon: Send },
       { name: 'Diseases', href: '/diseases', icon: Stethoscope },
       { name: 'Medicine Kits', href: '/kits', icon: Briefcase }
     ]

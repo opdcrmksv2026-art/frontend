@@ -75,27 +75,28 @@
   }
 }
 
-/* Print CSS Stylesheet - Ensures only the clean clinic receipt card is printed without layout distortion */
+/* Print CSS Stylesheet - Ensures only the clean bill / invoice card is printed without layout distortion */
 @media print {
   body * {
     visibility: hidden !important;
   }
   
-  #printable-receipt, #printable-receipt * {
+  #printable-receipt, #printable-receipt *,
+  #tally-printable-invoice, #tally-printable-invoice * {
     visibility: visible !important;
   }
 
-  #printable-receipt {
+  #printable-receipt,
+  #tally-printable-invoice {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
     margin: 0 !important;
-    padding: 24px !important;
+    padding: 0 !important;
     background: white !important;
     box-shadow: none !important;
-    border: none !important;
-    color: #0f172a !important;
+    color: #000000 !important;
   }
 
   .print\:hidden {

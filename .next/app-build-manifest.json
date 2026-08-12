@@ -11,20 +11,10 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/patients/page": [
+    "/inventory/kiyba/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/patients/page.js"
-    ],
-    "/billing/new/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/billing/new/page.js"
-    ],
-    "/billing/payments/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/billing/payments/page.js"
+      "static/chunks/app/inventory/kiyba/page.js"
     ]
   }
 }

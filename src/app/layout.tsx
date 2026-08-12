@@ -25,9 +25,9 @@ export default function RootLayout({
         <AuthProvider>
           <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden w-full">
             <Navigation />
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-12 bg-slate-50 relative w-full">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-5 lg:p-6 bg-slate-50 relative w-full custom-scrollbar">
               <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none"></div>
-              <div className="mx-auto max-w-[1400px] relative z-10 w-full">
+              <div className="w-full relative z-10">
                 {children}
               </div>
             </div>
