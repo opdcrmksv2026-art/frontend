@@ -35,6 +35,7 @@ interface KiybaInvoiceFormProps {
   onOpenCatalogModal: () => void
   initialInvoice?: KiybaInvoice | null
   onCancel?: () => void
+  defaultInvoiceType?: 'SALE' | 'PURCHASE'
 }
 
 export default function KiybaInvoiceForm({
@@ -46,7 +47,8 @@ export default function KiybaInvoiceForm({
   onOpenPartyModal,
   onOpenCatalogModal,
   initialInvoice,
-  onCancel
+  onCancel,
+  defaultInvoiceType
 }: KiybaInvoiceFormProps) {
   // 1. Company / Seller
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(
@@ -73,6 +75,7 @@ export default function KiybaInvoiceForm({
   const [paymentTerms, setPaymentTerms] = useState<string>(initialInvoice?.paymentTerms || 'Bank Transfer / Cash')
   const [totalBags, setTotalBags] = useState<string>(initialInvoice?.totalBags || '')
   const [reverseCharge, setReverseCharge] = useState<'N' | 'Y'>(initialInvoice?.reverseCharge || 'N')
+  const [invoiceType, setInvoiceType] = useState<'SALE' | 'PURCHASE'>(initialInvoice?.type || defaultInvoiceType || 'SALE')
 
   // 4. Line Items Grid (Starts clean with 1 clean item row, no dummy data!)
   const [items, setItems] = useState<InvoiceItemRow[]>(
@@ -233,7 +236,7 @@ export default function KiybaInvoiceForm({
 
   // Calculations
   const subtotal = items.reduce((sum, it) => sum + (it.amount || 0), 0)
-  const totalQuantity = items.reduce((sum, it) => sum + (it.quantity || 0), 0)
+  const totalQuantity = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0)
 
   // HSN Tax Breakdown
   const hsnMap: { [key: string]: { taxable: number; taxRate: number } } = {}
@@ -299,10 +302,16 @@ export default function KiybaInvoiceForm({
 
     // Filter out completely empty items if any
     const validItems = items.filter((it) => it.description.trim() || it.amount > 0)
-    const itemsToSave = validItems.length > 0 ? validItems : items
+    const itemsToSave = (validItems.length > 0 ? validItems : items).map((it) => ({
+      ...it,
+      quantity: Number(it.quantity) || 0,
+      rate: Number(it.rate) || 0,
+      discountPercent: Number(it.discountPercent) || 0,
+    }))
 
     const invoice: KiybaInvoice = {
       id: initialInvoice?.id || `inv_${Date.now()}`,
+      type: invoiceType,
       invoiceNo: invoiceNo || '1',
       refNo,
       invoiceDate,
@@ -349,20 +358,7 @@ export default function KiybaInvoiceForm({
       {/* Tally Voucher Top Header Bar */}
       <div className="bg-[#0f172a] text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border border-slate-800 shadow-xl">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-md">
-            <FileSpreadsheet className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">
-                Voucher Entry
-              </span>
-              <span className="text-xs font-semibold text-slate-400">Tally Sales / Tax Invoice</span>
-            </div>
-            <h2 className="text-lg font-black text-white tracking-tight">
-              Tax Invoice Creation — #{invoiceNo}
-            </h2>
-          </div>
+          {/* Empty left side */}
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -389,7 +385,9 @@ export default function KiybaInvoiceForm({
           {/* Company / Seller */}
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label className="text-[11px] font-bold text-slate-500 uppercase">Company (Seller) *</label>
+              <label className="text-[11px] font-bold text-slate-500 uppercase">
+                {invoiceType === 'PURCHASE' ? 'Our Firm (Buyer) *' : 'Company (Seller) *'}
+              </label>
               <button
                 type="button"
                 onClick={onOpenCompanyModal}
@@ -414,7 +412,9 @@ export default function KiybaInvoiceForm({
           {/* Party / Buyer */}
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label className="text-[11px] font-bold text-slate-500 uppercase">Party A/c Name (Buyer) *</label>
+              <label className="text-[11px] font-bold text-slate-500 uppercase">
+                {invoiceType === 'PURCHASE' ? 'Supplier (Seller) *' : 'Party A/c Name (Buyer) *'}
+              </label>
               <button
                 type="button"
                 onClick={onOpenPartyModal}
@@ -536,7 +536,7 @@ export default function KiybaInvoiceForm({
               onClick={onOpenCatalogModal}
               className="text-[11px] font-bold text-slate-500 hover:text-slate-800"
             >
-              + Catalog Master
+              + Product Name
             </button>
             <button
               type="button"

@@ -5,7 +5,8 @@ import {
   CompanyProfile,
   PartyProfile,
   CatalogItem,
-  KiybaInvoice
+  KiybaInvoice,
+  OpeningStockEntry
 } from '@/types/kiybaBilling'
 import {
   DEFAULT_COMPANIES,
@@ -18,6 +19,7 @@ import TallyInvoicePrint from '@/components/kiyba/TallyInvoicePrint'
 import CompanyModal from '@/components/kiyba/CompanyModal'
 import PartyModal from '@/components/kiyba/PartyModal'
 import CatalogModal from '@/components/kiyba/CatalogModal'
+import OpeningStockModal from '@/components/kiyba/OpeningStockModal'
 import {
   FileText,
   Plus,
@@ -43,8 +45,9 @@ export default function KiybaPage() {
   const [parties, setParties] = useState<PartyProfile[]>([])
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [invoices, setInvoices] = useState<KiybaInvoice[]>([])
+  const [openingStock, setOpeningStock] = useState<OpeningStockEntry[]>([])
 
-  // Active Tab: 'invoices' | 'create' | 'companies' | 'parties' | 'catalog'
+  // Active Tab: 'invoices' | 'create' | 'companies' | 'parties' | 'catalog' | 'opening-stock'
   const [activeTab, setActiveTab] = useState<string>('invoices')
 
   // Modals & Print Previews
@@ -60,9 +63,13 @@ export default function KiybaPage() {
   const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false)
   const [editingCatalogItem, setEditingCatalogItem] = useState<CatalogItem | null>(null)
 
+  const [isOpeningStockModalOpen, setIsOpeningStockModalOpen] = useState(false)
+  const [editingOpeningStockEntry, setEditingOpeningStockEntry] = useState<OpeningStockEntry | null>(null)
+
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
+  const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE'>('SALE')
 
   // Load Initial Data from localStorage or clean defaults
   useEffect(() => {
@@ -71,17 +78,20 @@ export default function KiybaPage() {
       const storedParties = localStorage.getItem('ksv_kiyba_parties')
       const storedCatalog = localStorage.getItem('ksv_kiyba_catalog')
       const storedInvoices = localStorage.getItem('ksv_kiyba_invoices')
+      const storedOpeningStock = localStorage.getItem('ksv_kiyba_opening_stock')
 
       setCompanies(storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_COMPANIES)
       setParties(storedParties ? JSON.parse(storedParties) : DEFAULT_PARTIES)
       setCatalog(storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_CATALOG)
       setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_INVOICES)
+      setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
     } catch (e) {
       console.error('Failed to load Kiyba storage data:', e)
       setCompanies(DEFAULT_COMPANIES)
       setParties(DEFAULT_PARTIES)
       setCatalog(DEFAULT_CATALOG)
       setInvoices(SEEDED_INVOICES)
+      setOpeningStock([])
     }
   }, [])
 
@@ -99,6 +109,11 @@ export default function KiybaPage() {
   const saveCatalog = (newCatalog: CatalogItem[]) => {
     setCatalog(newCatalog)
     localStorage.setItem('ksv_kiyba_catalog', JSON.stringify(newCatalog))
+  }
+
+  const saveOpeningStock = (newStock: OpeningStockEntry[]) => {
+    setOpeningStock(newStock)
+    localStorage.setItem('ksv_kiyba_opening_stock', JSON.stringify(newStock))
   }
 
   const saveInvoices = (newInvoices: KiybaInvoice[]) => {
@@ -189,12 +204,49 @@ export default function KiybaPage() {
       ? catalog.map((c) => (c.id === item.id ? item : c))
       : [...catalog, item]
     saveCatalog(updated)
+
+    // Automatically sync with Opening Stock
+    const existingStock = openingStock.find((s) => s.itemId === item.id)
+    if (existingStock) {
+      const updatedStock = openingStock.map((s) => 
+        s.itemId === item.id 
+          ? { ...s, quantity: Number(item.quantity) || 0, itemName: item.name, unit: item.defaultUnit } 
+          : s
+      )
+      saveOpeningStock(updatedStock)
+    } else {
+      const newStockEntry: OpeningStockEntry = {
+        id: `os_${Date.now()}`,
+        itemId: item.id,
+        itemName: item.name,
+        date: new Date().toISOString().split('T')[0],
+        unit: item.defaultUnit,
+        quantity: Number(item.quantity) || 0
+      }
+      saveOpeningStock([...openingStock, newStockEntry])
+    }
   }
 
   const handleDeleteCatalogItem = (id: string) => {
     if (confirm('Delete this item from catalog?')) {
       const updated = catalog.filter((c) => c.id !== id)
       saveCatalog(updated)
+    }
+  }
+
+  // Opening Stock Handlers
+  const handleSaveOpeningStock = (entry: OpeningStockEntry) => {
+    const exists = openingStock.some((s) => s.id === entry.id)
+    const updated = exists
+      ? openingStock.map((s) => (s.id === entry.id ? entry : s))
+      : [...openingStock, entry]
+    saveOpeningStock(updated)
+  }
+
+  const handleDeleteOpeningStock = (id: string) => {
+    if (confirm('Delete this opening stock entry?')) {
+      const updated = openingStock.filter((s) => s.id !== id)
+      saveOpeningStock(updated)
     }
   }
 
@@ -213,41 +265,17 @@ export default function KiybaPage() {
       inv.items.some((it) => it.description.toLowerCase().includes(searchQuery.toLowerCase()))
 
     const matchesCompany = filterCompany === 'ALL' || inv.company.id === filterCompany
-    return matchesSearch && matchesCompany
+    const matchesType = (inv.type || 'SALE') === invoiceSummaryType
+    return matchesSearch && matchesCompany && matchesType
   })
+
+  const saleCount = invoices.filter((inv) => (inv.type || 'SALE') === 'SALE').length
+  const purchaseCount = invoices.filter((inv) => inv.type === 'PURCHASE').length
+  const saleTotalRevenue = invoices.filter((inv) => (inv.type || 'SALE') === 'SALE').reduce((sum, inv) => sum + (inv.grandTotal || 0), 0)
+  const purchaseTotalSpend = invoices.filter((inv) => inv.type === 'PURCHASE').reduce((sum, inv) => sum + (inv.grandTotal || 0), 0)
 
   return (
     <div className="w-full space-y-3.5 pt-0 animate-in fade-in duration-300">
-      {/* 1. Header Banner & Quick Action */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm w-full">
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 font-mono">
-              Gateway of Tally • Kiyba
-            </span>
-          </div>
-          <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-            Tax Invoicing &amp; Billing Ledger
-          </h1>
-          <p className="text-[11px] text-slate-500 font-medium">
-            Fast GST Tax Invoicing with HSN summary, Company master &amp; instant A4 print
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={() => {
-              setEditingInvoice(null)
-              setActiveTab('create')
-            }}
-            className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/25 active:scale-95 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            + Create Tax Invoice
-          </button>
-        </div>
-      </div>
 
       {/* 2. Key Accounting Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full">
@@ -293,22 +321,37 @@ export default function KiybaPage() {
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
-          Tax Invoices ({invoices.length})
+          Invoice Summary ({invoices.length})
         </button>
 
         <button
           onClick={() => {
             setEditingInvoice(null)
-            setActiveTab('create')
+            setActiveTab('create-sell')
           }}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'create'
+            activeTab === 'create-sell'
               ? 'bg-blue-600 text-white shadow-md'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
           <Plus className="w-3.5 h-3.5" />
-          {editingInvoice ? 'Edit Tax Invoice' : '+ Create Tax Invoice'}
+          {editingInvoice && activeTab === 'create-sell' ? 'Edit Sale Invoice' : 'Create Sale Invoice'}
+        </button>
+
+        <button
+          onClick={() => {
+            setEditingInvoice(null)
+            setActiveTab('create-purchase')
+          }}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'create-purchase'
+              ? 'bg-orange-500 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          {editingInvoice && activeTab === 'create-purchase' ? 'Edit Purchase Invoice' : 'Create Purchase Invoice'}
         </button>
 
         <button
@@ -344,13 +387,87 @@ export default function KiybaPage() {
           }`}
         >
           <Package className="w-3.5 h-3.5" />
-          Catalog Master ({catalog.length})
+          Product Name ({catalog.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('opening-stock')}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'opening-stock'
+              ? 'bg-purple-600 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5" />
+          Stock Register
         </button>
       </div>
 
       {/* 4. TAB CONTENT: 1. INVOICES */}
       {activeTab === 'invoices' && (
         <div className="space-y-4 animate-in fade-in duration-300">
+
+          {/* Sub-Tab Toggle: Sell Summary | Purchase Summary */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex items-center gap-2">
+            <button
+              onClick={() => setInvoiceSummaryType('SALE')}
+              className={`flex-1 py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                invoiceSummaryType === 'SALE'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                  : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              📤 Sale Summary
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'SALE' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {saleCount}
+              </span>
+            </button>
+            <button
+              onClick={() => setInvoiceSummaryType('PURCHASE')}
+              className={`flex-1 py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                invoiceSummaryType === 'PURCHASE'
+                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-200'
+                  : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              📥 Purchase Summary
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'PURCHASE' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {purchaseCount}
+              </span>
+            </button>
+          </div>
+
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className={`rounded-2xl p-4 border shadow-sm ${invoiceSummaryType === 'SALE' ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
+              <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${invoiceSummaryType === 'SALE' ? 'text-blue-500' : 'text-orange-500'}`}>
+                {invoiceSummaryType === 'SALE' ? 'Total Sales' : 'Total Purchases'}
+              </p>
+              <h3 className={`text-lg font-black ${invoiceSummaryType === 'SALE' ? 'text-blue-700' : 'text-orange-700'}`}>
+                {invoiceSummaryType === 'SALE' ? saleCount : purchaseCount}
+              </h3>
+              <p className="text-[10px] text-slate-400 font-medium">Invoices</p>
+            </div>
+            <div className={`rounded-2xl p-4 border shadow-sm ${invoiceSummaryType === 'SALE' ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
+              <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${invoiceSummaryType === 'SALE' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                {invoiceSummaryType === 'SALE' ? 'Total Revenue' : 'Total Spend'}
+              </p>
+              <h3 className={`text-lg font-black ${invoiceSummaryType === 'SALE' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                ₹{(invoiceSummaryType === 'SALE' ? saleTotalRevenue : purchaseTotalSpend).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </h3>
+              <p className="text-[10px] text-slate-400 font-medium">Grand Total (incl. GST)</p>
+            </div>
+            <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 shadow-sm col-span-2 sm:col-span-1">
+              <p className="text-[10px] font-black uppercase tracking-wider mb-1 text-slate-400">
+                Total GST
+              </p>
+              <h3 className="text-lg font-black text-slate-700">
+                ₹{filteredInvoices.reduce((sum, inv) => sum + (inv.totalTaxAmount || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </h3>
+              <p className="text-[10px] text-slate-400 font-medium">Tax Collected</p>
+            </div>
+          </div>
+
           {/* Search Bar */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="relative w-full sm:w-80">
@@ -430,7 +547,7 @@ export default function KiybaPage() {
                             <button
                               onClick={() => {
                                 setEditingInvoice(inv)
-                                setActiveTab('create')
+                                setActiveTab((inv.type || 'SALE') === 'SALE' ? 'create-sell' : 'create-purchase')
                               }}
                               className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
                               title="Edit"
@@ -468,7 +585,7 @@ export default function KiybaPage() {
               </p>
               <div className="pt-1">
                 <button
-                  onClick={() => setActiveTab('create')}
+                  onClick={() => setActiveTab('create-sell')}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md transition-all inline-flex items-center gap-1.5"
                 >
                   <Plus className="w-3.5 h-3.5" /> Create Tax Invoice
@@ -480,8 +597,10 @@ export default function KiybaPage() {
       )}
 
       {/* 4. TAB CONTENT: 2. CREATE INVOICE FORM */}
-      {activeTab === 'create' && (
+      {(activeTab === 'create-sell' || activeTab === 'create-purchase') && (
         <KiybaInvoiceForm
+          key={activeTab} // Force re-render when switching between sell and purchase
+          defaultInvoiceType={activeTab === 'create-purchase' ? 'PURCHASE' : 'SALE'}
           companies={companies}
           parties={parties}
           catalog={catalog}
@@ -656,15 +775,23 @@ export default function KiybaPage() {
               <h2 className="text-sm font-black text-slate-800">Catalog Master (Herbs &amp; Materials)</h2>
               <p className="text-xs text-slate-400 font-medium">Manage HSN codes, default rates &amp; GST tax percentages</p>
             </div>
-            <button
-              onClick={() => {
-                setEditingCatalogItem(null)
-                setIsCatalogModalOpen(true)
-              }}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" /> + Add Item
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setActiveTab('opening-stock')}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-purple-600/20"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" /> Opening Stock
+              </button>
+              <button
+                onClick={() => {
+                  setEditingCatalogItem(null)
+                  setIsCatalogModalOpen(true)
+                }}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-amber-600/20"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Item
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -720,6 +847,233 @@ export default function KiybaPage() {
         </div>
       )}
 
+      {/* 4. TAB CONTENT: 6. OPENING STOCK */}
+      {activeTab === 'opening-stock' && (() => {
+        // Build stock register: per product aggregate
+        const stockRegister = catalog.map((item) => {
+          const openingEntry = openingStock.find((s) => s.itemId === item.id)
+          const openingQty = openingEntry?.quantity ?? 0
+          const unit = openingEntry?.unit ?? item.defaultUnit
+
+          // Sum purchased qty from PURCHASE invoices
+          const purchasedQty = invoices
+            .filter((inv) => inv.type === 'PURCHASE')
+            .reduce((sum, inv) => {
+              const rows = inv.items.filter(
+                (it) => it.description.toLowerCase() === item.name.toLowerCase()
+              )
+              return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+            }, 0)
+
+          // Sum sold qty from SALE invoices
+          const soldQty = invoices
+            .filter((inv) => (inv.type || 'SALE') === 'SALE')
+            .reduce((sum, inv) => {
+              const rows = inv.items.filter(
+                (it) => it.description.toLowerCase() === item.name.toLowerCase()
+              )
+              return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+            }, 0)
+
+          const closingQty = openingQty + purchasedQty - soldQty
+
+          return { item, openingQty, purchasedQty, soldQty, closingQty, unit }
+        }).filter((row) => row.openingQty > 0 || row.purchasedQty > 0 || row.soldQty > 0)
+
+        const totalOpeningQty = stockRegister.reduce((s, r) => s + r.openingQty, 0)
+        const totalPurchasedQty = stockRegister.reduce((s, r) => s + r.purchasedQty, 0)
+        const totalSoldQty = stockRegister.reduce((s, r) => s + r.soldQty, 0)
+        const totalClosingQty = stockRegister.reduce((s, r) => s + r.closingQty, 0)
+
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-sm gap-3">
+              <div>
+                <h2 className="text-sm font-black text-slate-800">📦 Stock Register</h2>
+                <p className="text-xs text-slate-400 font-medium">Opening Stock + Purchases − Sales = Closing Balance</p>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingOpeningStockEntry(null)
+                  setIsOpeningStockModalOpen(true)
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-purple-600/20"
+              >
+                <Plus className="w-3.5 h-3.5" /> Set Opening Stock
+              </button>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-purple-400 mb-1">Opening Stock</p>
+                <h3 className="text-xl font-black text-purple-700 font-mono">{totalOpeningQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className="text-[10px] text-purple-300 font-medium mt-0.5">Initial balance</p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-400 mb-1">Purchased In</p>
+                <h3 className="text-xl font-black text-emerald-700 font-mono">+{totalPurchasedQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className="text-[10px] text-emerald-300 font-medium mt-0.5">From purchase invoices</p>
+              </div>
+              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-rose-400 mb-1">Sold / Dispatched</p>
+                <h3 className="text-xl font-black text-rose-700 font-mono">−{totalSoldQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className="text-[10px] text-rose-300 font-medium mt-0.5">From sale invoices</p>
+              </div>
+              <div className={`border rounded-2xl p-4 shadow-sm ${totalClosingQty > 0 ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
+                <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${totalClosingQty > 0 ? 'text-blue-400' : 'text-amber-400'}`}>Closing Stock</p>
+                <h3 className={`text-xl font-black font-mono ${totalClosingQty > 0 ? 'text-blue-700' : 'text-amber-700'}`}>{totalClosingQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className={`text-[10px] font-medium mt-0.5 ${totalClosingQty > 0 ? 'text-blue-300' : 'text-amber-300'}`}>Remaining balance</p>
+              </div>
+            </div>
+
+            {/* Stock Register Table */}
+            {stockRegister.length > 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-900 text-white font-extrabold uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3 pl-5">#</th>
+                        <th className="p-3">Product Name</th>
+                        <th className="p-3 text-center">Unit</th>
+                        <th className="p-3 text-right text-purple-300">Opening Stock</th>
+                        <th className="p-3 text-right text-emerald-300">Purchased In (+)</th>
+                        <th className="p-3 text-right text-rose-300">Sold Out (−)</th>
+                        <th className="p-3 text-right text-blue-300 pr-5">Closing Stock</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {stockRegister.map(({ item, openingQty, purchasedQty, soldQty, closingQty, unit }, idx) => (
+                        <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${closingQty <= 0 ? 'bg-rose-50/40' : ''}`}>
+                          <td className="p-3 pl-5 font-mono text-slate-400 text-[10px]">{idx + 1}</td>
+                          <td className="p-3">
+                            <div className="font-bold text-slate-900">{item.name}</div>
+                            <div className="text-[10px] text-slate-400 font-medium">{item.hsnCode && `HSN: ${item.hsnCode}`}</div>
+                          </td>
+                          <td className="p-3 text-center font-bold text-slate-600 uppercase">{unit}</td>
+                          <td className="p-3 text-right font-mono font-bold text-purple-700">
+                            {openingQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-emerald-600">
+                            {purchasedQty > 0 ? `+${purchasedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-rose-600">
+                            {soldQty > 0 ? `−${soldQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}
+                          </td>
+                          <td className="p-3 text-right pr-5">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full font-black font-mono text-xs ${
+                              closingQty <= 0
+                                ? 'bg-rose-100 text-rose-700'
+                                : closingQty < (openingQty * 0.2)
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {closingQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
+                              {closingQty <= 0 && <span className="ml-1 text-[9px]">OUT</span>}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {/* Totals Footer */}
+                    <tfoot className="bg-slate-100 border-t-2 border-slate-200 font-black text-xs">
+                      <tr>
+                        <td className="p-3 pl-5" colSpan={3}>
+                          <span className="text-slate-700 font-extrabold uppercase text-[10px] tracking-wider">TOTAL</span>
+                        </td>
+                        <td className="p-3 text-right font-mono text-purple-700">
+                          {totalOpeningQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-right font-mono text-emerald-600">
+                          {totalPurchasedQty > 0 ? `+${totalPurchasedQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="p-3 text-right font-mono text-rose-600">
+                          {totalSoldQty > 0 ? `−${totalSoldQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="p-3 text-right pr-5 font-mono text-blue-700">
+                          {totalClosingQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 shadow-sm space-y-3">
+                <div className="text-4xl">📦</div>
+                <h3 className="text-sm font-black text-slate-800">No Stock Data Yet</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Set opening stock for your catalog items first. Once you create invoices, the stock register will auto-calculate purchases and sales.
+                </p>
+                <button
+                  onClick={() => {
+                    setEditingOpeningStockEntry(null)
+                    setIsOpeningStockModalOpen(true)
+                  }}
+                  className="mt-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Set Opening Stock
+                </button>
+              </div>
+            )}
+
+            {/* All Raw Opening Stock Entries (editable list) */}
+            {openingStock.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Opening Stock Entries</h3>
+                  <span className="text-[10px] text-slate-400 font-medium">{openingStock.length} entries</span>
+                </div>
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 text-slate-600 font-extrabold uppercase text-[10px] border-b border-slate-100">
+                      <tr>
+                        <th className="p-3 pl-5">Product Name</th>
+                        <th className="p-3 text-center">Date</th>
+                        <th className="p-3 text-center">Unit</th>
+                        <th className="p-3 text-right">Opening Qty</th>
+                        <th className="p-3 text-right pr-5">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {openingStock.map((entry) => (
+                        <tr key={entry.id} className="hover:bg-slate-50">
+                          <td className="p-3 pl-5 font-bold text-slate-900">{entry.itemName}</td>
+                          <td className="p-3 text-center font-mono font-medium text-slate-600">{entry.date}</td>
+                          <td className="p-3 text-center font-bold text-slate-600 uppercase">{entry.unit}</td>
+                          <td className="p-3 text-right font-mono font-black text-purple-700">{entry.quantity}</td>
+                          <td className="p-3 text-right pr-5">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => {
+                                  setEditingOpeningStockEntry(entry)
+                                  setIsOpeningStockModalOpen(true)
+                                }}
+                                className="p-1 text-slate-400 hover:text-purple-600 rounded"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteOpeningStock(entry.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
       {/* 5. TALLY INVOICE PRINT / PREVIEW MODAL */}
       {selectedInvoiceForPrint && (
         <TallyInvoicePrint
@@ -748,6 +1102,14 @@ export default function KiybaPage() {
         onClose={() => setIsCatalogModalOpen(false)}
         onSave={handleSaveCatalogItem}
         initialData={editingCatalogItem}
+      />
+
+      <OpeningStockModal
+        isOpen={isOpeningStockModalOpen}
+        onClose={() => setIsOpeningStockModalOpen(false)}
+        onSave={handleSaveOpeningStock}
+        initialData={editingOpeningStockEntry}
+        catalog={catalog}
       />
     </div>
   )

@@ -47,6 +47,7 @@ export interface CatalogItem {
   defaultTaxRate: number // e.g. 5, 12, 18
   description?: string
   category?: 'raw_material' | 'packaging' | 'herb' | 'medicine' | 'general'
+  quantity?: number
 }
 
 export interface InvoiceItemRow {
@@ -76,6 +77,7 @@ export interface HsnSummaryRow {
 
 export interface KiybaInvoice {
   id: string
+  type?: 'PURCHASE' | 'SALE' // Optional for backwards compatibility, but we'll default it
   invoiceNo: string
   refNo?: string
   invoiceDate: string // YYYY-MM-DD
@@ -136,4 +138,13 @@ export interface KiybaInvoice {
   notes?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface OpeningStockEntry {
+  id: string
+  itemId: string
+  itemName: string
+  date: string // YYYY-MM-DD
+  unit: string
+  quantity: number
 }

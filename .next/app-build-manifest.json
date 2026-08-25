@@ -11,6 +11,11 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
+    "/patients/followups/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/patients/followups/page.js"
+    ],
     "/inventory/kiyba/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",

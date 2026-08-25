@@ -25,7 +25,8 @@ export default function CatalogModal({
     defaultRate: 0,
     defaultTaxRate: 5,
     category: 'herb',
-    description: ''
+    description: '',
+    quantity: 0
   })
 
   useEffect(() => {
@@ -40,7 +41,8 @@ export default function CatalogModal({
         defaultRate: 0,
         defaultTaxRate: 5,
         category: 'herb',
-        description: ''
+        description: '',
+        quantity: 0
       })
     }
   }, [initialData, isOpen])
@@ -85,7 +87,7 @@ export default function CatalogModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-              Item / Herb / Material Name *
+              Item *
             </label>
             <input
               type="text"
@@ -129,7 +131,7 @@ export default function CatalogModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
                 Unit (per) *
@@ -164,7 +166,9 @@ export default function CatalogModal({
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-800 outline-none focus:border-amber-500 text-right"
               />
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
                 GST Rate (%)
@@ -180,6 +184,21 @@ export default function CatalogModal({
                 <option value={18}>18% (Bottles / Standard)</option>
                 <option value={28}>28% (Luxury)</option>
               </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Quantity
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={formData.quantity}
+                onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) || 0 })}
+                placeholder="0"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-800 outline-none focus:border-amber-500 text-right"
+              />
             </div>
           </div>
 

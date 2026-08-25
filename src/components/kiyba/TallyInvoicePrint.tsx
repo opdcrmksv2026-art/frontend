@@ -322,13 +322,13 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
                   </td>
                   <td className="border-r border-black p-1 text-center">{item.hsnSac || '-'}</td>
                   <td className="border-r border-black p-1 text-right font-bold">
-                    {item.quantity.toFixed(3)} {item.unit}
+                    {Number(item.quantity).toFixed(3)} {item.unit}
                   </td>
                   <td className="border-r border-black p-1 text-right text-neutral-800">
                     {inclTaxRate > 0 ? inclTaxRate.toFixed(2) : '-'}
                   </td>
                   <td className="border-r border-black p-1 text-right font-semibold">
-                    {item.rate.toFixed(2)}
+                    {Number(item.rate).toFixed(2)}
                   </td>
                   <td className="border-r border-black p-1 text-center font-sans">{item.unit}</td>
                   <td className="border-r border-black p-1 text-right">
@@ -427,7 +427,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
                 Total
               </td>
               <td className="border-r border-black p-1.5 text-right font-mono">
-                {invoice.totalQuantity.toFixed(3)}
+                {Number(invoice.totalQuantity).toFixed(3)}
               </td>
               <td colSpan={4} className="border-r border-black p-1.5 text-right uppercase tracking-wider">
                 Grand Total
