@@ -530,7 +530,10 @@ export default function KsvPage() {
               </p>
               <div className="pt-1 flex items-center justify-center gap-2">
                 <button
-                  onClick={handleStartKiyavaPurchase}
+                  onClick={() => {
+                    setEditingInvoice(null)
+                    setActiveTab('create-purchase')
+                  }}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md transition-all inline-flex items-center gap-1.5"
                 >
                   <ShoppingCart className="w-3.5 h-3.5" /> Purchase from Kiyava
