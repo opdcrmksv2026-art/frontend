@@ -161,7 +161,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="********"
                     className="w-full pl-10 pr-10 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-600 rounded-2xl outline-none text-xs font-bold text-slate-800 placeholder-slate-400 transition-all"
                     required
                   />
@@ -200,7 +200,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
           {/* Footer Copyright */}
           <p className="text-center text-[10px] text-slate-400 mt-5 font-bold uppercase tracking-wider">
-            © 2026 KSV Healthcare &amp; Ayurveda Portal
+            &copy; 2026 KSV Healthcare &amp; Ayurveda Portal
           </p>
 
         </div>

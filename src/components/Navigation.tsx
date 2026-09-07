@@ -57,7 +57,7 @@ const navigationGroups: NavGroup[] = [
         name: 'Inventory',
         icon: Package,
         subItems: [
-          { name: 'Kiyba', href: '/inventory/kiyba' },
+          { name: 'Kiyava', href: '/inventory/kiyava' },
           { name: 'Karan Singh Vaidh (KSV)', href: '/inventory/ksv' },
           { name: 'Maxxi Pharma', href: '/inventory/maxxi-pharma' }
         ]
@@ -178,7 +178,7 @@ export default function Navigation() {
                 <span className="text-sm font-medium text-slate-400 group-hover:text-slate-200 transition-colors">Search...</span>
               </div>
               <div className="flex items-center gap-1">
-                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold text-slate-400 bg-black/40 rounded border border-white/10">⌘</kbd>
+                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold text-slate-400 bg-black/40 rounded border border-white/10">Ctrl</kbd>
                 <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold text-slate-400 bg-black/40 rounded border border-white/10">K</kbd>
               </div>
             </div>

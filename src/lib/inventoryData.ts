@@ -1,4 +1,4 @@
-export type FirmType = 'kiyba' | 'ksv' | 'maxxi';
+export type FirmType = 'kiyava' | 'ksv' | 'maxxi';
 
 export interface FirmInfo {
   id: FirmType;
@@ -14,11 +14,11 @@ export interface FirmInfo {
 }
 
 export const FIRMS: Record<FirmType, FirmInfo> = {
-  kiyba: {
-    id: 'kiyba',
-    name: 'Kiyba',
-    shortName: 'Kiyba',
-    fullName: 'Kiyba Herbal & Wellness',
+  kiyava: {
+    id: 'kiyava',
+    name: 'Kiyava',
+    shortName: 'Kiyava',
+    fullName: 'Kiyava Herbal & Wellness',
     tagline: 'Herbal Extracts, Tonics & Wellness Formulations',
     badgeColor: 'bg-indigo-50 text-indigo-600 border-indigo-200/60 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/50',
     accentGradient: 'from-indigo-600 via-indigo-500 to-purple-600',
@@ -217,11 +217,11 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     updatedAt: '2026-08-07T15:00:00Z',
   },
 
-  // --- KIYBA ITEMS ---
+  // --- KIYAVA ITEMS ---
   {
     id: 'kyb-001',
-    name: 'Kiyba Tri-Extract Immunity Tonic',
-    firm: 'kiyba',
+    name: 'Kiyava Tri-Extract Immunity Tonic',
+    firm: 'kiyava',
     category: 'Syrup',
     batchNumber: 'KYB-IM-2026-06',
     mfgDate: '2026-06-15',
@@ -234,15 +234,15 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     costPrice: 310,
     dosageForm: '450 ml Glass Bottle',
     description: 'Giloy, Ashwagandha, and Tulsi concentrated nano-extract for vital defense.',
-    storageLocation: 'Kiyba Warehouse - Rack 1A',
+    storageLocation: 'Kiyava Warehouse - Rack 1A',
     status: 'In Stock',
     createdAt: '2026-06-18T10:00:00Z',
     updatedAt: '2026-08-06T14:00:00Z',
   },
   {
     id: 'kyb-002',
-    name: 'Kiyba Kesha-Glow Pure Herbal Drops',
-    firm: 'kiyba',
+    name: 'Kiyava Kesha-Glow Pure Herbal Drops',
+    firm: 'kiyava',
     category: 'Drops',
     batchNumber: 'KYB-KG-2026-04',
     mfgDate: '2026-04-10',
@@ -255,15 +255,15 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     costPrice: 380,
     dosageForm: '50 ml Dropper Bottle',
     description: 'Biotin-fortified Bhringraj and Amla sublingual drops for hair rejuvenation.',
-    storageLocation: 'Kiyba Warehouse - Rack 2B',
+    storageLocation: 'Kiyava Warehouse - Rack 2B',
     status: 'In Stock',
     createdAt: '2026-04-15T12:00:00Z',
     updatedAt: '2026-08-03T11:00:00Z',
   },
   {
     id: 'kyb-003',
-    name: 'Kiyba Madhu-Niyantran Glyco Capsules',
-    firm: 'kiyba',
+    name: 'Kiyava Madhu-Niyantran Glyco Capsules',
+    firm: 'kiyava',
     category: 'Capsule',
     batchNumber: 'KYB-MN-2026-07',
     mfgDate: '2026-07-01',
@@ -276,15 +276,15 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     costPrice: 420,
     dosageForm: '60 Veg Capsules (1000mg)',
     description: 'Gymnema Sylvestre + Karela standardized extract for healthy HbA1c levels.',
-    storageLocation: 'Kiyba Warehouse - Rack 3A',
+    storageLocation: 'Kiyava Warehouse - Rack 3A',
     status: 'In Stock',
     createdAt: '2026-07-03T09:00:00Z',
     updatedAt: '2026-08-07T10:00:00Z',
   },
   {
     id: 'kyb-004',
-    name: 'Kiyba Deep Detox Digestive Elixir',
-    firm: 'kiyba',
+    name: 'Kiyava Deep Detox Digestive Elixir',
+    firm: 'kiyava',
     category: 'Syrup',
     batchNumber: 'KYB-DD-2026-02',
     mfgDate: '2026-02-14',
@@ -297,15 +297,15 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     costPrice: 240,
     dosageForm: '300 ml Bottle',
     description: 'Enzyme-rich fermented herbal tonic for hyperacidity, gas and bowel regularity.',
-    storageLocation: 'Kiyba Warehouse - Rack 1C',
+    storageLocation: 'Kiyava Warehouse - Rack 1C',
     status: 'Expiring Soon',
     createdAt: '2026-02-20T10:00:00Z',
     updatedAt: '2026-08-05T09:00:00Z',
   },
   {
     id: 'kyb-005',
-    name: 'Kiyba Skin-Radiance Manjistha Capsules',
-    firm: 'kiyba',
+    name: 'Kiyava Skin-Radiance Manjistha Capsules',
+    firm: 'kiyava',
     category: 'Capsule',
     batchNumber: 'KYB-SR-2026-05',
     mfgDate: '2026-05-22',
@@ -318,7 +318,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     costPrice: 320,
     dosageForm: '60 Capsules',
     description: 'Blood purifier and pigment correction formula for clear luminous skin.',
-    storageLocation: 'Kiyba Warehouse - Rack 3B',
+    storageLocation: 'Kiyava Warehouse - Rack 3B',
     status: 'In Stock',
     createdAt: '2026-05-25T11:00:00Z',
     updatedAt: '2026-08-02T13:00:00Z',
@@ -462,8 +462,8 @@ export const INITIAL_TRANSFERS: StockTransfer[] = [
   {
     id: 'TRF-1003',
     itemId: 'kyb-001',
-    itemName: 'Kiyba Tri-Extract Immunity Tonic',
-    firm: 'kiyba',
+    itemName: 'Kiyava Tri-Extract Immunity Tonic',
+    firm: 'kiyava',
     fromLocation: 'Plant / Warehouse',
     toLocation: 'OPD Clinic Counter',
     quantity: 25,
