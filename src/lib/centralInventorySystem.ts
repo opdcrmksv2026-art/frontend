@@ -9,6 +9,7 @@ export type TransactionType =
   | 'SALE_RETURN'
   | 'PURCHASE_RETURN'
   | 'STOCK_ADJUSTMENT'
+  | 'STOCK_RETURN'
 
 export interface BatchStock {
   id: string
