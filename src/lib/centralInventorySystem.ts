@@ -1,4 +1,4 @@
-import { CompanyProfile, PartyProfile, CatalogItem, KiyavaInvoice, InvoiceItem } from '@/types/kiyavaBilling'
+import { CompanyProfile, PartyProfile, CatalogItem, KiyavaInvoice, InvoiceItemRow } from '@/types/kiyavaBilling'
 
 export type StockEntity = 'THIRD_PARTY' | 'KSV' | 'MAXXI_PHARMA'
 
