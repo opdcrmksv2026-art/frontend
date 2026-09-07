@@ -35,6 +35,7 @@ import {
   TrendingUp,
   Receipt,
   RotateCcw,
+  ShoppingCart,
   ArrowDownLeft,
   ArrowUpRight,
   CheckCircle2
