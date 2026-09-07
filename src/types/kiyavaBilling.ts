@@ -148,3 +148,30 @@ export interface OpeningStockEntry {
   unit: string
   quantity: number
 }
+
+export interface RawMaterialConsumed {
+  itemId: string
+  itemName: string
+  quantity: number
+  unit: string
+  rate?: number
+  amount?: number
+}
+
+export interface ManufacturingLog {
+  id: string
+  date: string
+  batchNo?: string
+  finishedGoodItemId: string
+  finishedGoodName: string
+  producedQuantity: number
+  unit: string
+  costAllocationPercent?: number
+  rawMaterialsConsumed: RawMaterialConsumed[]
+  totalComponentsCost?: number
+  additionalCost?: number
+  effectiveCost?: number
+  effectiveRatePerUnit?: number
+  notes?: string
+}
+

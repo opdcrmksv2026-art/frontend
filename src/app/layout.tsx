@@ -5,7 +5,6 @@ import Navigation from '@/components/Navigation'
 import AuthProvider from '@/components/AuthProvider'
 
 const inter = Inter({ subsets: ['latin'] })
-
 export const metadata: Metadata = {
   title: 'KSV CRM',
   description: 'Clinic Inventory & OPD CRM System',

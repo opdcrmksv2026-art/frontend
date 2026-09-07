@@ -6,7 +6,8 @@ import {
   PartyProfile,
   CatalogItem,
   KiyavaInvoice,
-  OpeningStockEntry
+  OpeningStockEntry,
+  ManufacturingLog
 } from '@/types/kiyavaBilling'
 import {
   DEFAULT_COMPANIES,
@@ -20,6 +21,7 @@ import CompanyModal from '@/components/kiyava/CompanyModal'
 import PartyModal from '@/components/kiyava/PartyModal'
 import CatalogModal from '@/components/kiyava/CatalogModal'
 import OpeningStockModal from '@/components/kiyava/OpeningStockModal'
+import ManufacturingModal from '@/components/kiyava/ManufacturingModal'
 import {
   FileText,
   Plus,
@@ -36,7 +38,8 @@ import {
   TrendingUp,
   Receipt,
   FileSpreadsheet,
-  RotateCcw
+  RotateCcw,
+  FlaskConical
 } from 'lucide-react'
 
 export default function KiyavaPage() {
@@ -46,8 +49,9 @@ export default function KiyavaPage() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [invoices, setInvoices] = useState<KiyavaInvoice[]>([])
   const [openingStock, setOpeningStock] = useState<OpeningStockEntry[]>([])
+  const [manufacturingLogs, setManufacturingLogs] = useState<ManufacturingLog[]>([])
 
-  // Active Tab: 'invoices' | 'create' | 'companies' | 'parties' | 'catalog' | 'opening-stock'
+  // Active Tab: 'invoices' | 'create' | 'companies' | 'parties' | 'catalog' | 'opening-stock' | 'manufacturing'
   const [activeTab, setActiveTab] = useState<string>('invoices')
 
   // Modals & Print Previews
@@ -66,6 +70,8 @@ export default function KiyavaPage() {
   const [isOpeningStockModalOpen, setIsOpeningStockModalOpen] = useState(false)
   const [editingOpeningStockEntry, setEditingOpeningStockEntry] = useState<OpeningStockEntry | null>(null)
 
+  const [isManufacturingModalOpen, setIsManufacturingModalOpen] = useState(false)
+
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
@@ -79,6 +85,7 @@ export default function KiyavaPage() {
       const storedCatalog = localStorage.getItem('ksv_kiyava_catalog')
       const storedInvoices = localStorage.getItem('ksv_kiyava_invoices')
       const storedOpeningStock = localStorage.getItem('ksv_kiyava_opening_stock')
+      const storedMfgLogs = localStorage.getItem('ksv_kiyava_manufacturing')
 
       let parsedCompanies: CompanyProfile[] = storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_COMPANIES
       parsedCompanies = parsedCompanies.filter((c) => c.name.toUpperCase().includes('KIYAVA') || c.isDefault)
@@ -89,6 +96,7 @@ export default function KiyavaPage() {
       setCatalog(storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_CATALOG)
       setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_INVOICES)
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
+      setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
     } catch (e) {
       console.error('Failed to load Kiyava storage data:', e)
       setCompanies(DEFAULT_COMPANIES)
@@ -96,6 +104,7 @@ export default function KiyavaPage() {
       setCatalog(DEFAULT_CATALOG)
       setInvoices(SEEDED_INVOICES)
       setOpeningStock([])
+      setManufacturingLogs([])
     }
   }, [])
 
@@ -123,6 +132,27 @@ export default function KiyavaPage() {
   const saveInvoices = (newInvoices: KiyavaInvoice[]) => {
     setInvoices(newInvoices)
     localStorage.setItem('ksv_kiyava_invoices', JSON.stringify(newInvoices))
+  }
+
+  const saveManufacturingLogs = (newLogs: ManufacturingLog[]) => {
+    setManufacturingLogs(newLogs)
+    localStorage.setItem('ksv_kiyava_manufacturing', JSON.stringify(newLogs))
+  }
+
+  // Manufacturing Handlers
+  const handleSaveManufacturingLog = (log: ManufacturingLog) => {
+    const exists = manufacturingLogs.some((l) => l.id === log.id)
+    const updated = exists
+      ? manufacturingLogs.map((l) => (l.id === log.id ? log : l))
+      : [...manufacturingLogs, log]
+    saveManufacturingLogs(updated)
+  }
+
+  const handleDeleteManufacturingLog = (id: string) => {
+    if (confirm('Delete this manufacturing entry? Stock will be updated accordingly.')) {
+      const updated = manufacturingLogs.filter((l) => l.id !== id)
+      saveManufacturingLogs(updated)
+    }
   }
 
   // Invoice Handlers
@@ -251,6 +281,24 @@ export default function KiyavaPage() {
     if (confirm('Delete this opening stock entry?')) {
       const updated = openingStock.filter((s) => s.id !== id)
       saveOpeningStock(updated)
+    }
+  }
+
+  const handleResetData = () => {
+    if (confirm('Are you sure you want to reset all data? This will clear all invoices and stock.')) {
+      localStorage.removeItem('ksv_kiyava_companies')
+      localStorage.removeItem('ksv_kiyava_parties')
+      localStorage.removeItem('ksv_kiyava_catalog')
+      localStorage.removeItem('ksv_kiyava_invoices')
+      localStorage.removeItem('ksv_kiyava_opening_stock')
+      localStorage.removeItem('ksv_kiyava_manufacturing')
+      
+      setCompanies(DEFAULT_COMPANIES)
+      setParties(DEFAULT_PARTIES)
+      setCatalog(DEFAULT_CATALOG)
+      setInvoices(SEEDED_INVOICES)
+      setOpeningStock([])
+      setManufacturingLogs([])
     }
   }
 
@@ -397,6 +445,18 @@ export default function KiyavaPage() {
         >
           <FileSpreadsheet className="w-3.5 h-3.5" />
           Stock Register
+        </button>
+
+
+        <div className="flex-1" /> {/* Spacer */}
+
+        <button
+          onClick={handleResetData}
+          className="px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap bg-rose-50 text-rose-600 hover:bg-rose-100 shadow-sm border border-rose-200"
+          title="Reset All Data"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Reset Data
         </button>
       </div>
 
@@ -797,17 +857,53 @@ export default function KiyavaPage() {
                     <th className="p-3 pl-5">Item / Herb Name</th>
                     <th className="p-3 text-center">HSN/SAC</th>
                     <th className="p-3 text-center">Unit</th>
+                    <th className="p-3 text-right">Quantity</th>
                     <th className="p-3 text-right">Default Rate (₹)</th>
                     <th className="p-3 text-center">GST Rate</th>
                     <th className="p-3 text-right pr-5">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
-                  {catalog.map((item) => (
+                  {catalog.map((item) => {
+                    const openingEntry = openingStock.find((s) => s.itemId === item.id)
+                    const openingQty = openingEntry?.quantity || Number(item.quantity) || 0
+                    
+                    const purchasedQty = invoices
+                      .filter((inv) => inv.type === 'PURCHASE')
+                      .reduce((sum, inv) => {
+                        const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
+                        return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+                      }, 0)
+                      
+                    const soldQty = invoices
+                      .filter((inv) => (inv.type || 'SALE') === 'SALE')
+                      .reduce((sum, inv) => {
+                        const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
+                        return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+                      }, 0)
+                      
+                    const manufacturedQty = manufacturingLogs
+                      .filter(log => log.finishedGoodItemId === item.id)
+                      .reduce((sum, log) => sum + log.producedQuantity, 0)
+                      
+                    const consumedQty = manufacturingLogs
+                      .reduce((sum, log) => {
+                        const consumed = log.rawMaterialsConsumed.filter(rm => rm.itemId === item.id)
+                        return sum + consumed.reduce((s, rm) => s + rm.quantity, 0)
+                      }, 0)
+                      
+                    const currentStock = openingQty + purchasedQty + manufacturedQty - soldQty - consumedQty
+
+                    return (
                     <tr key={item.id} className="hover:bg-slate-50">
                       <td className="p-3 pl-5 font-bold text-slate-900">{item.name}</td>
                       <td className="p-3 text-center font-mono font-bold text-slate-700">{item.hsnCode}</td>
                       <td className="p-3 text-center font-medium text-slate-700">{item.defaultUnit}</td>
+                      <td className="p-3 text-right">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded font-black font-mono text-xs ${currentStock <= 0 ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {currentStock}
+                        </span>
+                      </td>
                       <td className="p-3 text-right font-mono font-bold text-slate-900">
                         ₹{item.defaultRate.toFixed(2)}
                       </td>
@@ -834,7 +930,7 @@ export default function KiyavaPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -847,7 +943,7 @@ export default function KiyavaPage() {
         // Build stock register: per product aggregate
         const stockRegister = catalog.map((item) => {
           const openingEntry = openingStock.find((s) => s.itemId === item.id)
-          const openingQty = openingEntry?.quantity ?? 0
+          const openingQty = openingEntry?.quantity || Number(item.quantity) || 0
           const unit = openingEntry?.unit ?? item.defaultUnit
 
           // Sum purchased qty from PURCHASE invoices
@@ -870,10 +966,20 @@ export default function KiyavaPage() {
               return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
             }, 0)
 
-          const closingQty = openingQty + purchasedQty - soldQty
+          const manufacturedQty = manufacturingLogs
+            .filter(log => log.finishedGoodItemId === item.id)
+            .reduce((sum, log) => sum + log.producedQuantity, 0)
 
-          return { item, openingQty, purchasedQty, soldQty, closingQty, unit }
-        }).filter((row) => row.openingQty > 0 || row.purchasedQty > 0 || row.soldQty > 0)
+          const consumedQty = manufacturingLogs
+            .reduce((sum, log) => {
+              const consumed = log.rawMaterialsConsumed.filter(rm => rm.itemId === item.id)
+              return sum + consumed.reduce((s, rm) => s + rm.quantity, 0)
+            }, 0)
+
+          const closingQty = openingQty + purchasedQty + manufacturedQty - soldQty - consumedQty
+
+          return { item, openingQty, purchasedQty, soldQty, manufacturedQty, consumedQty, closingQty, unit }
+        }).filter((row) => row.openingQty > 0 || row.purchasedQty > 0 || row.soldQty > 0 || row.manufacturedQty > 0 || row.consumedQty > 0)
 
         const totalOpeningQty = stockRegister.reduce((s, r) => s + r.openingQty, 0)
         const totalPurchasedQty = stockRegister.reduce((s, r) => s + r.purchasedQty, 0)
@@ -935,12 +1041,14 @@ export default function KiyavaPage() {
                         <th className="p-3 text-center">Unit</th>
                         <th className="p-3 text-right text-purple-300">Opening Stock</th>
                         <th className="p-3 text-right text-emerald-300">Purchased In (+)</th>
+                        <th className="p-3 text-right text-cyan-300">Produced In Mfg (+)</th>
                         <th className="p-3 text-right text-rose-300">Sold Out (−)</th>
+                        <th className="p-3 text-right text-amber-300">Consumed In Mfg (−)</th>
                         <th className="p-3 text-right text-blue-300 pr-5">Closing Stock</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-sans">
-                      {stockRegister.map(({ item, openingQty, purchasedQty, soldQty, closingQty, unit }, idx) => (
+                      {stockRegister.map(({ item, openingQty, purchasedQty, soldQty, manufacturedQty, consumedQty, closingQty, unit }, idx) => (
                         <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${closingQty <= 0 ? 'bg-rose-50/40' : ''}`}>
                           <td className="p-3 pl-5 font-mono text-slate-400 text-[10px]">{idx + 1}</td>
                           <td className="p-3">
@@ -954,8 +1062,14 @@ export default function KiyavaPage() {
                           <td className="p-3 text-right font-mono font-bold text-emerald-600">
                             {purchasedQty > 0 ? `+${purchasedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}
                           </td>
+                          <td className="p-3 text-right font-mono font-bold text-cyan-600">
+                            {manufacturedQty > 0 ? `+${manufacturedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}
+                          </td>
                           <td className="p-3 text-right font-mono font-bold text-rose-600">
                             {soldQty > 0 ? `−${soldQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-amber-600">
+                            {consumedQty > 0 ? `−${consumedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}
                           </td>
                           <td className="p-3 text-right pr-5">
                             <span className={`inline-flex items-center px-3 py-1 rounded-full font-black font-mono text-xs ${closingQty <= 0
@@ -983,8 +1097,16 @@ export default function KiyavaPage() {
                         <td className="p-3 text-right font-mono text-emerald-600">
                           {totalPurchasedQty > 0 ? `+${totalPurchasedQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
                         </td>
+                        <td className="p-3 text-right font-mono text-cyan-600">
+                          {/* Manufactured Total could be calculated here, skipping for simple UI */}
+                          —
+                        </td>
                         <td className="p-3 text-right font-mono text-rose-600">
                           {totalSoldQty > 0 ? `−${totalSoldQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="p-3 text-right font-mono text-amber-600">
+                          {/* Consumed Total could be calculated here, skipping for simple UI */}
+                          —
                         </td>
                         <td className="p-3 text-right pr-5 font-mono text-blue-700">
                           {totalClosingQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
@@ -1068,6 +1190,8 @@ export default function KiyavaPage() {
         )
       })()}
 
+
+
       {/* 5. TALLY INVOICE PRINT / PREVIEW MODAL */}
       {selectedInvoiceForPrint && (
         <TallyInvoicePrint
@@ -1105,6 +1229,8 @@ export default function KiyavaPage() {
         initialData={editingOpeningStockEntry}
         catalog={catalog}
       />
+
+
     </div>
   )
 }

@@ -6,7 +6,8 @@ import {
   PartyProfile,
   CatalogItem,
   KiyavaInvoice,
-  OpeningStockEntry
+  OpeningStockEntry,
+  ManufacturingLog
 } from '@/types/kiyavaBilling'
 import {
   DEFAULT_KSV_COMPANIES,
@@ -16,10 +17,12 @@ import {
 } from '@/lib/ksvDefaults'
 import KiyavaInvoiceForm from '@/components/kiyava/KiyavaInvoiceForm'
 import TallyInvoicePrint from '@/components/kiyava/TallyInvoicePrint'
+import TallyManufacturingPrint from '@/components/kiyava/TallyManufacturingPrint'
 import CompanyModal from '@/components/kiyava/CompanyModal'
 import PartyModal from '@/components/kiyava/PartyModal'
 import CatalogModal from '@/components/kiyava/CatalogModal'
 import OpeningStockModal from '@/components/kiyava/OpeningStockModal'
+import ManufacturingModal from '@/components/kiyava/ManufacturingModal'
 import {
   FileText,
   Plus,
@@ -38,7 +41,8 @@ import {
   ShoppingCart,
   ArrowDownLeft,
   ArrowUpRight,
-  CheckCircle2
+  CheckCircle2,
+  FlaskConical
 } from 'lucide-react'
 
 export default function KsvPage() {
@@ -48,8 +52,9 @@ export default function KsvPage() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [invoices, setInvoices] = useState<KiyavaInvoice[]>([])
   const [openingStock, setOpeningStock] = useState<OpeningStockEntry[]>([])
+  const [manufacturingLogs, setManufacturingLogs] = useState<ManufacturingLog[]>([])
 
-  // Active Tab: 'invoices' | 'create-purchase' | 'create-sell' | 'companies' | 'parties' | 'catalog' | 'opening-stock'
+  // Active Tab: 'invoices' | 'create-purchase' | 'create-sell' | 'companies' | 'parties' | 'catalog' | 'opening-stock' | 'manufacturing'
   const [activeTab, setActiveTab] = useState<string>('invoices')
 
   // Modals & Print Previews
@@ -68,6 +73,9 @@ export default function KsvPage() {
   const [isOpeningStockModalOpen, setIsOpeningStockModalOpen] = useState(false)
   const [editingOpeningStockEntry, setEditingOpeningStockEntry] = useState<OpeningStockEntry | null>(null)
 
+  const [isManufacturingModalOpen, setIsManufacturingModalOpen] = useState(false)
+  const [selectedMfgLogForPrint, setSelectedMfgLogForPrint] = useState<ManufacturingLog | null>(null)
+
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
@@ -81,12 +89,14 @@ export default function KsvPage() {
       const storedCatalog = localStorage.getItem('ksv_app_catalog')
       const storedInvoices = localStorage.getItem('ksv_app_invoices')
       const storedOpeningStock = localStorage.getItem('ksv_app_opening_stock')
+      const storedMfgLogs = localStorage.getItem('ksv_app_manufacturing')
 
       setCompanies(storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_KSV_COMPANIES)
       setParties(storedParties ? JSON.parse(storedParties) : DEFAULT_KSV_PARTIES)
       setCatalog(storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_KSV_CATALOG)
       setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_KSV_INVOICES)
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
+      setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
     } catch (e) {
       console.error('Failed to load KSV storage data:', e)
       setCompanies(DEFAULT_KSV_COMPANIES)
@@ -94,6 +104,7 @@ export default function KsvPage() {
       setCatalog(DEFAULT_KSV_CATALOG)
       setInvoices(SEEDED_KSV_INVOICES)
       setOpeningStock([])
+      setManufacturingLogs([])
     }
   }, [])
 
@@ -238,6 +249,27 @@ export default function KsvPage() {
     }
   }
 
+  const saveManufacturingLogs = (newLogs: ManufacturingLog[]) => {
+    setManufacturingLogs(newLogs)
+    localStorage.setItem('ksv_app_manufacturing', JSON.stringify(newLogs))
+  }
+
+  // Manufacturing Handlers
+  const handleSaveManufacturingLog = (log: ManufacturingLog) => {
+    const exists = manufacturingLogs.some((l) => l.id === log.id)
+    const updated = exists
+      ? manufacturingLogs.map((l) => (l.id === log.id ? log : l))
+      : [...manufacturingLogs, log]
+    saveManufacturingLogs(updated)
+  }
+
+  const handleDeleteManufacturingLog = (id: string) => {
+    if (confirm('Delete this manufacturing entry? Stock will be updated accordingly.')) {
+      const updated = manufacturingLogs.filter((l) => l.id !== id)
+      saveManufacturingLogs(updated)
+    }
+  }
+
   // Financial Stats
   const totalInvoicesCount = invoices.length
   const totalPurchasedFromKiyava = invoices
@@ -377,6 +409,17 @@ export default function KsvPage() {
         >
           <FileText className="w-3.5 h-3.5" />
           Stock Register
+        </button>
+
+        <button
+          onClick={() => setActiveTab('manufacturing')}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'manufacturing'
+              ? 'bg-cyan-600 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+        >
+          <FlaskConical className="w-3.5 h-3.5" />
+          Production of Finished Goods ({manufacturingLogs.length})
         </button>
       </div>
 
@@ -790,79 +833,253 @@ export default function KsvPage() {
         </div>
       )}
 
-      {/* 4. TAB CONTENT: 6. OPENING STOCK */}
-      {activeTab === 'opening-stock' && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div>
-              <h2 className="text-sm font-black text-slate-800">Opening Stock Ledger</h2>
-              <p className="text-[11px] text-slate-400">
-                Record starting inventory balances for raw herbs, packaging, and finished kits.
-              </p>
+      {/* 4. TAB CONTENT: 6. STOCK REGISTER & AUTOMATIC INVENTORY ADJUSTMENT */}
+      {activeTab === 'opening-stock' && (() => {
+        // Build full stock register with auto manufacturing adjustments
+        const stockRegister = catalog.map((item) => {
+          const openingEntry = openingStock.find((s) => s.itemId === item.id || s.itemName.toLowerCase() === item.name.toLowerCase())
+          const openingQty = openingEntry?.quantity || Number(item.quantity) || 0
+          const unit = openingEntry?.unit ?? item.defaultUnit
+
+          // Purchased Qty from PURCHASE invoices
+          const purchasedQty = invoices
+            .filter((inv) => inv.type === 'PURCHASE')
+            .reduce((sum, inv) => {
+              const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
+              return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+            }, 0)
+
+          // Sold Qty from SALE invoices
+          const soldQty = invoices
+            .filter((inv) => (inv.type || 'SALE') === 'SALE')
+            .reduce((sum, inv) => {
+              const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
+              return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+            }, 0)
+
+          // Manufactured Qty (Produced)
+          const manufacturedQty = manufacturingLogs
+            .filter((log) => log.finishedGoodItemId === item.id || log.finishedGoodName.toLowerCase() === item.name.toLowerCase())
+            .reduce((sum, log) => sum + (log.producedQuantity || 0), 0)
+
+          // Consumed Qty in Manufacturing (Raw Materials)
+          const consumedQty = manufacturingLogs.reduce((sum, log) => {
+            const consumed = log.rawMaterialsConsumed.filter(
+              (rm) => rm.itemId === item.id || rm.itemName.toLowerCase() === item.name.toLowerCase()
+            )
+            return sum + consumed.reduce((s, rm) => s + (rm.quantity || 0), 0)
+          }, 0)
+
+          const closingQty = openingQty + purchasedQty + manufacturedQty - soldQty - consumedQty
+
+          return { item, openingQty, purchasedQty, soldQty, manufacturedQty, consumedQty, closingQty, unit }
+        }).filter((row) => row.openingQty > 0 || row.purchasedQty > 0 || row.soldQty > 0 || row.manufacturedQty > 0 || row.consumedQty > 0)
+
+        const totalOpeningQty = stockRegister.reduce((s, r) => s + r.openingQty, 0)
+        const totalPurchasedQty = stockRegister.reduce((s, r) => s + r.purchasedQty, 0)
+        const totalSoldQty = stockRegister.reduce((s, r) => s + r.soldQty, 0)
+        const totalClosingQty = stockRegister.reduce((s, r) => s + r.closingQty, 0)
+
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-sm gap-3">
+              <div>
+                <h2 className="text-sm font-black text-slate-800">📦 KSV Stock Register &amp; Ledger</h2>
+                <p className="text-xs text-slate-400 font-medium">Opening Stock + Purchases + Manufactured In − Sales − Consumed In Mfg = Closing Balance</p>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingOpeningStockEntry(null)
+                  setIsOpeningStockModalOpen(true)
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Opening Stock
+              </button>
             </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-purple-500 mb-1">Opening Stock</p>
+                <h3 className="text-xl font-black text-purple-700 font-mono">{totalOpeningQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className="text-[10px] text-purple-400 font-medium mt-0.5">Initial balance</p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-500 mb-1">Purchased In</p>
+                <h3 className="text-xl font-black text-emerald-700 font-mono">+{totalPurchasedQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className="text-[10px] text-emerald-400 font-medium mt-0.5">From purchase invoices</p>
+              </div>
+              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-rose-500 mb-1">Sold Out</p>
+                <h3 className="text-xl font-black text-rose-700 font-mono">−{totalSoldQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className="text-[10px] text-rose-400 font-medium mt-0.5">From sale invoices</p>
+              </div>
+              <div className={`border rounded-2xl p-4 shadow-sm ${totalClosingQty > 0 ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
+                <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${totalClosingQty > 0 ? 'text-blue-500' : 'text-amber-500'}`}>Closing Balance</p>
+                <h3 className={`text-xl font-black font-mono ${totalClosingQty > 0 ? 'text-blue-700' : 'text-amber-700'}`}>{totalClosingQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className={`text-[10px] font-medium mt-0.5 ${totalClosingQty > 0 ? 'text-blue-400' : 'text-amber-400'}`}>Current net stock</p>
+              </div>
+            </div>
+
+            {/* Stock Table */}
+            {stockRegister.length > 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-900 text-white font-extrabold uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3 pl-5">Product / Herb Name</th>
+                        <th className="p-3 text-center">Unit</th>
+                        <th className="p-3 text-right text-purple-300">Opening Stock</th>
+                        <th className="p-3 text-right text-emerald-300">Purchased In (+)</th>
+                        <th className="p-3 text-right text-cyan-300">Produced In Mfg (+)</th>
+                        <th className="p-3 text-right text-rose-300">Sold Out (−)</th>
+                        <th className="p-3 text-right text-amber-300">Consumed In Mfg (−)</th>
+                        <th className="p-3 text-right text-blue-300 pr-5">Closing Stock</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {stockRegister.map(({ item, openingQty, purchasedQty, soldQty, manufacturedQty, consumedQty, closingQty, unit }) => (
+                        <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${closingQty <= 0 ? 'bg-rose-50/30' : ''}`}>
+                          <td className="p-3 pl-5">
+                            <div className="font-bold text-slate-900">{item.name}</div>
+                            {item.hsnCode && <div className="text-[10px] text-slate-400">HSN: {item.hsnCode}</div>}
+                          </td>
+                          <td className="p-3 text-center font-bold text-slate-600 uppercase">{unit}</td>
+                          <td className="p-3 text-right font-mono font-bold text-purple-700">{openingQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
+                          <td className="p-3 text-right font-mono font-bold text-emerald-600">{purchasedQty > 0 ? `+${purchasedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}</td>
+                          <td className="p-3 text-right font-mono font-bold text-cyan-600">{manufacturedQty > 0 ? `+${manufacturedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}</td>
+                          <td className="p-3 text-right font-mono font-bold text-rose-600">{soldQty > 0 ? `−${soldQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}</td>
+                          <td className="p-3 text-right font-mono font-bold text-amber-600">{consumedQty > 0 ? `−${consumedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}</td>
+                          <td className="p-3 text-right pr-5">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full font-black font-mono text-xs ${
+                              closingQty <= 0
+                                ? 'bg-rose-100 text-rose-700'
+                                : closingQty < 10
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {closingQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 shadow-sm space-y-3">
+                <div className="text-4xl">📦</div>
+                <h3 className="text-sm font-black text-slate-800">No Stock Records</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">Set opening stock or create manufacturing logs to track automatic stock adjustments.</p>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* 4. TAB CONTENT: 7. MANUFACTURING (MANUFACTURE OF MATERIALS) */}
+      {activeTab === 'manufacturing' && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="flex justify-end items-center">
             <button
-              onClick={() => {
-                setEditingOpeningStockEntry(null)
-                setIsOpeningStockModalOpen(true)
-              }}
-              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              onClick={() => setIsManufacturingModalOpen(true)}
+              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-cyan-600/20 uppercase tracking-wider"
             >
-              <Plus className="w-3.5 h-3.5" /> Add Opening Stock
+              <Plus className="w-3.5 h-3.5" /> Log Manufacturing Voucher
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Product Name</th>
-                    <th className="p-3 text-right">Quantity</th>
-                    <th className="p-3 text-right">Unit</th>
-                    <th className="p-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {openingStock.length > 0 ? (
-                    openingStock.map((entry) => (
-                      <tr key={entry.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="p-3 text-slate-500">{entry.date}</td>
-                        <td className="p-3 font-bold text-slate-900">{entry.itemName}</td>
-                        <td className="p-3 text-right font-mono font-bold text-purple-700">{entry.quantity}</td>
-                        <td className="p-3 text-right font-semibold uppercase text-slate-600">{entry.unit}</td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => {
-                                setEditingOpeningStockEntry(entry)
-                                setIsOpeningStockModalOpen(true)
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteOpeningStockEntry(entry.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
+          {manufacturingLogs.length > 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-900 text-white font-extrabold uppercase text-[10px]">
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-400 text-xs">
-                        No opening stock entries recorded.
-                      </td>
+                      <th className="p-3 pl-5">Date</th>
+                      <th className="p-3">Batch Name</th>
+                      <th className="p-3">Manufactured Product (Output)</th>
+                      <th className="p-3 text-right">Qty Produced</th>
+                      <th className="p-3 text-right">Effective Rate (₹)</th>
+                      <th className="p-3 text-right">Effective Cost (₹)</th>
+                      <th className="p-3">Components Consumed (Input)</th>
+                      <th className="p-3 text-right pr-5">Actions</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-sans">
+                    {manufacturingLogs.map((log) => {
+                      const totalCost = log.effectiveCost ?? log.rawMaterialsConsumed.reduce((s, rm) => s + (rm.amount ?? (rm.quantity * (rm.rate || 0))), 0)
+                      const effectiveRate = log.effectiveRatePerUnit ?? (log.producedQuantity > 0 ? totalCost / log.producedQuantity : 0)
+
+                      return (
+                        <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3 pl-5 font-mono text-slate-600">{log.date}</td>
+                          <td className="p-3 font-mono font-bold text-slate-800 uppercase">{log.batchNo || 'N/A'}</td>
+                          <td className="p-3 font-black text-cyan-800 uppercase">{log.finishedGoodName}</td>
+                          <td className="p-3 text-right font-mono font-black text-emerald-600">
+                            +{log.producedQuantity} <span className="text-[10px] text-emerald-500 font-bold uppercase">{log.unit}</span>
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-slate-700">
+                            ₹{effectiveRate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-3 text-right font-mono font-black text-slate-900">
+                            ₹{totalCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-3">
+                            <div className="space-y-1">
+                              {log.rawMaterialsConsumed.map((rm, idx) => (
+                                <div key={idx} className="flex justify-between items-center text-[10px]">
+                                  <span className="font-bold text-slate-700">{rm.itemName}</span>
+                                  <span className="font-mono text-rose-600 font-bold ml-3">
+                                    −{rm.quantity} {rm.unit} {rm.rate ? `(@ ₹${rm.rate})` : ''}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-3 text-right pr-5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => setSelectedMfgLogForPrint(log)}
+                                className="px-2.5 py-1 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-cyan-200"
+                                title="Print Tally Voucher"
+                              >
+                                <Printer className="w-3.5 h-3.5" /> Voucher
+                              </button>
+                              <button
+                                onClick={() => handleDeleteManufacturingLog(log.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 shadow-sm space-y-3">
+              <div className="text-4xl">⚗️</div>
+              <h3 className="text-sm font-black text-slate-800">No Manufacturing Logs Recorded</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                Log production batches with finished goods and consumed components to automatically adjust stock balances.
+              </p>
+              <button
+                onClick={() => setIsManufacturingModalOpen(true)}
+                className="mt-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs rounded-xl inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-md uppercase tracking-wider"
+              >
+                <Plus className="w-3.5 h-3.5" /> Log First Batch
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -902,6 +1119,20 @@ export default function KsvPage() {
         initialData={editingOpeningStockEntry}
         catalog={catalog}
       />
+
+      <ManufacturingModal
+        isOpen={isManufacturingModalOpen}
+        onClose={() => setIsManufacturingModalOpen(false)}
+        onSave={handleSaveManufacturingLog}
+        catalog={catalog}
+      />
+
+      {selectedMfgLogForPrint && (
+        <TallyManufacturingPrint
+          log={selectedMfgLogForPrint}
+          onClose={() => setSelectedMfgLogForPrint(null)}
+        />
+      )}
     </div>
   )
 }
