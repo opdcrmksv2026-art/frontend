@@ -24,7 +24,8 @@ import {
   Trash2,
   Banknote,
   Smartphone,
-  Wallet
+  Wallet,
+  Edit
 } from "lucide-react"
 
 interface TreatmentItem {
@@ -1087,6 +1088,23 @@ export default function CreateInvoicePage() {
                   className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all cursor-pointer active:scale-95"
                 >
                   <Printer className="w-4 h-4" /> Print / Save PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReceiptModal(false)
+                    // Remove last offline bill to prevent exact duplicate in local storage on next submit
+                    try {
+                      const existing = JSON.parse(localStorage.getItem("ksv_offline_bills") || "[]")
+                      if (existing.length > 0 && existing[0].invoiceNo === generatedBill.invoiceNo) {
+                        existing.shift()
+                        localStorage.setItem("ksv_offline_bills", JSON.stringify(existing))
+                      }
+                    } catch(e) {}
+                  }}
+                  className="bg-amber-500 hover:bg-amber-400 text-white font-extrabold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all cursor-pointer active:scale-95"
+                >
+                  <Edit className="w-4 h-4" /> Edit Bill
                 </button>
                 <button
                   type="button"
