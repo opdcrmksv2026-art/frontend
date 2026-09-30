@@ -567,7 +567,7 @@ export default function CreateInvoicePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="flex flex-col">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Bimari / Disease Condition *</label>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Disease/Kit *</label>
                   <textarea
                     rows={2}
                     value={treatment.disease}
