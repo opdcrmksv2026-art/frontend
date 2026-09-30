@@ -662,9 +662,9 @@ export default function KiyavaInvoiceForm({
             <button
               type="button"
               onClick={onOpenCatalogModal}
-              className="text-[11px] font-bold text-slate-500 hover:text-slate-800"
+              className="px-3 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 font-extrabold text-xs rounded-lg border border-amber-200 transition-all cursor-pointer flex items-center gap-1"
             >
-              + Product Name
+              <Package className="w-3.5 h-3.5" /> + New Product
             </button>
             <button
               type="button"
