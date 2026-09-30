@@ -619,31 +619,32 @@ export default function CreateInvoicePage() {
                   {activeTreatmentId === treatment.id && (() => {
                     const lines = treatment.kitName.split('\n')
                     const currentLine = lines[lines.length - 1]
-                    if (currentLine.length > 0) {
-                      const matches = catalog.filter(c => c.name.toLowerCase().includes(currentLine.toLowerCase()))
-                      if (matches.length > 0 && !catalog.some(c => c.name.toLowerCase() === currentLine.toLowerCase())) {
-                        return (
-                          <div className="absolute z-50 left-0 top-[105%] w-full bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto">
-                            {matches.map(c => (
-                              <div
-                                key={c.id}
-                                onMouseDown={(e) => {
-                                  e.preventDefault()
-                                  lines[lines.length - 1] = c.name
-                                  handleTreatmentChange(treatment.id, 'kitName', lines.join('\n') + '\n')
-                                  
-                                  const newPrice = (parseFloat(treatment.price || "0") + (c.defaultRate || 0)).toString()
-                                  handleTreatmentChange(treatment.id, 'price', newPrice)
-                                }}
-                                className="px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer border-b border-slate-100 last:border-0 transition-colors flex justify-between"
-                              >
-                                <span>{c.name}</span>
-                                {c.defaultRate > 0 && <span className="text-slate-400">₹{c.defaultRate}</span>}
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      }
+                    const matches = currentLine.trim() === '' 
+                      ? catalog 
+                      : catalog.filter(c => c.name.toLowerCase().includes(currentLine.toLowerCase()))
+                      
+                    if (matches.length > 0 && !catalog.some(c => c.name.toLowerCase() === currentLine.trim().toLowerCase())) {
+                      return (
+                        <div className="absolute z-50 left-0 top-[105%] w-full bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                          {matches.map(c => (
+                            <div
+                              key={c.id}
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                lines[lines.length - 1] = c.name
+                                handleTreatmentChange(treatment.id, 'kitName', lines.join('\n') + '\n')
+                                
+                                const newPrice = (parseFloat(treatment.price || "0") + (c.defaultRate || 0)).toString()
+                                handleTreatmentChange(treatment.id, 'price', newPrice)
+                              }}
+                              className="px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer border-b border-slate-100 last:border-0 transition-colors flex justify-between"
+                            >
+                              <span>{c.name}</span>
+                              {c.defaultRate > 0 && <span className="text-slate-400">₹{c.defaultRate}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )
                     }
                     return null
                   })()}
