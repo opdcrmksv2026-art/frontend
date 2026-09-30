@@ -118,7 +118,7 @@ export default function KsvPage() {
               name: log.finishedGoodName,
               hsnCode: '',
               defaultUnit: 'PCS',
-              defaultRate: log.effectiveRate || 0,
+              defaultRate: log.effectiveRatePerUnit || 0,
               defaultTaxRate: 12,
               category: 'medicine',
               description: 'Auto-added from Manufacturing'
@@ -390,7 +390,7 @@ export default function KsvPage() {
           name: log.finishedGoodName,
           hsnCode: '', // Can be edited later
           defaultUnit: 'PCS',
-          defaultRate: log.effectiveRate || 0,
+          defaultRate: log.effectiveRatePerUnit || 0,
           defaultTaxRate: 12,
           category: 'medicine',
           description: 'Auto-added from Manufacturing'
