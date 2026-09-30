@@ -99,64 +99,164 @@ export const DEFAULT_MAXXI_PARTIES: PartyProfile[] = [
 
 export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
-    id: 'cat_mx_1',
-    name: 'Maxxi-Cal D3 Softgel Capsules (10x10)',
-    hsnCode: '30049099',
-    defaultUnit: 'STRIP',
-    defaultRate: 145.0,
-    defaultTaxRate: 12,
+    id: 'cat_mx_ston_80',
+    name: 'STONVAIDHA KSG 80',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 2500.0,
+    defaultTaxRate: 5,
     category: 'medicine',
-    description: 'Calcium Carbonate 500mg & Vitamin D3 250 IU Softgel Capsules'
+    description: 'Packing: 240 GRM'
   },
   {
-    id: 'cat_mx_2',
-    name: 'Maxxi-Cold Total Relief Syrup 100ml',
-    hsnCode: '30049099',
-    defaultUnit: 'BOTTLE',
-    defaultRate: 85.0,
-    defaultTaxRate: 12,
+    id: 'cat_mx_ston_40',
+    name: 'STONVAIDHA KSG 40',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
     category: 'medicine',
-    description: 'Paracetamol, Phenylephrine & Chlorpheniramine Cold Relief Syrup'
+    description: 'Packing: 120 GRM'
   },
   {
-    id: 'cat_mx_3',
-    name: 'Maxxi-Cevit Vitamin C 500mg Chewable',
-    hsnCode: '30049099',
-    defaultUnit: 'STRIP',
-    defaultRate: 65.0,
-    defaultTaxRate: 12,
+    id: 'cat_mx_ston_12',
+    name: 'STONVAIDHA KSGA 12',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
     category: 'medicine',
-    description: 'Vitamin C & Zinc Chewable Immunity Booster Tablets'
+    description: 'Packing: 120 GRM'
   },
   {
-    id: 'cat_mx_4',
-    name: 'Maxxi-Praz D SR Capsules (10x10)',
-    hsnCode: '30049099',
-    defaultUnit: 'STRIP',
-    defaultRate: 120.0,
-    defaultTaxRate: 12,
+    id: 'cat_mx_ston_6',
+    name: 'STONVAIDHA KSGA 6',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
     category: 'medicine',
-    description: 'Rabeprazole Sodium 20mg & Domperidone 30mg SR Capsules'
+    description: 'Packing: 60 GRM'
   },
   {
-    id: 'cat_mx_5',
-    name: 'Maxxi-Gel Pain Relief Ointment 30g',
-    hsnCode: '30049099',
-    defaultUnit: 'TUBE',
-    defaultRate: 95.0,
-    defaultTaxRate: 12,
+    id: 'cat_mx_ston_108',
+    name: 'STONVAIDHA KSS 108',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
     category: 'medicine',
-    description: 'Diclofenac, Linseed Oil & Menthol Pain Relief Topical Gel'
+    description: 'Packing: KSS 108'
   },
   {
-    id: 'cat_mx_6',
-    name: 'Paracetamol IP Bulk Raw Powder',
-    hsnCode: '29222990',
-    defaultUnit: 'kg',
-    defaultRate: 450.0,
-    defaultTaxRate: 18,
-    category: 'herb',
-    description: 'Active Pharmaceutical Ingredient (API) Bulk Powder'
+    id: 'cat_mx_ston_72',
+    name: 'STONVAIDHA KSS 72',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: KSS 72'
+  },
+  {
+    id: 'cat_mx_ston_36',
+    name: 'STONVAIDHA KSS 36',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: KSS 36'
+  },
+  {
+    id: 'cat_mx_vidhu_tr_30',
+    name: 'VIDHUVAIDHA TR 30 CHURAN',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: 120 GRM'
+  },
+  {
+    id: 'cat_mx_vidhu_aks_30',
+    name: 'VIDHUVAIDHA AKS 30 CHURAN',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: 30 POUCH'
+  },
+  {
+    id: 'cat_mx_vidhu_ls_30',
+    name: 'VIDHUVAIDHA LS 30 CHURAN',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: 30 POUCH'
+  },
+  {
+    id: 'cat_mx_madhu_sm_30',
+    name: 'MADHUVAIDHA SM 30 CHURAN',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: 30 POUCH'
+  },
+  {
+    id: 'cat_mx_vidhu_bbn_30',
+    name: 'VIDHUVAIDHA BBN 30 CHURAN',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: 180 GRM'
+  },
+  {
+    id: 'cat_mx_vidhu_hgp_30',
+    name: 'VIDHUVAIDHA HGP 30 CHURAN',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: 120 GRM'
+  },
+  {
+    id: 'cat_mx_vidhu_pssf_30',
+    name: 'VIDHUVAIDHA PSSF 30 CHURAN',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: 90 GRM'
+  },
+  {
+    id: 'cat_mx_vidhu_pssf_60',
+    name: 'VIDHUVAIDHA PSSF 60 CHURAN',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: 180 GRM'
+  },
+  {
+    id: 'cat_mx_vidhu_hbp_30',
+    name: 'VIDHUVAIDHA HBP 30 CHURAN',
+    hsnCode: '30031000',
+    defaultUnit: 'NOS',
+    defaultRate: 0.0,
+    defaultTaxRate: 5,
+    category: 'medicine',
+    description: 'Packing: 30 POUCH'
   }
 ]
 

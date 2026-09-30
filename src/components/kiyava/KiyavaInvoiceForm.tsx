@@ -770,19 +770,23 @@ export default function KiyavaInvoiceForm({
 
                   {/* Unit */}
                   <td className="p-2">
-                    <select
+                    <input
+                      list="invoice-unit-options"
                       value={item.unit}
                       onChange={(e) => handleItemChange(item.id, 'unit', e.target.value)}
-                      className="w-full px-1 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 outline-none cursor-pointer"
-                    >
-                      <option value="kg">kg</option>
-                      <option value="PCS">PCS</option>
-                      <option value="Bags">Bags</option>
-                      <option value="Box">Box</option>
-                      <option value="Ltr">Ltr</option>
-                      <option value="gm">gm</option>
-                      <option value="Units">Units</option>
-                    </select>
+                      placeholder="Unit..."
+                      className="w-full px-1 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 outline-none"
+                    />
+                    <datalist id="invoice-unit-options">
+                      <option value="kg" />
+                      <option value="PCS" />
+                      <option value="NOS" />
+                      <option value="Bags" />
+                      <option value="Box" />
+                      <option value="Ltr" />
+                      <option value="gm" />
+                      <option value="Units" />
+                    </datalist>
                   </td>
 
                   {/* Rate */}

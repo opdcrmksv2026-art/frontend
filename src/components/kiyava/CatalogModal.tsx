@@ -136,19 +136,23 @@ export default function CatalogModal({
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
                 Unit (per) *
               </label>
-              <select
+              <input
+                list="catalog-unit-options"
                 value={formData.defaultUnit}
                 onChange={(e) => setFormData({ ...formData, defaultUnit: e.target.value })}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-amber-500 cursor-pointer"
-              >
+                placeholder="Type or select..."
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-amber-500"
+              />
+              <datalist id="catalog-unit-options">
                 <option value="kg">kg (Kilogram)</option>
                 <option value="PCS">PCS (Pieces)</option>
+                <option value="NOS">NOS (Numbers)</option>
                 <option value="Bags">Bags / Bales</option>
                 <option value="Box">Box</option>
                 <option value="Ltr">Ltr (Liter)</option>
                 <option value="gm">gm (Grams)</option>
                 <option value="Units">Units</option>
-              </select>
+              </datalist>
             </div>
 
             <div>
