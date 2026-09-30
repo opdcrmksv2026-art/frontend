@@ -568,23 +568,23 @@ export default function CreateInvoicePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="flex flex-col">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Bimari / Disease Condition *</label>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={2}
                     value={treatment.disease}
                     onChange={(e) => handleTreatmentChange(treatment.id, "disease", e.target.value)}
                     placeholder="e.g. Sugar / Diabetes, BP, Joint Pain, Liver..."
-                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700 placeholder-slate-400"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700 placeholder-slate-400 resize-none"
                   />
                 </div>
 
                 <div className="flex flex-col">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Medicine Name</label>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={2}
                     value={treatment.kitName}
                     onChange={(e) => handleTreatmentChange(treatment.id, "kitName", e.target.value)}
-                    placeholder="e.g. Sugar Control Kit, BP Care Pack..."
-                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700 placeholder-slate-400"
+                    placeholder="e.g. KSG 80-1, KSGA 12-1..."
+                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700 placeholder-slate-400 resize-none"
                   />
                 </div>
 
