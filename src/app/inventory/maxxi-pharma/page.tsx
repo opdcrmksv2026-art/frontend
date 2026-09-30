@@ -85,7 +85,20 @@ export default function MaxxiPharmaPage() {
 
       setCompanies(storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_MAXXI_COMPANIES)
       setParties(storedParties ? JSON.parse(storedParties) : DEFAULT_MAXXI_PARTIES)
-      setCatalog(storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_MAXXI_CATALOG)
+      
+      let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_MAXXI_CATALOG
+      let catalogChanged = false
+      DEFAULT_MAXXI_CATALOG.forEach(defaultItem => {
+        if (!parsedCatalog.some((c: any) => c.name.toLowerCase() === defaultItem.name.toLowerCase())) {
+          parsedCatalog.push(defaultItem)
+          catalogChanged = true
+        }
+      })
+      if (catalogChanged && storedCatalog) {
+        localStorage.setItem('maxxi_app_catalog', JSON.stringify(parsedCatalog))
+      }
+      setCatalog(parsedCatalog)
+
       setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_MAXXI_INVOICES)
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
     } catch (e) {
