@@ -62,11 +62,15 @@ export default function CreateInvoicePage() {
   // Step-by-Step State
   const [currentStep, setCurrentStep] = useState(1)
 
+  // Catalog for autocomplete
+  const [catalog, setCatalog] = useState<any[]>([])
+  const [activeTreatmentId, setActiveTreatmentId] = useState<string | null>(null)
+
   // Search & selection states
   const [searchQuery, setSearchQuery] = useState("")
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
-  
+
   // Form mode: true = existing patient selected/autofilled, false = register new on-the-fly
   const [isExistingPatient, setIsExistingPatient] = useState(false)
 
@@ -92,13 +96,13 @@ export default function CreateInvoicePage() {
     city: "",
     state: "",
     pincode: "",
-    
+
     // Pricing & Payments
     discountApplied: "0",
     amountCash: "0",
     amountOnline: "0",
     billingType: "Non-GST",
-    
+
     // Medical notes
     symptoms: "",
     notes: "",
@@ -127,6 +131,29 @@ export default function CreateInvoicePage() {
     }
     fetchPatients()
   }, [API_URL])
+
+  // Load catalogs for product autocomplete
+  useEffect(() => {
+    Promise.all([
+      import("@/lib/ksvDefaults"),
+      import("@/lib/kiyavaDefaults"),
+      import("@/lib/maxxiDefaults")
+    ]).then(([ksv, kiyava, maxxi]) => {
+      const ksvCat = localStorage.getItem("ksv_app_catalog") 
+        ? JSON.parse(localStorage.getItem("ksv_app_catalog")!) 
+        : ksv.DEFAULT_KSV_CATALOG
+      
+      const kiyavaCat = localStorage.getItem("kiyava_app_catalog") 
+        ? JSON.parse(localStorage.getItem("kiyava_app_catalog")!) 
+        : kiyava.DEFAULT_KIYAVA_CATALOG
+      
+      const maxxiCat = localStorage.getItem("maxxi_app_catalog") 
+        ? JSON.parse(localStorage.getItem("maxxi_app_catalog")!) 
+        : maxxi.DEFAULT_MAXXI_CATALOG
+
+      setCatalog([...ksvCat, ...kiyavaCat, ...maxxiCat])
+    }).catch(err => console.error("Error loading catalogs:", err))
+  }, [])
 
   // Treatment list manipulators
   const handleAddTreatment = () => {
@@ -158,7 +185,7 @@ export default function CreateInvoicePage() {
     setIsExistingPatient(true)
     setShowDropdown(false)
     setSearchQuery(`${patient.name} (${patient.uniqueId})`)
-    
+
     setFormData(prev => ({
       ...prev,
       uniqueId: patient.uniqueId,
@@ -179,7 +206,7 @@ export default function CreateInvoicePage() {
     setSelectedPatient(null)
     setIsExistingPatient(false)
     setSearchQuery("")
-    
+
     setFormData(prev => ({
       ...prev,
       uniqueId: "",
@@ -342,7 +369,7 @@ export default function CreateInvoicePage() {
             state: formData.state || null,
             pincode: formData.pincode || null
           })
-        }).catch(() => {})
+        }).catch(() => { })
       }
 
       await fetch(`${API_URL}/api/patients/${formData.uniqueId}/history`, {
@@ -359,7 +386,7 @@ export default function CreateInvoicePage() {
           notes: formData.notes,
           date: formData.date
         })
-      }).catch(() => {})
+      }).catch(() => { })
 
       if (formData.nextFollowUpDate) {
         await fetch(`${API_URL}/api/patients/${formData.uniqueId}/followup`, {
@@ -370,7 +397,7 @@ export default function CreateInvoicePage() {
             followUpStatus: "PENDING",
             followUpNotes: `Next checkup for ${combinedKitName}`
           })
-        }).catch(() => {})
+        }).catch(() => { })
       }
     } catch (err) {
       console.warn("Backend offline or network error, generating local bill receipt:", err)
@@ -395,7 +422,7 @@ export default function CreateInvoicePage() {
   const renderStep1 = () => (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.02)] space-y-6">
-        
+
         <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3.5">
           <User className="w-5 h-5 text-blue-500" />
           Patient Selection &amp; Identification
@@ -532,7 +559,7 @@ export default function CreateInvoicePage() {
   const renderStep2 = () => (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.02)] space-y-6">
-        
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
           <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
             <Pill className="w-5 h-5 text-emerald-500" />
@@ -552,7 +579,7 @@ export default function CreateInvoicePage() {
                   <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">
                     {index + 1}
                   </span>
-                  Disease / Treatment #{index + 1}
+                  Disease / Kit #{index + 1}
                 </span>
                 {treatments.length > 1 && (
                   <button
@@ -567,7 +594,7 @@ export default function CreateInvoicePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="flex flex-col">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Disease/Kit *</label>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Bimari / Disease Condition *</label>
                   <textarea
                     rows={2}
                     value={treatment.disease}
@@ -577,15 +604,49 @@ export default function CreateInvoicePage() {
                   />
                 </div>
 
-                <div className="flex flex-col">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Medicine Name</label>
+                <div className="flex flex-col relative">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Product Name</label>
                   <textarea
                     rows={2}
                     value={treatment.kitName}
                     onChange={(e) => handleTreatmentChange(treatment.id, "kitName", e.target.value)}
+                    onFocus={() => setActiveTreatmentId(treatment.id)}
+                    onBlur={() => setTimeout(() => setActiveTreatmentId(null), 200)}
                     placeholder="e.g. KSG 80-1, KSGA 12-1..."
                     className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700 placeholder-slate-400 resize-none"
                   />
+
+                  {activeTreatmentId === treatment.id && (() => {
+                    const lines = treatment.kitName.split('\n')
+                    const currentLine = lines[lines.length - 1]
+                    if (currentLine.length > 0) {
+                      const matches = catalog.filter(c => c.name.toLowerCase().includes(currentLine.toLowerCase()))
+                      if (matches.length > 0 && !catalog.some(c => c.name.toLowerCase() === currentLine.toLowerCase())) {
+                        return (
+                          <div className="absolute z-50 left-0 top-[105%] w-full bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto">
+                            {matches.map(c => (
+                              <div
+                                key={c.id}
+                                onMouseDown={(e) => {
+                                  e.preventDefault()
+                                  lines[lines.length - 1] = c.name
+                                  handleTreatmentChange(treatment.id, 'kitName', lines.join('\n') + '\n')
+                                  
+                                  const newPrice = (parseFloat(treatment.price || "0") + (c.defaultRate || 0)).toString()
+                                  handleTreatmentChange(treatment.id, 'price', newPrice)
+                                }}
+                                className="px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer border-b border-slate-100 last:border-0 transition-colors flex justify-between"
+                              >
+                                <span>{c.name}</span>
+                                {c.defaultRate > 0 && <span className="text-slate-400">₹{c.defaultRate}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      }
+                    }
+                    return null
+                  })()}
                 </div>
 
                 <div className="flex flex-col">
@@ -678,10 +739,10 @@ export default function CreateInvoicePage() {
   // --- RENDERING STEP 3: BILLING & PAYMENT ---
   const renderStep3 = () => (
     <div className="space-y-6 animate-in fade-in duration-300">
-      
+
       {/* Visual Invoice Receipt / Bill Preview */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+
         {/* Left Form controls */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.02)] space-y-6">
@@ -691,7 +752,7 @@ export default function CreateInvoicePage() {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
+
               {/* Discount selection */}
               <div className="flex flex-col">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">Discount (₹)</label>
@@ -823,7 +884,7 @@ export default function CreateInvoicePage() {
         {/* Right Invoice Receipt Preview */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.02)] relative overflow-hidden text-slate-600">
-            
+
             <div className="flex items-center gap-2 mb-6 pb-4 border-b border-slate-100">
               <Receipt className="w-5 h-5 text-indigo-500" />
               <h2 className="text-sm font-extrabold uppercase tracking-widest text-slate-800">Bill Receipt Preview</h2>
@@ -953,7 +1014,7 @@ export default function CreateInvoicePage() {
 
   return (
     <div className="w-full pt-0 pb-16 animate-in fade-in duration-500 text-slate-700">
-      
+
       {/* Sleek Compact Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-3 border-b border-slate-200/60">
         <div className="flex items-center gap-3">
@@ -972,21 +1033,19 @@ export default function CreateInvoicePage() {
           <button
             type="button"
             onClick={() => setCurrentStep(1)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
-              currentStep === 1
-                ? "bg-white text-blue-600 font-extrabold shadow-sm"
-                : currentStep > 1
-                  ? "text-emerald-600 font-bold"
-                  : "text-slate-400 font-medium"
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${currentStep === 1
+              ? "bg-white text-blue-600 font-extrabold shadow-sm"
+              : currentStep > 1
+                ? "text-emerald-600 font-bold"
+                : "text-slate-400 font-medium"
+              }`}
           >
-            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
-              currentStep === 1
-                ? "bg-blue-600 text-white font-bold"
-                : currentStep > 1
-                  ? "bg-emerald-500 text-white font-bold"
-                  : "bg-slate-200 text-slate-500"
-            }`}>
+            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${currentStep === 1
+              ? "bg-blue-600 text-white font-bold"
+              : currentStep > 1
+                ? "bg-emerald-500 text-white font-bold"
+                : "bg-slate-200 text-slate-500"
+              }`}>
               {currentStep > 1 ? <Check className="w-2.5 h-2.5" /> : "1"}
             </span>
             <span>Patient</span>
@@ -997,21 +1056,19 @@ export default function CreateInvoicePage() {
           <button
             type="button"
             onClick={() => currentStep > 1 && setCurrentStep(2)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
-              currentStep === 2
-                ? "bg-white text-blue-600 font-extrabold shadow-sm"
-                : currentStep > 2
-                  ? "text-emerald-600 font-bold"
-                  : "text-slate-400 font-medium"
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${currentStep === 2
+              ? "bg-white text-blue-600 font-extrabold shadow-sm"
+              : currentStep > 2
+                ? "text-emerald-600 font-bold"
+                : "text-slate-400 font-medium"
+              }`}
           >
-            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
-              currentStep === 2
-                ? "bg-blue-600 text-white font-bold"
-                : currentStep > 2
-                  ? "bg-emerald-500 text-white font-bold"
-                  : "bg-slate-200 text-slate-500"
-            }`}>
+            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${currentStep === 2
+              ? "bg-blue-600 text-white font-bold"
+              : currentStep > 2
+                ? "bg-emerald-500 text-white font-bold"
+                : "bg-slate-200 text-slate-500"
+              }`}>
               {currentStep > 2 ? <Check className="w-2.5 h-2.5" /> : "2"}
             </span>
             <span>Treatment</span>
@@ -1022,17 +1079,15 @@ export default function CreateInvoicePage() {
           <button
             type="button"
             onClick={() => currentStep > 2 && setCurrentStep(3)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
-              currentStep === 3
-                ? "bg-white text-blue-600 font-extrabold shadow-sm"
-                : "text-slate-400 font-medium"
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${currentStep === 3
+              ? "bg-white text-blue-600 font-extrabold shadow-sm"
+              : "text-slate-400 font-medium"
+              }`}
           >
-            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
-              currentStep === 3
-                ? "bg-blue-600 text-white font-bold"
-                : "bg-slate-200 text-slate-500"
-            }`}>
+            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${currentStep === 3
+              ? "bg-blue-600 text-white font-bold"
+              : "bg-slate-200 text-slate-500"
+              }`}>
               3
             </span>
             <span>Payment</span>
@@ -1064,18 +1119,18 @@ export default function CreateInvoicePage() {
 
       {/* PRINTABLE RECEIPT MODAL TEMPLATE */}
       {showReceiptModal && generatedBill && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-300 print:bg-transparent print:p-0"
           onClick={() => {
             setShowReceiptModal(false)
             router.push("/patients")
           }}
         >
-          <div 
+          <div
             className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 relative my-8 text-slate-800 flex flex-col overflow-hidden print:shadow-none print:border-none print:my-0 print:max-w-none print:w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            
+
             {/* Top Modal Actions Header Bar (Non-printable) */}
             <div className="px-6 py-4 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0 print:hidden">
               <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200 flex items-center gap-1.5">
@@ -1100,7 +1155,7 @@ export default function CreateInvoicePage() {
                         existing.shift()
                         localStorage.setItem("ksv_offline_bills", JSON.stringify(existing))
                       }
-                    } catch(e) {}
+                    } catch (e) { }
                   }}
                   className="bg-amber-500 hover:bg-amber-400 text-white font-extrabold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all cursor-pointer active:scale-95"
                 >
@@ -1121,10 +1176,10 @@ export default function CreateInvoicePage() {
 
             {/* Scrollable Receipt Body Container */}
             <div className="p-6 sm:p-8 overflow-y-auto max-h-[75vh] print:max-h-none print:p-0 print:overflow-visible">
-              
+
               {/* PRINT AREA / OFFICIAL CLINIC RECEIPT TEMPLATE */}
               <div id="printable-receipt" className="space-y-6">
-                
+
                 {/* Header Letterhead */}
                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4">
                   <div>
