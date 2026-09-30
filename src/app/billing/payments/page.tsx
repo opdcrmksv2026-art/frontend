@@ -21,7 +21,8 @@ import {
   LayoutGrid,
   Trash2,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  Edit
 } from "lucide-react"
 
 interface PaymentRecord {
@@ -574,6 +575,13 @@ export default function PaymentsPage() {
                             className="bg-white hover:bg-blue-50 text-blue-600 hover:text-blue-700 border border-slate-200 hover:border-blue-300 font-extrabold px-3 py-1.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
                           >
                             <Printer className="w-3.5 h-3.5" /> View Receipt
+                          </button>
+                          <button
+                            onClick={() => alert("Edit feature coming soon!")}
+                            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all border border-transparent hover:border-amber-100 cursor-pointer"
+                            title="Edit Invoice"
+                          >
+                            <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDeleteRecord(r)}
