@@ -578,7 +578,7 @@ export default function CreateInvoicePage() {
                 </div>
 
                 <div className="flex flex-col">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Kit / Medicine Name</label>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Medicine Name</label>
                   <input
                     type="text"
                     value={treatment.kitName}
