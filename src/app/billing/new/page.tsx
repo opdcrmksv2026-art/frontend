@@ -132,27 +132,17 @@ export default function CreateInvoicePage() {
     fetchPatients()
   }, [API_URL])
 
-  // Load catalogs for product autocomplete
+  // Load Maxxi catalog for product autocomplete (only Maxxi as requested)
   useEffect(() => {
-    Promise.all([
-      import("@/lib/ksvDefaults"),
-      import("@/lib/kiyavaDefaults"),
-      import("@/lib/maxxiDefaults")
-    ]).then(([ksv, kiyava, maxxi]) => {
-      const ksvCat = localStorage.getItem("ksv_app_catalog") 
-        ? JSON.parse(localStorage.getItem("ksv_app_catalog")!) 
-        : ksv.DEFAULT_KSV_CATALOG
-      
-      const kiyavaCat = localStorage.getItem("kiyava_app_catalog") 
-        ? JSON.parse(localStorage.getItem("kiyava_app_catalog")!) 
-        : kiyava.DEFAULT_CATALOG
-      
-      const maxxiCat = localStorage.getItem("maxxi_app_catalog") 
-        ? JSON.parse(localStorage.getItem("maxxi_app_catalog")!) 
-        : maxxi.DEFAULT_MAXXI_CATALOG
+    import("@/lib/maxxiDefaults")
+      .then(maxxi => {
+        const maxxiCat = localStorage.getItem("maxxi_app_catalog") 
+          ? JSON.parse(localStorage.getItem("maxxi_app_catalog")!) 
+          : maxxi.DEFAULT_MAXXI_CATALOG
 
-      setCatalog([...(ksvCat || []), ...(kiyavaCat || []), ...(maxxiCat || [])])
-    }).catch(err => console.error("Error loading catalogs:", err))
+        setCatalog([...(maxxiCat || [])])
+      })
+      .catch(err => console.error("Error loading Maxxi catalog:", err))
   }, [])
 
   // Treatment list manipulators
