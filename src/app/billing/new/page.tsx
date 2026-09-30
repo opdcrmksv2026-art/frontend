@@ -145,13 +145,13 @@ export default function CreateInvoicePage() {
       
       const kiyavaCat = localStorage.getItem("kiyava_app_catalog") 
         ? JSON.parse(localStorage.getItem("kiyava_app_catalog")!) 
-        : kiyava.DEFAULT_KIYAVA_CATALOG
+        : kiyava.DEFAULT_CATALOG
       
       const maxxiCat = localStorage.getItem("maxxi_app_catalog") 
         ? JSON.parse(localStorage.getItem("maxxi_app_catalog")!) 
         : maxxi.DEFAULT_MAXXI_CATALOG
 
-      setCatalog([...ksvCat, ...kiyavaCat, ...maxxiCat])
+      setCatalog([...(ksvCat || []), ...(kiyavaCat || []), ...(maxxiCat || [])])
     }).catch(err => console.error("Error loading catalogs:", err))
   }, [])
 
