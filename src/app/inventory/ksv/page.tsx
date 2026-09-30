@@ -15,6 +15,7 @@ import {
   DEFAULT_KSV_CATALOG,
   SEEDED_KSV_INVOICES
 } from '@/lib/ksvDefaults'
+import { DEFAULT_MAXXI_CATALOG } from '@/lib/maxxiDefaults'
 import KiyavaInvoiceForm from '@/components/kiyava/KiyavaInvoiceForm'
 import TallyInvoicePrint from '@/components/kiyava/TallyInvoicePrint'
 import TallyManufacturingPrint from '@/components/kiyava/TallyManufacturingPrint'
@@ -23,6 +24,7 @@ import PartyModal from '@/components/kiyava/PartyModal'
 import CatalogModal from '@/components/kiyava/CatalogModal'
 import OpeningStockModal from '@/components/kiyava/OpeningStockModal'
 import ManufacturingModal from '@/components/kiyava/ManufacturingModal'
+import StockRegisterTab from '@/components/kiyava/StockRegisterTab'
 import {
   FileText,
   Plus,
@@ -44,6 +46,7 @@ import {
   CheckCircle2,
   FlaskConical
 } from 'lucide-react'
+import { constants } from 'buffer'
 
 export default function KsvPage() {
   // State for data
@@ -75,11 +78,10 @@ export default function KsvPage() {
 
   const [isManufacturingModalOpen, setIsManufacturingModalOpen] = useState(false)
   const [selectedMfgLogForPrint, setSelectedMfgLogForPrint] = useState<ManufacturingLog | null>(null)
-
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
-  const [invoiceSummaryType, setInvoiceSummaryType] = useState<'PURCHASE' | 'SALE'>('PURCHASE')
+  const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE' | 'ALL'>('SALE')
 
   // Load Initial Data from localStorage or clean defaults
   useEffect(() => {
@@ -92,9 +94,58 @@ export default function KsvPage() {
       const storedMfgLogs = localStorage.getItem('ksv_app_manufacturing')
 
       setCompanies(storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_KSV_COMPANIES)
-      setParties(storedParties ? JSON.parse(storedParties) : DEFAULT_KSV_PARTIES)
-      setCatalog(storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_KSV_CATALOG)
-      setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_KSV_INVOICES)
+      
+      // Migration: Ensure MAXXI PHARMA exists in parties if it was missed in older localStorage
+      let parsedParties = storedParties ? JSON.parse(storedParties) : DEFAULT_KSV_PARTIES
+      if (!parsedParties.some((p: any) => p.id === 'party_maxxi')) {
+        const maxxi = DEFAULT_KSV_PARTIES.find(p => p.id === 'party_maxxi')
+        if (maxxi) {
+          parsedParties.push(maxxi)
+          localStorage.setItem('ksv_app_parties', JSON.stringify(parsedParties))
+        }
+      }
+      setParties(parsedParties)
+
+      // Migration: Ensure all finished goods from manufacturing logs are in the catalog
+      let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_KSV_CATALOG
+      if (storedMfgLogs) {
+        const parsedLogs = JSON.parse(storedMfgLogs)
+        let catalogChanged = false
+        parsedLogs.forEach((log: any) => {
+          if (log.finishedGoodName && !parsedCatalog.some((c: any) => c.name.toLowerCase() === log.finishedGoodName.toLowerCase())) {
+            parsedCatalog.push({
+              id: log.finishedGoodItemId || `cat_mfg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+              name: log.finishedGoodName,
+              hsnCode: '',
+              defaultUnit: 'PCS',
+              defaultRate: log.effectiveRate || 0,
+              defaultTaxRate: 12,
+              category: 'medicine',
+              description: 'Auto-added from Manufacturing'
+            })
+            catalogChanged = true
+          }
+        })
+        if (catalogChanged) {
+          localStorage.setItem('ksv_app_catalog', JSON.stringify(parsedCatalog))
+        }
+      }
+      setCatalog(parsedCatalog)
+
+      if (storedInvoices) {
+        let parsed = JSON.parse(storedInvoices)
+        // If stored invoices have no sales recorded yet, merge the seeded sale invoice so Sale Summary is immediately visible
+        const hasSale = parsed.some((inv: any) => (inv.type || 'SALE') === 'SALE')
+        if (!hasSale && SEEDED_KSV_INVOICES.some((inv) => (inv.type || 'SALE') === 'SALE')) {
+          const seededSales = SEEDED_KSV_INVOICES.filter((inv) => (inv.type || 'SALE') === 'SALE')
+          parsed = [...seededSales, ...parsed]
+          localStorage.setItem('ksv_app_invoices', JSON.stringify(parsed))
+        }
+        setInvoices(parsed)
+      } else {
+        setInvoices(SEEDED_KSV_INVOICES)
+      }
+
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
     } catch (e) {
@@ -134,6 +185,25 @@ export default function KsvPage() {
     localStorage.setItem('ksv_app_invoices', JSON.stringify(newInvoices))
   }
 
+  const handleResetData = () => {
+    if (confirm('Are you sure you want to reset all data for KSV? This will restore initial seeded records.')) {
+      localStorage.removeItem('ksv_app_companies_v2')
+      localStorage.removeItem('ksv_app_parties')
+      localStorage.removeItem('ksv_app_catalog')
+      localStorage.removeItem('ksv_app_invoices')
+      localStorage.removeItem('ksv_app_opening_stock')
+      localStorage.removeItem('ksv_app_manufacturing')
+
+      setCompanies(DEFAULT_KSV_COMPANIES)
+      setParties(DEFAULT_KSV_PARTIES)
+      setCatalog(DEFAULT_KSV_CATALOG)
+      setInvoices(SEEDED_KSV_INVOICES)
+      setOpeningStock([])
+      setManufacturingLogs([])
+      setInvoiceSummaryType('SALE')
+    }
+  }
+
   // Invoice Handlers
   const handleSaveInvoice = (invoice: KiyavaInvoice, shouldPrint: boolean = false) => {
     const exists = invoices.some((inv) => inv.id === invoice.id)
@@ -146,10 +216,59 @@ export default function KsvPage() {
     saveInvoices(updated)
     setEditingInvoice(null)
 
+    // Auto-sync to Maxxi Pharma as PURCHASE if KSV is selling to Maxxi
+    const buyerNameStr = invoice.buyer.name.toLowerCase()
+    if ((invoice.type || 'SALE') === 'SALE' && (buyerNameStr.includes('maxxi') || buyerNameStr.includes('maxi'))) {
+      try {
+        const maxxiStored = localStorage.getItem('maxxi_app_invoices')
+        const maxxiInvoices = maxxiStored ? JSON.parse(maxxiStored) : []
+        
+        const maxxiPurchaseInvoice = JSON.parse(JSON.stringify(invoice))
+        maxxiPurchaseInvoice.type = 'PURCHASE'
+        
+        const existingIndex = maxxiInvoices.findIndex((inv: any) => inv.id === invoice.id)
+        if (existingIndex >= 0) {
+          maxxiInvoices[existingIndex] = maxxiPurchaseInvoice
+        } else {
+          maxxiInvoices.unshift(maxxiPurchaseInvoice)
+        }
+        
+        localStorage.setItem('maxxi_app_invoices', JSON.stringify(maxxiInvoices))
+
+        // Also sync products to Maxxi catalog so they appear in Live Stock
+        const maxxiCatalogStored = localStorage.getItem('maxxi_app_catalog')
+        const maxxiCatalog = maxxiCatalogStored ? JSON.parse(maxxiCatalogStored) : [...DEFAULT_MAXXI_CATALOG]
+        
+        let catalogChanged = false
+        invoice.items.forEach(item => {
+          if (!maxxiCatalog.some((c: any) => c.name.toLowerCase() === item.description.toLowerCase())) {
+            maxxiCatalog.push({
+              id: `cat_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+              name: item.description,
+              hsnCode: item.hsnSac || '',
+              defaultUnit: item.unit || 'PCS',
+              defaultRate: item.rate || 0,
+              defaultTaxRate: item.taxRate || 0,
+              category: 'medicine',
+              description: 'Auto-added from KSV purchase'
+            })
+            catalogChanged = true
+          }
+        })
+        
+        if (catalogChanged) {
+          localStorage.setItem('maxxi_app_catalog', JSON.stringify(maxxiCatalog))
+        }
+      } catch (e) {
+        console.error('Failed to sync invoice to Maxxi Pharma:', e)
+      }
+    }
+
     if (shouldPrint) {
       setSelectedInvoiceForPrint(invoice)
     } else {
       setActiveTab('invoices')
+      setInvoiceSummaryType((invoice.type || 'SALE') as any)
     }
   }
 
@@ -261,6 +380,24 @@ export default function KsvPage() {
       ? manufacturingLogs.map((l) => (l.id === log.id ? log : l))
       : [...manufacturingLogs, log]
     saveManufacturingLogs(updated)
+
+    // Ensure the finished product is added to the Catalog so it appears in the Sales Dropdown
+    if (log.finishedGoodName) {
+      const alreadyInCatalog = catalog.some(c => c.name.toLowerCase() === log.finishedGoodName.toLowerCase())
+      if (!alreadyInCatalog) {
+        const newCatalogItem: CatalogItem = {
+          id: log.finishedGoodItemId || `cat_mfg_${Date.now()}`,
+          name: log.finishedGoodName,
+          hsnCode: '', // Can be edited later
+          defaultUnit: 'PCS',
+          defaultRate: log.effectiveRate || 0,
+          defaultTaxRate: 12,
+          category: 'medicine',
+          description: 'Auto-added from Manufacturing'
+        }
+        saveCatalog([...catalog, newCatalogItem])
+      }
+    }
   }
 
   const handleDeleteManufacturingLog = (id: string) => {
@@ -271,14 +408,16 @@ export default function KsvPage() {
   }
 
   // Financial Stats
+  const saleInvoices = invoices.filter((inv) => (inv.type || 'SALE') === 'SALE')
+  const purchaseInvoices = invoices.filter((inv) => inv.type === 'PURCHASE')
+
   const totalInvoicesCount = invoices.length
-  const totalPurchasedFromKiyava = invoices
-    .filter((inv) => inv.type === 'PURCHASE')
-    .reduce((sum, inv) => sum + (inv.grandTotal || 0), 0)
-  const totalSalesRevenue = invoices
-    .filter((inv) => (inv.type || 'SALE') === 'SALE')
-    .reduce((sum, inv) => sum + (inv.grandTotal || 0), 0)
+  const totalPurchasedFromKiyava = purchaseInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0)
+  const totalSalesRevenue = saleInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0)
   const totalGstCollected = invoices.reduce((sum, inv) => sum + (inv.totalTaxAmount || 0), 0)
+
+  const saleGst = saleInvoices.reduce((sum, inv) => sum + (inv.totalTaxAmount || 0), 0)
+  const purchaseGst = purchaseInvoices.reduce((sum, inv) => sum + (inv.totalTaxAmount || 0), 0)
 
   // Filtered Invoices
   const filteredInvoices = invoices.filter((inv) => {
@@ -289,22 +428,29 @@ export default function KsvPage() {
       inv.items.some((it) => it.description.toLowerCase().includes(searchQuery.toLowerCase()))
 
     const matchesCompany = filterCompany === 'ALL' || inv.company.id === filterCompany
-    const matchesType = (inv.type || 'SALE') === invoiceSummaryType
+    const matchesType = invoiceSummaryType === 'ALL' || (inv.type || 'SALE') === invoiceSummaryType
     return matchesSearch && matchesCompany && matchesType
   })
-
-  const purchaseInvoices = invoices.filter((inv) => inv.type === 'PURCHASE')
-  const saleInvoices = invoices.filter((inv) => (inv.type || 'SALE') === 'SALE')
 
   return (
     <div className="w-full space-y-4 pt-0 animate-in fade-in duration-300">
 
       {/* 2. Key Accounting & Procurement Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full">
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Purchase Invoices</span>
-          <h3 className="text-lg font-black text-slate-900 mt-0.5">{purchaseInvoices.length}</h3>
-          <p className="text-[10px] text-slate-400 font-medium">Invoices in KSV Ledger</p>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Invoices</span>
+          <h3 className="text-lg font-black text-slate-900 mt-0.5">{totalInvoicesCount}</h3>
+          <p className="text-[10px] text-slate-400 font-medium">{saleInvoices.length} Sales · {purchaseInvoices.length} Purchases</p>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm bg-gradient-to-br from-blue-50/50 to-white border-blue-100">
+          <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block flex items-center gap-1">
+            <ArrowUpRight className="w-3 h-3 text-blue-600" /> Total Sales Revenue
+          </span>
+          <h3 className="text-lg font-black text-blue-700 font-mono mt-0.5">
+            ₹{totalSalesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+          </h3>
+          <p className="text-[10px] text-blue-500/80 font-medium">Clinic & Patient Sales</p>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm bg-gradient-to-br from-indigo-50/50 to-white border-indigo-100">
@@ -318,11 +464,11 @@ export default function KsvPage() {
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">GST Tax Value</span>
-          <h3 className="text-lg font-black text-blue-600 font-mono mt-0.5">
+          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">GST Tax Value</span>
+          <h3 className="text-lg font-black text-emerald-600 font-mono mt-0.5">
             ₹{totalGstCollected.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
           </h3>
-          <p className="text-[10px] text-slate-400 font-medium">Input Tax Credit (ITC)</p>
+          <p className="text-[10px] text-slate-400 font-medium">Output Tax & ITC</p>
         </div>
       </div>
 
@@ -331,8 +477,8 @@ export default function KsvPage() {
         <button
           onClick={() => setActiveTab('invoices')}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'invoices'
-              ? 'bg-slate-900 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            ? 'bg-slate-900 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
         >
           <Receipt className="w-3.5 h-3.5" />
@@ -345,8 +491,8 @@ export default function KsvPage() {
             setActiveTab('create-sell')
           }}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'create-sell'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            ? 'bg-blue-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
         >
           <Plus className="w-3.5 h-3.5" />
@@ -359,8 +505,8 @@ export default function KsvPage() {
             setActiveTab('create-purchase')
           }}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'create-purchase'
-              ? 'bg-orange-500 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            ? 'bg-orange-500 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
         >
           <Plus className="w-3.5 h-3.5" />
@@ -370,8 +516,8 @@ export default function KsvPage() {
         <button
           onClick={() => setActiveTab('companies')}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'companies'
-              ? 'bg-emerald-600 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            ? 'bg-emerald-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
         >
           <Building2 className="w-3.5 h-3.5" />
@@ -381,8 +527,8 @@ export default function KsvPage() {
         <button
           onClick={() => setActiveTab('parties')}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'parties'
-              ? 'bg-indigo-600 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            ? 'bg-indigo-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
         >
           <Users className="w-3.5 h-3.5" />
@@ -392,8 +538,8 @@ export default function KsvPage() {
         <button
           onClick={() => setActiveTab('catalog')}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'catalog'
-              ? 'bg-amber-600 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            ? 'bg-amber-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
         >
           <Package className="w-3.5 h-3.5" />
@@ -403,39 +549,103 @@ export default function KsvPage() {
         <button
           onClick={() => setActiveTab('opening-stock')}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'opening-stock'
-              ? 'bg-purple-600 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            ? 'bg-purple-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
         >
           <FileText className="w-3.5 h-3.5" />
-          Stock Register
+          Opening Stock
+        </button>
+
+        <button
+          onClick={() => setActiveTab('stock-register')}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'stock-register'
+              ? 'bg-teal-600 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          Live Stock
         </button>
 
         <button
           onClick={() => setActiveTab('manufacturing')}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'manufacturing'
-              ? 'bg-cyan-600 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            ? 'bg-cyan-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
         >
           <FlaskConical className="w-3.5 h-3.5" />
           Production of Finished Goods ({manufacturingLogs.length})
         </button>
+
+        <div className="flex-1" />
       </div>
 
       {/* 4. TAB CONTENT: 1. INVOICES & PURCHASES LEDGER */}
       {activeTab === 'invoices' && (
-        <div className="space-y-3.5 animate-in fade-in duration-300">
-          {/* Filter Bar */}
-          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-semibold">
-            {/* Type Label */}
-            <div className="flex items-center gap-1.5">
-              <span className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-                <ShoppingCart className="w-3.5 h-3.5" />
-                Purchase Invoices ({purchaseInvoices.length})
+        <div className="space-y-4 animate-in fade-in duration-300">
+          {/* Sub-Tab Toggle: Sale Summary | Purchase Summary | All Invoices */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setInvoiceSummaryType('SALE')}
+              className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'SALE'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                : 'text-slate-500 hover:bg-slate-50'
+                }`}
+            >
+              📤 Sale Summary
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'SALE' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {saleInvoices.length}
               </span>
-            </div>
+            </button>
+            <button
+              onClick={() => setInvoiceSummaryType('PURCHASE')}
+              className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'PURCHASE'
+                ? 'bg-orange-500 text-white shadow-lg shadow-orange-200'
+                : 'text-slate-500 hover:bg-slate-50'
+                }`}
+            >
+              📥 Purchase Summary
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'PURCHASE' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {purchaseInvoices.length}
+              </span>
+            </button>
+          </div>
 
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className={`rounded-2xl p-4 border shadow-sm ${invoiceSummaryType === 'SALE' ? 'bg-blue-50 border-blue-100' : invoiceSummaryType === 'PURCHASE' ? 'bg-orange-50 border-orange-100' : 'bg-slate-50 border-slate-200'}`}>
+              <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${invoiceSummaryType === 'SALE' ? 'text-blue-500' : invoiceSummaryType === 'PURCHASE' ? 'text-orange-500' : 'text-slate-500'}`}>
+                {invoiceSummaryType === 'SALE' ? 'Total Sales' : invoiceSummaryType === 'PURCHASE' ? 'Total Purchases' : 'Total Invoices'}
+              </p>
+              <h3 className={`text-lg font-black ${invoiceSummaryType === 'SALE' ? 'text-blue-700' : invoiceSummaryType === 'PURCHASE' ? 'text-orange-700' : 'text-slate-800'}`}>
+                {invoiceSummaryType === 'SALE' ? saleInvoices.length : invoiceSummaryType === 'PURCHASE' ? purchaseInvoices.length : invoices.length}
+              </h3>
+              <p className="text-[10px] text-slate-400 font-medium">Invoices Recorded</p>
+            </div>
+            <div className={`rounded-2xl p-4 border shadow-sm ${invoiceSummaryType === 'SALE' ? 'bg-emerald-50 border-emerald-100' : invoiceSummaryType === 'PURCHASE' ? 'bg-rose-50 border-rose-100' : 'bg-indigo-50 border-indigo-100'}`}>
+              <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${invoiceSummaryType === 'SALE' ? 'text-emerald-500' : invoiceSummaryType === 'PURCHASE' ? 'text-rose-500' : 'text-indigo-500'}`}>
+                {invoiceSummaryType === 'SALE' ? 'Total Sales Revenue' : invoiceSummaryType === 'PURCHASE' ? 'Total Spend' : 'Net Total Amount'}
+              </p>
+              <h3 className={`text-lg font-black ${invoiceSummaryType === 'SALE' ? 'text-emerald-700' : invoiceSummaryType === 'PURCHASE' ? 'text-rose-700' : 'text-indigo-700'}`}>
+                ₹{(invoiceSummaryType === 'SALE' ? totalSalesRevenue : invoiceSummaryType === 'PURCHASE' ? totalPurchasedFromKiyava : (totalSalesRevenue + totalPurchasedFromKiyava)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </h3>
+              <p className="text-[10px] text-slate-400 font-medium">Grand Total (incl. GST)</p>
+            </div>
+            <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 shadow-sm col-span-2 sm:col-span-1">
+              <p className="text-[10px] font-black uppercase tracking-wider mb-1 text-slate-400">
+                {invoiceSummaryType === 'SALE' ? 'Output GST Tax' : invoiceSummaryType === 'PURCHASE' ? 'Input Tax Credit (ITC)' : 'Total GST Value'}
+              </p>
+              <h3 className="text-lg font-black text-slate-700">
+                ₹{(invoiceSummaryType === 'SALE' ? saleGst : invoiceSummaryType === 'PURCHASE' ? purchaseGst : totalGstCollected).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </h3>
+              <p className="text-[10px] text-slate-400 font-medium">Tax Collected / Claimed</p>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-semibold">
             {/* Search Input */}
             <div className="relative flex-1 max-w-md">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -444,7 +654,7 @@ export default function KsvPage() {
                 placeholder="Search invoice no, party name, item..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               />
             </div>
 
@@ -454,7 +664,7 @@ export default function KsvPage() {
               <select
                 value={filterCompany}
                 onChange={(e) => setFilterCompany(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="ALL">All Companies</option>
                 {companies.map((comp) => (
@@ -490,11 +700,11 @@ export default function KsvPage() {
                         <td className="p-3">
                           <div className="flex items-center gap-1.5">
                             {inv.type === 'PURCHASE' ? (
-                              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-black text-[9px] uppercase tracking-wider rounded-md border border-indigo-200/60">
+                              <span className="px-2 py-0.5 bg-orange-50 text-orange-700 font-black text-[9px] uppercase tracking-wider rounded-md border border-orange-200/60">
                                 Purchase
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-black text-[9px] uppercase tracking-wider rounded-md border border-emerald-200/60">
+                              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-black text-[9px] uppercase tracking-wider rounded-md border border-blue-200/60">
                                 Sale
                               </span>
                             )}
@@ -514,10 +724,10 @@ export default function KsvPage() {
                         <td className="p-3 text-center">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${inv.status === 'PAID'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : inv.status === 'PENDING'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-rose-100 text-rose-800'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : inv.status === 'PENDING'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-rose-100 text-rose-800'
                               }`}
                           >
                             {inv.status}
@@ -567,20 +777,43 @@ export default function KsvPage() {
           ) : (
             <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 shadow-sm space-y-2.5 w-full">
               <FileText className="w-9 h-9 text-slate-300 mx-auto" />
-              <h3 className="text-sm font-bold text-slate-800">No Invoices in Ledger Yet</h3>
+              <h3 className="text-sm font-bold text-slate-800">
+                {invoiceSummaryType === 'SALE'
+                  ? 'No Sale Invoices in Ledger Yet'
+                  : invoiceSummaryType === 'PURCHASE'
+                    ? 'No Purchase Invoices in Ledger Yet'
+                    : 'No Invoices in Ledger Yet'}
+              </h3>
               <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                Ledger is clean. Click below to record your first Purchase from Kiyava or create a Patient Tax Invoice.
+                {invoiceSummaryType === 'SALE'
+                  ? 'Create your first Patient or Customer Sale Tax Invoice now.'
+                  : invoiceSummaryType === 'PURCHASE'
+                    ? 'Record raw herbal material or packaging purchases from Kiyava.'
+                    : 'Ledger is clean. Click below to create a Sale or record a Purchase.'}
               </p>
               <div className="pt-1 flex items-center justify-center gap-2">
-                <button
-                  onClick={() => {
-                    setEditingInvoice(null)
-                    setActiveTab('create-purchase')
-                  }}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md transition-all inline-flex items-center gap-1.5"
-                >
-                  <ShoppingCart className="w-3.5 h-3.5" /> Purchase from Kiyava
-                </button>
+                {(invoiceSummaryType === 'SALE' || invoiceSummaryType === 'ALL') && (
+                  <button
+                    onClick={() => {
+                      setEditingInvoice(null)
+                      setActiveTab('create-sell')
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md transition-all inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Create Sale Invoice
+                  </button>
+                )}
+                {(invoiceSummaryType === 'PURCHASE' || invoiceSummaryType === 'ALL') && (
+                  <button
+                    onClick={() => {
+                      setEditingInvoice(null)
+                      setActiveTab('create-purchase')
+                    }}
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md transition-all inline-flex items-center gap-1.5"
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5" /> Record Purchase
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -608,6 +841,7 @@ export default function KsvPage() {
             setEditingCatalogItem(null)
             setIsCatalogModalOpen(true)
           }}
+          onSaveParty={handleSaveParty}
           initialInvoice={editingInvoice}
           onCancel={() => setActiveTab('invoices')}
         />
@@ -954,13 +1188,12 @@ export default function KsvPage() {
                           <td className="p-3 text-right font-mono font-bold text-rose-600">{soldQty > 0 ? `−${soldQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}</td>
                           <td className="p-3 text-right font-mono font-bold text-amber-600">{consumedQty > 0 ? `−${consumedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}</td>
                           <td className="p-3 text-right pr-5">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full font-black font-mono text-xs ${
-                              closingQty <= 0
-                                ? 'bg-rose-100 text-rose-700'
-                                : closingQty < 10
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : 'bg-blue-100 text-blue-700'
-                            }`}>
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full font-black font-mono text-xs ${closingQty <= 0
+                              ? 'bg-rose-100 text-rose-700'
+                              : closingQty < 10
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-blue-100 text-blue-700'
+                              }`}>
                               {closingQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
                             </span>
                           </td>
@@ -985,12 +1218,7 @@ export default function KsvPage() {
       {activeTab === 'manufacturing' && (
         <div className="space-y-4 animate-in fade-in duration-300">
           <div className="flex justify-end items-center">
-            <button
-              onClick={() => setIsManufacturingModalOpen(true)}
-              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-cyan-600/20 uppercase tracking-wider"
-            >
-              <Plus className="w-3.5 h-3.5" /> Log Manufacturing Voucher
-            </button>
+            {/* Manufacturing Button Removed as per request */}
           </div>
 
           {manufacturingLogs.length > 0 ? (
@@ -1081,6 +1309,17 @@ export default function KsvPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB CONTENT: STOCK REGISTER */}
+      {activeTab === 'stock-register' && (
+        <StockRegisterTab
+          catalog={catalog}
+          openingStock={openingStock}
+          invoices={invoices}
+          manufacturingLogs={manufacturingLogs}
+          onOpenOpeningStock={() => setActiveTab('opening-stock')}
+        />
       )}
 
       {/* MODALS */}

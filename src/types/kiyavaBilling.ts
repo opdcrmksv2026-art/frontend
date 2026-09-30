@@ -95,6 +95,7 @@ export interface KiyavaInvoice {
   reverseCharge: 'N' | 'Y'
   totalBags?: string
   matCenter?: string
+  disease?: string
 
   // Company / Seller info
   company: CompanyProfile

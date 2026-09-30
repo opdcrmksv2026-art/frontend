@@ -15,6 +15,7 @@ import {
   DEFAULT_CATALOG,
   SEEDED_INVOICES
 } from '@/lib/kiyavaDefaults'
+import { DEFAULT_KSV_CATALOG } from '@/lib/ksvDefaults'
 import KiyavaInvoiceForm from '@/components/kiyava/KiyavaInvoiceForm'
 import TallyInvoicePrint from '@/components/kiyava/TallyInvoicePrint'
 import CompanyModal from '@/components/kiyava/CompanyModal'
@@ -22,6 +23,7 @@ import PartyModal from '@/components/kiyava/PartyModal'
 import CatalogModal from '@/components/kiyava/CatalogModal'
 import OpeningStockModal from '@/components/kiyava/OpeningStockModal'
 import ManufacturingModal from '@/components/kiyava/ManufacturingModal'
+import StockRegisterTab from '@/components/kiyava/StockRegisterTab'
 import {
   FileText,
   Plus,
@@ -93,7 +95,33 @@ export default function KiyavaPage() {
 
       setCompanies(parsedCompanies)
       setParties(storedParties ? JSON.parse(storedParties) : DEFAULT_PARTIES)
-      setCatalog(storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_CATALOG)
+      
+      // Migration: Ensure all finished goods from manufacturing logs are in the catalog
+      let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_CATALOG
+      if (storedMfgLogs) {
+        const parsedLogs = JSON.parse(storedMfgLogs)
+        let catalogChanged = false
+        parsedLogs.forEach((log: any) => {
+          if (log.finishedGoodName && !parsedCatalog.some((c: any) => c.name.toLowerCase() === log.finishedGoodName.toLowerCase())) {
+            parsedCatalog.push({
+              id: log.finishedGoodItemId || `cat_mfg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+              name: log.finishedGoodName,
+              hsnCode: '',
+              defaultUnit: 'PCS',
+              defaultRate: log.effectiveRate || 0,
+              defaultTaxRate: 12,
+              category: 'medicine',
+              description: 'Auto-added from Manufacturing'
+            })
+            catalogChanged = true
+          }
+        })
+        if (catalogChanged) {
+          localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(parsedCatalog))
+        }
+      }
+      setCatalog(parsedCatalog)
+
       setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_INVOICES)
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
@@ -146,6 +174,24 @@ export default function KiyavaPage() {
       ? manufacturingLogs.map((l) => (l.id === log.id ? log : l))
       : [...manufacturingLogs, log]
     saveManufacturingLogs(updated)
+
+    // Ensure the finished product is added to the Catalog so it appears in the Sales Dropdown
+    if (log.finishedGoodName) {
+      const alreadyInCatalog = catalog.some(c => c.name.toLowerCase() === log.finishedGoodName.toLowerCase())
+      if (!alreadyInCatalog) {
+        const newCatalogItem: CatalogItem = {
+          id: log.finishedGoodItemId || `cat_mfg_${Date.now()}`,
+          name: log.finishedGoodName,
+          hsnCode: '', // Can be edited later
+          defaultUnit: 'PCS',
+          defaultRate: log.effectiveRate || 0,
+          defaultTaxRate: 12,
+          category: 'medicine',
+          description: 'Auto-added from Manufacturing'
+        }
+        saveCatalog([...catalog, newCatalogItem])
+      }
+    }
   }
 
   const handleDeleteManufacturingLog = (id: string) => {
@@ -166,6 +212,54 @@ export default function KiyavaPage() {
     }
     saveInvoices(updated)
     setEditingInvoice(null)
+
+    // Auto-sync to KSV as PURCHASE if Kiyava is selling to KSV
+    const buyerNameStr = invoice.buyer.name.toLowerCase()
+    if ((invoice.type || 'SALE') === 'SALE' && (buyerNameStr.includes('ksv') || buyerNameStr.includes('karan singh vaidh'))) {
+      try {
+        const ksvStored = localStorage.getItem('ksv_app_invoices')
+        const ksvInvoices = ksvStored ? JSON.parse(ksvStored) : []
+        
+        const ksvPurchaseInvoice = JSON.parse(JSON.stringify(invoice))
+        ksvPurchaseInvoice.type = 'PURCHASE'
+        
+        const existingIndex = ksvInvoices.findIndex((inv: any) => inv.id === invoice.id)
+        if (existingIndex >= 0) {
+          ksvInvoices[existingIndex] = ksvPurchaseInvoice
+        } else {
+          ksvInvoices.unshift(ksvPurchaseInvoice)
+        }
+        
+        localStorage.setItem('ksv_app_invoices', JSON.stringify(ksvInvoices))
+
+        // Also sync products to KSV catalog so they appear in Live Stock
+        const ksvCatalogStored = localStorage.getItem('ksv_app_catalog')
+        const ksvCatalog = ksvCatalogStored ? JSON.parse(ksvCatalogStored) : [...DEFAULT_KSV_CATALOG]
+        
+        let catalogChanged = false
+        invoice.items.forEach(item => {
+          if (!ksvCatalog.some((c: any) => c.name.toLowerCase() === item.description.toLowerCase())) {
+            ksvCatalog.push({
+              id: `cat_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+              name: item.description,
+              hsnCode: item.hsnSac || '',
+              defaultUnit: item.unit || 'kg',
+              defaultRate: item.rate || 0,
+              defaultTaxRate: item.taxRate || 0,
+              category: 'herb',
+              description: 'Auto-added from Kiyava purchase'
+            })
+            catalogChanged = true
+          }
+        })
+        
+        if (catalogChanged) {
+          localStorage.setItem('ksv_app_catalog', JSON.stringify(ksvCatalog))
+        }
+      } catch (e) {
+        console.error('Failed to auto-sync purchase to KSV', e)
+      }
+    }
 
     if (shouldPrint) {
       setSelectedInvoiceForPrint(invoice)
@@ -444,20 +538,21 @@ export default function KiyavaPage() {
             }`}
         >
           <FileSpreadsheet className="w-3.5 h-3.5" />
-          Stock Register
+          Opening Stock
         </button>
-
-
-        <div className="flex-1" /> {/* Spacer */}
 
         <button
-          onClick={handleResetData}
-          className="px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap bg-rose-50 text-rose-600 hover:bg-rose-100 shadow-sm border border-rose-200"
-          title="Reset All Data"
+          onClick={() => setActiveTab('stock-register')}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'stock-register'
+              ? 'bg-teal-600 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
         >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Reset Data
+          <TrendingUp className="w-3.5 h-3.5" />
+          Live Stock
         </button>
+
+        <div className="flex-1" /> {/* Spacer */}
       </div>
 
       {/* 4. TAB CONTENT: 1. INVOICES */}
@@ -672,6 +767,7 @@ export default function KiyavaPage() {
             setEditingCatalogItem(null)
             setIsCatalogModalOpen(true)
           }}
+          onSaveParty={handleSaveParty}
           initialInvoice={editingInvoice}
           onCancel={() => setActiveTab('invoices')}
         />
@@ -1190,7 +1286,16 @@ export default function KiyavaPage() {
         )
       })()}
 
-
+      {/* 4. TAB CONTENT: STOCK REGISTER */}
+      {activeTab === 'stock-register' && (
+        <StockRegisterTab
+          catalog={catalog}
+          openingStock={openingStock}
+          invoices={invoices}
+          manufacturingLogs={manufacturingLogs}
+          onOpenOpeningStock={() => setActiveTab('opening-stock')}
+        />
+      )}
 
       {/* 5. TALLY INVOICE PRINT / PREVIEW MODAL */}
       {selectedInvoiceForPrint && (

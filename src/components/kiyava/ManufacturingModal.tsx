@@ -235,29 +235,47 @@ export default function ManufacturingModal({
                 <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
                   Name of Product (Finished Good) *
                 </label>
-                <input
-                  type="text"
-                  required
-                  list="catalog-products-list"
-                  value={formData.finishedGoodName}
-                  onChange={(e) => {
-                    const nameVal = e.target.value
-                    const matchedItem = catalog.find(c => c.name.toLowerCase() === nameVal.toLowerCase())
-                    setFormData({
-                      ...formData,
-                      finishedGoodName: nameVal,
-                      finishedGoodItemId: matchedItem?.id || formData.finishedGoodItemId || `fg_${Date.now()}`,
-                      unit: matchedItem?.defaultUnit || formData.unit || 'PCS'
-                    })
-                  }}
-                  placeholder="e.g. VIDHUVAIDHA ZXP 60 CAPSULE"
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 uppercase outline-none focus:border-cyan-500"
-                />
-                <datalist id="catalog-products-list">
-                  {catalog.map(item => (
-                    <option key={item.id} value={item.name} />
-                  ))}
-                </datalist>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    autoComplete="off"
+                    value={formData.finishedGoodName}
+                    onChange={(e) => {
+                      const nameVal = e.target.value
+                      const matchedItem = catalog.find(c => c.name.toLowerCase() === nameVal.toLowerCase())
+                      setFormData({
+                        ...formData,
+                        finishedGoodName: nameVal,
+                        finishedGoodItemId: matchedItem?.id || formData.finishedGoodItemId || `fg_${Date.now()}`,
+                        unit: matchedItem?.defaultUnit || formData.unit || 'PCS'
+                      })
+                    }}
+                    placeholder="e.g. VIDHUVAIDHA ZXP 60 CAPSULE"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 uppercase outline-none focus:border-cyan-500 relative z-10"
+                  />
+                  {formData.finishedGoodName.length > 0 && !catalog.some(c => c.name.toLowerCase() === formData.finishedGoodName.toLowerCase()) && catalog.filter(c => c.name.toLowerCase().includes(formData.finishedGoodName.toLowerCase())).length > 0 && (
+                    <div className="absolute z-50 left-0 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                      {catalog.filter(c => c.name.toLowerCase().includes(formData.finishedGoodName.toLowerCase())).map(c => (
+                        <div
+                          key={c.id}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            setFormData({
+                              ...formData,
+                              finishedGoodName: c.name,
+                              finishedGoodItemId: c.id,
+                              unit: c.defaultUnit || 'PCS'
+                            })
+                          }}
+                          className="px-3 py-2 text-xs font-bold text-slate-700 hover:bg-cyan-50 hover:text-cyan-700 cursor-pointer border-b border-slate-100 last:border-0 transition-colors"
+                        >
+                          {c.name} {c.hsnCode && <span className="text-[10px] font-medium text-slate-400 ml-1">({c.hsnCode})</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -321,45 +339,58 @@ export default function ManufacturingModal({
                 </button>
               </div>
             ) : (
-              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
-                <div className="overflow-x-auto">
+              <div className="border border-slate-200 rounded-2xl shadow-sm bg-white">
+                <div className="w-full">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px] border-b border-slate-200">
                       <tr>
-                        <th className="p-2.5 pl-4">Item Name</th>
+                        <th className="p-2.5 pl-4 rounded-tl-2xl">Item Name</th>
                         <th className="p-2.5 text-right w-28">Qty</th>
                         <th className="p-2.5 text-center w-24">Unit</th>
                         <th className="p-2.5 text-right w-28">Rate (₹)</th>
                         <th className="p-2.5 text-right w-32">Amount (₹)</th>
-                        <th className="p-2.5 text-center w-10"></th>
+                        <th className="p-2.5 text-center w-10 rounded-tr-2xl"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
                       {formData.rawMaterialsConsumed.map((rm, idx) => (
                         <tr key={idx} className="hover:bg-slate-50">
                           <td className="p-2 pl-4">
-                            <input
-                              type="text"
-                              required
-                              list={`cat-list-${idx}`}
-                              value={rm.itemName}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                const matched = catalog.find(c => c.name.toLowerCase() === val.toLowerCase())
-                                if (matched) {
-                                  handleRawMaterialChange(idx, 'itemId', matched.id)
-                                } else {
-                                  handleRawMaterialChange(idx, 'itemName', val)
-                                }
-                              }}
-                              placeholder="e.g. KASNI / KANTAKARI"
-                              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-cyan-500 uppercase"
-                            />
-                            <datalist id={`cat-list-${idx}`}>
-                              {catalog.map(c => (
-                                <option key={c.id} value={c.name} />
-                              ))}
-                            </datalist>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                required
+                                autoComplete="off"
+                                value={rm.itemName}
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  const matched = catalog.find(c => c.name.toLowerCase() === val.toLowerCase())
+                                  if (matched) {
+                                    handleRawMaterialChange(idx, 'itemId', matched.id)
+                                  } else {
+                                    handleRawMaterialChange(idx, 'itemName', val)
+                                  }
+                                }}
+                                placeholder="e.g. KASNI / KANTAKARI"
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-cyan-500 uppercase relative z-10"
+                              />
+                              {rm.itemName.length > 0 && !catalog.some(c => c.name.toLowerCase() === rm.itemName.toLowerCase()) && catalog.filter(c => c.name.toLowerCase().includes(rm.itemName.toLowerCase())).length > 0 && (
+                                <div className="absolute z-50 left-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                                  {catalog.filter(c => c.name.toLowerCase().includes(rm.itemName.toLowerCase())).map(c => (
+                                    <div
+                                      key={c.id}
+                                      onMouseDown={(e) => {
+                                        e.preventDefault()
+                                        handleRawMaterialChange(idx, 'itemId', c.id)
+                                      }}
+                                      className="px-3 py-2 text-xs font-bold text-slate-700 hover:bg-cyan-50 hover:text-cyan-700 cursor-pointer border-b border-slate-100 last:border-0 transition-colors"
+                                    >
+                                      {c.name} {c.hsnCode && <span className="text-[10px] font-medium text-slate-400 ml-1">({c.hsnCode})</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </td>
 
                           <td className="p-2 text-right">

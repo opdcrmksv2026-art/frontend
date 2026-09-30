@@ -39,7 +39,7 @@ interface Patient {
   name: string;
   address?: string | null;
   houseNumber?: string | null;
-  galiNumber?: string | null;
+  city?: string | null;
   state?: string | null;
   pincode?: string | null;
   age?: number | null;
@@ -295,13 +295,13 @@ export default function PatientHistoryPage() {
                     {selectedPatient.whatsappNumber}
                   </a>
                 )}
-                {(selectedPatient.houseNumber || selectedPatient.galiNumber || selectedPatient.state || selectedPatient.pincode) && (
+                {(selectedPatient.houseNumber || selectedPatient.city || selectedPatient.state || selectedPatient.pincode) && (
                   <span className="flex items-start gap-1.5">
                     <MapPin className="w-4 h-4 text-slate-400" />
                     <span>
                       {[
                         selectedPatient.houseNumber ? `H.No. ${selectedPatient.houseNumber}` : "",
-                        selectedPatient.galiNumber ? `Gali ${selectedPatient.galiNumber}` : "",
+                        selectedPatient.city ? selectedPatient.city : "",
                         selectedPatient.state,
                         selectedPatient.pincode
                       ].filter(Boolean).join(", ")}

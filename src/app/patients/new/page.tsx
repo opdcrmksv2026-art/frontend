@@ -26,7 +26,7 @@ export default function NewPatientPage() {
     uniqueId: "",
     name: "",
     houseNumber: "",
-    galiNumber: "",
+    city: "",
     state: "",
     pincode: "",
     age: "",
@@ -242,14 +242,14 @@ export default function NewPatientPage() {
                 <div className="flex flex-col">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                    Gali Number / Street
+                    City
                   </label>
                   <input
-                    name="galiNumber"
-                    value={formData.galiNumber}
+                    name="city"
+                    value={formData.city}
                     onChange={handleChange}
                     className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-50 focus:border-primary/20 rounded-2xl outline-none transition-all text-sm font-semibold text-slate-700"
-                    placeholder="e.g. Gali No. 4"
+                    placeholder="e.g. New Delhi"
                   />
                 </div>
 

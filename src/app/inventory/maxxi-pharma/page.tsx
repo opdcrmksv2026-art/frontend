@@ -20,6 +20,7 @@ import CompanyModal from '@/components/kiyava/CompanyModal'
 import PartyModal from '@/components/kiyava/PartyModal'
 import CatalogModal from '@/components/kiyava/CatalogModal'
 import OpeningStockModal from '@/components/kiyava/OpeningStockModal'
+import StockRegisterTab from '@/components/kiyava/StockRegisterTab'
 import {
   FileText,
   Plus,
@@ -37,7 +38,8 @@ import {
   ArrowDownLeft,
   CheckCircle2,
   Activity,
-  FileSpreadsheet
+  FileSpreadsheet,
+  TrendingUp
 } from 'lucide-react'
 
 export default function MaxxiPharmaPage() {
@@ -409,7 +411,18 @@ export default function MaxxiPharmaPage() {
             }`}
         >
           <FileSpreadsheet className="w-3.5 h-3.5" />
-          Stock Register
+          Opening Stock
+        </button>
+
+        <button
+          onClick={() => setActiveTab('stock-register')}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'stock-register'
+            ? 'bg-teal-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          Live Stock
         </button>
       </div>
 
@@ -637,6 +650,7 @@ export default function MaxxiPharmaPage() {
             setEditingCatalogItem(null)
             setIsCatalogModalOpen(true)
           }}
+          onSaveParty={handleSaveParty}
           initialInvoice={editingInvoice}
           onCancel={() => setActiveTab('invoices')}
         />
@@ -931,6 +945,17 @@ export default function MaxxiPharmaPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 4. TAB CONTENT: 7. LIVE STOCK REGISTER */}
+      {activeTab === 'stock-register' && (
+        <StockRegisterTab
+          catalog={catalog}
+          openingStock={openingStock}
+          invoices={invoices}
+          manufacturingLogs={[]} // Maxxi Pharma doesn't have manufacturing logs right now
+          onOpenOpeningStock={() => setActiveTab('opening-stock')}
+        />
       )}
 
       {/* MODALS */}

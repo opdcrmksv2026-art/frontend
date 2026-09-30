@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   CompanyProfile,
   PartyProfile,
@@ -33,6 +33,7 @@ interface KiyavaInvoiceFormProps {
   onOpenCompanyModal: () => void
   onOpenPartyModal: () => void
   onOpenCatalogModal: () => void
+  onSaveParty?: (party: PartyProfile) => void
   initialInvoice?: KiyavaInvoice | null
   onCancel?: () => void
   defaultInvoiceType?: 'SALE' | 'PURCHASE'
@@ -46,6 +47,7 @@ export default function KiyavaInvoiceForm({
   onOpenCompanyModal,
   onOpenPartyModal,
   onOpenCatalogModal,
+  onSaveParty,
   initialInvoice,
   onCancel,
   defaultInvoiceType
@@ -59,6 +61,46 @@ export default function KiyavaInvoiceForm({
   const [selectedPartyId, setSelectedPartyId] = useState<string>(
     initialInvoice?.buyer.id || parties[0]?.id || ''
   )
+  const [partySearchQuery, setPartySearchQuery] = useState('')
+  const [isPartySearchOpen, setIsPartySearchOpen] = useState(false)
+  const [patientResults, setPatientResults] = useState<any[]>([])
+  const partySearchRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const fetchPatients = async () => {
+      if (!partySearchQuery || partySearchQuery.length < 2) {
+        setPatientResults([])
+        return
+      }
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+        const res = await fetch(`${API_URL}/api/patients`)
+        if (res.ok) {
+          const data = await res.json()
+          const matched = data.filter((p: any) => 
+            p.name.toLowerCase().includes(partySearchQuery.toLowerCase()) || 
+            (p.whatsappNumber && p.whatsappNumber.includes(partySearchQuery)) ||
+            (p.uniqueId && p.uniqueId.includes(partySearchQuery))
+          )
+          setPatientResults(matched)
+        }
+      } catch (err) {
+        console.error("Failed to fetch patients", err)
+      }
+    }
+    const delay = setTimeout(fetchPatients, 300)
+    return () => clearTimeout(delay)
+  }, [partySearchQuery])
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (partySearchRef.current && !partySearchRef.current.contains(event.target as Node)) {
+        setIsPartySearchOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
 
   // 3. Invoice Header
   const [invoiceNo, setInvoiceNo] = useState<string>(
@@ -100,6 +142,7 @@ export default function KiyavaInvoiceForm({
   const [freightCharges, setFreightCharges] = useState<number>(initialInvoice?.freightCharges || 0)
   const [extraDiscount, setExtraDiscount] = useState<number>(initialInvoice?.extraDiscount || 0)
   const [notes, setNotes] = useState<string>(initialInvoice?.notes || '')
+  const [disease, setDisease] = useState<string>(initialInvoice?.disease || '')
   const [taxMode, setTaxMode] = useState<'AUTO' | 'INTRA' | 'INTER'>('AUTO')
 
   // Active Company & Party
@@ -161,6 +204,7 @@ export default function KiyavaInvoiceForm({
           ...item,
           description: found.name,
           hsnSac: found.hsnCode,
+          quantity: qty,
           unit: found.defaultUnit,
           rate: rate,
           taxRate: found.defaultTaxRate,
@@ -346,6 +390,7 @@ export default function KiyavaInvoiceForm({
       status: 'PAID',
       paymentMode: paymentTerms,
       notes,
+      disease,
       createdAt: initialInvoice?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -371,10 +416,10 @@ export default function KiyavaInvoiceForm({
           </button>
           <button
             type="button"
-            onClick={(e) => handleFormSubmit(e, true)}
+            onClick={(e) => handleFormSubmit(e, false)}
             className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/30 active:scale-95 transition-all cursor-pointer"
           >
-            <Printer className="w-4 h-4" /> Save &amp; Print Bill
+            <Save className="w-4 h-4" /> Save Invoice
           </button>
         </div>
       </div>
@@ -413,7 +458,7 @@ export default function KiyavaInvoiceForm({
           </div>
 
           {/* Party / Buyer */}
-          <div>
+          <div ref={partySearchRef} className="relative">
             <div className="flex justify-between items-center mb-1">
               <label className="text-[11px] font-bold text-slate-500 uppercase">
                 {invoiceType === 'PURCHASE' ? 'Supplier (Seller) *' : 'Party A/c Name (Buyer) *'}
@@ -426,20 +471,97 @@ export default function KiyavaInvoiceForm({
                 + New
               </button>
             </div>
-            <select
-              value={selectedPartyId}
-              onChange={(e) => setSelectedPartyId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-blue-600 cursor-pointer"
+            <div
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 cursor-pointer flex justify-between items-center"
+              onClick={() => setIsPartySearchOpen(true)}
             >
-              {(parties.filter((p) => !p.name.toUpperCase().includes('KIYAVA')).length > 0
-                ? parties.filter((p) => !p.name.toUpperCase().includes('KIYAVA'))
-                : parties
-              ).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.city})
-                </option>
-              ))}
-            </select>
+              <span className="truncate">
+                {currentBuyer ? `${currentBuyer.name} (${currentBuyer.city || currentBuyer.state})` : 'Select Buyer...'}
+              </span>
+            </div>
+
+            {isPartySearchOpen && (
+              <div className="absolute z-50 left-0 top-full mt-1 w-full sm:w-96 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
+                <div className="p-2 border-b border-slate-100 bg-slate-50">
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Search Parties or Patients..."
+                    value={partySearchQuery}
+                    onChange={(e) => setPartySearchQuery(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 outline-none focus:border-blue-600"
+                  />
+                </div>
+                <div className="max-h-64 overflow-y-auto custom-scrollbar p-1">
+                  {/* Local Parties */}
+                  <div className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                    Local Parties
+                  </div>
+                  {parties
+                    .filter(p => !p.name.toUpperCase().includes('KIYAVA'))
+                    .filter(p => p.name.toLowerCase().includes(partySearchQuery.toLowerCase()) || p.phone?.includes(partySearchQuery))
+                    .map(p => (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedPartyId(p.id)
+                          setIsPartySearchOpen(false)
+                          setPartySearchQuery('')
+                        }}
+                        className="px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer rounded-lg mb-0.5"
+                      >
+                        {p.name} <span className="text-slate-400 font-medium ml-1">({p.city || p.state})</span>
+                      </div>
+                  ))}
+
+                  {/* API Patients */}
+                  {patientResults.length > 0 && (
+                    <>
+                      <div className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-wider bg-slate-50/50 mt-1 border-t border-slate-100">
+                        Patients Database
+                      </div>
+                      {patientResults.map(p => (
+                        <div
+                          key={p.uniqueId}
+                          onClick={() => {
+                            const newParty: PartyProfile = {
+                              id: `party_patient_${p.uniqueId}`,
+                              name: p.name,
+                              contactPerson: p.name,
+                              addressLine1: `${p.houseNumber || ''} ${p.galiNumber || ''} ${p.address || ''}`.trim() || 'Address not provided',
+                              city: p.state ? '' : 'Solan',
+                              state: p.state || 'Himachal Pradesh',
+                              stateCode: '02',
+                              pincode: p.pincode || '',
+                              gstin: 'URP',
+                              phone: p.whatsappNumber || p.callingNumber || '',
+                              email: ''
+                            }
+                            if (onSaveParty) {
+                              onSaveParty(newParty)
+                            }
+                            setSelectedPartyId(newParty.id)
+                            setIsPartySearchOpen(false)
+                            setPartySearchQuery('')
+                          }}
+                          className="px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-teal-50 hover:text-teal-700 cursor-pointer rounded-lg mb-0.5 border border-transparent hover:border-teal-100 transition-colors flex justify-between items-center"
+                        >
+                          <div>
+                            {p.name} <span className="text-slate-400 font-medium ml-1">({p.uniqueId})</span>
+                          </div>
+                          <span className="text-[9px] px-1.5 py-0.5 bg-teal-100 text-teal-800 rounded">Patient</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {partySearchQuery && patientResults.length === 0 && (
+                    <div className="px-3 py-4 text-xs text-center text-slate-500 font-medium">
+                      No patients matched "{partySearchQuery}"
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Invoice No */}
@@ -555,11 +677,11 @@ export default function KiyavaInvoiceForm({
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto border border-slate-200 rounded-xl">
+        <div className="border border-slate-200 rounded-xl">
           <table className="w-full text-xs text-left border-collapse min-w-[760px]">
             <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px] border-b border-slate-200">
               <tr>
-                <th className="p-2.5 text-center w-8">#</th>
+                <th className="p-2.5 text-center w-8 rounded-tl-xl">#</th>
                 <th className="p-2.5 text-left">Description of Goods</th>
                 <th className="p-2.5 text-center w-24">HSN/SAC</th>
                 <th className="p-2.5 text-right w-24">Quantity</th>
@@ -568,7 +690,7 @@ export default function KiyavaInvoiceForm({
                 <th className="p-2.5 text-center w-16">Tax %</th>
                 <th className="p-2.5 text-right w-16">Disc %</th>
                 <th className="p-2.5 text-right w-28">Amount (₹)</th>
-                <th className="p-2.5 text-center w-10"></th>
+                <th className="p-2.5 text-center w-10 rounded-tr-xl"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-sans">
@@ -578,40 +700,47 @@ export default function KiyavaInvoiceForm({
 
                   {/* Description / Autocomplete */}
                   <td className="p-2">
-                    <div className="space-y-1">
-                      <input
-                        type="text"
-                        required
-                        value={item.description}
-                        onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            handleAddItem()
-                          }
-                        }}
-                        placeholder="Item / Raw Material / Herb Name"
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs font-bold text-slate-900 outline-none"
-                      />
-                      {catalog.length > 0 && (
-                        <select
+                      <div className="relative">
+                        <input
+                          type="text"
+                          required
+                          autoComplete="off"
+                          value={item.description}
                           onChange={(e) => {
-                            if (e.target.value) handleSelectCatalogItem(item.id, e.target.value)
+                            const val = e.target.value
+                            handleItemChange(item.id, 'description', val)
+                            const matched = catalog.find(c => c.name.toLowerCase() === val.toLowerCase())
+                            if (matched) {
+                              handleSelectCatalogItem(item.id, matched.id)
+                            }
                           }}
-                          defaultValue=""
-                          className="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 outline-none cursor-pointer w-full"
-                        >
-                          <option value="" disabled>
-                            ⚡ Pick from saved items...
-                          </option>
-                          {catalog.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name} (HSN: {c.hsnCode} | ₹{c.defaultRate}/{c.defaultUnit})
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleAddItem()
+                            }
+                          }}
+                          placeholder="Item / Raw Material / Herb Name"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs font-bold text-slate-900 outline-none relative z-10"
+                        />
+                        {item.description.length > 0 && !catalog.some(c => c.name.toLowerCase() === item.description.toLowerCase()) && catalog.filter(c => c.name.toLowerCase().includes(item.description.toLowerCase())).length > 0 && (
+                          <div className="absolute z-50 left-0 top-full mt-1 w-72 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                            {catalog.filter(c => c.name.toLowerCase().includes(item.description.toLowerCase())).map(c => (
+                              <div
+                                key={c.id}
+                                onMouseDown={(e) => {
+                                  e.preventDefault()
+                                  handleItemChange(item.id, 'description', c.name)
+                                  handleSelectCatalogItem(item.id, c.id)
+                                }}
+                                className="px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer border-b border-slate-100 last:border-0 transition-colors"
+                              >
+                                {c.name} {c.hsnCode && <span className="text-[10px] font-medium text-slate-400 ml-1">({c.hsnCode})</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                   </td>
 
                   {/* HSN */}
@@ -759,17 +888,31 @@ export default function KiyavaInvoiceForm({
             </div>
           </div>
 
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 uppercase mb-1 block">
-              Consignment Notes / Remarks
-            </label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Raw Material Verified"
-              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 outline-none"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-slate-500 uppercase mb-1 block">
+                Consignment Notes
+              </label>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. Raw Material Verified"
+                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-500 uppercase mb-1 block">
+                Disease / Diagnosis
+              </label>
+              <input
+                type="text"
+                value={disease}
+                onChange={(e) => setDisease(e.target.value)}
+                placeholder="e.g. Sugar / BP"
+                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 outline-none"
+              />
+            </div>
           </div>
         </div>
 
@@ -832,16 +975,9 @@ export default function KiyavaInvoiceForm({
           <div className="pt-2 flex gap-2">
             <button
               type="submit"
-              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1 shadow-md shadow-emerald-600/20 active:scale-95 transition-all cursor-pointer"
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all cursor-pointer"
             >
-              <Save className="w-4 h-4" /> Save Voucher
-            </button>
-            <button
-              type="button"
-              onClick={(e) => handleFormSubmit(e, true)}
-              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1 shadow-md shadow-blue-600/20 active:scale-95 transition-all cursor-pointer"
-            >
-              <Printer className="w-4 h-4" /> Save &amp; Print
+              <Save className="w-5 h-5" /> Save Invoice
             </button>
           </div>
         </div>

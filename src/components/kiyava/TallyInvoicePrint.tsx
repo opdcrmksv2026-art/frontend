@@ -230,6 +230,12 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
               <span className="font-bold text-neutral-700">Transport / Courier</span>
               <span className="col-span-2 font-semibold text-black">: {invoice.transport || 'Direct'}</span>
             </div>
+            {invoice.disease && (
+              <div className="grid grid-cols-3 gap-1">
+                <span className="font-bold text-neutral-700">Disease / Diagnosis</span>
+                <span className="col-span-2 font-semibold text-black">: {invoice.disease}</span>
+              </div>
+            )}
             {invoice.grRrNo && (
               <div className="grid grid-cols-3 gap-1">
                 <span className="font-bold text-neutral-700">GR / RR No.</span>

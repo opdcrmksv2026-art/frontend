@@ -26,7 +26,7 @@ interface Patient {
   name: string;
   address?: string | null;
   houseNumber?: string | null;
-  galiNumber?: string | null;
+  city?: string | null;
   state?: string | null;
   pincode?: string | null;
   age?: number | null;
@@ -360,7 +360,7 @@ export default function PatientsListPage() {
                   // Extract concise address row
                   const addressParts = [
                     patient.houseNumber ? `H.No. ${patient.houseNumber}` : "",
-                    patient.galiNumber ? `Gali ${patient.galiNumber}` : ""
+                    patient.city ? patient.city : ""
                   ].filter(Boolean).join(", ");
 
                   return (
@@ -518,18 +518,18 @@ export default function PatientsListPage() {
                   </div>
 
                   {/* Address block */}
-                  {(patient.houseNumber || patient.galiNumber || patient.state || patient.pincode || patient.address) && (
+                  {(patient.houseNumber || patient.city || patient.state || patient.pincode || patient.address) && (
                     <div className="mt-4 pt-4 border-t border-slate-50">
                       <div className="flex gap-2 items-start text-xs font-medium text-slate-500">
                         <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
                         <div className="flex flex-col gap-0.5">
-                          {patient.houseNumber || patient.galiNumber || patient.state || patient.pincode ? (
+                          {patient.houseNumber || patient.city || patient.state || patient.pincode ? (
                             <>
-                              {(patient.houseNumber || patient.galiNumber) && (
+                              {(patient.houseNumber || patient.city) && (
                                 <p className="text-slate-600 font-bold">
                                   {[
                                     patient.houseNumber ? `H.No. ${patient.houseNumber}` : "",
-                                    patient.galiNumber ? `Gali ${patient.galiNumber}` : ""
+                                    patient.city ? patient.city : ""
                                   ].filter(Boolean).join(", ")}
                                 </p>
                               )}

@@ -78,6 +78,22 @@ export const DEFAULT_KSV_PARTIES: PartyProfile[] = [
     email: 'opd@ksvayurveda.com',
     transport: 'Counter Pickup',
     station: 'Solan'
+  },
+  {
+    id: 'party_maxxi',
+    name: 'MAXXI PHARMA',
+    contactPerson: 'Director',
+    addressLine1: 'Solan',
+    addressLine2: 'Himachal Pradesh',
+    city: 'Solan',
+    state: 'Himachal Pradesh',
+    stateCode: '02',
+    pincode: '173206',
+    gstin: 'URP',
+    phone: '',
+    email: '',
+    transport: 'Direct',
+    station: 'Solan'
   }
 ]
 

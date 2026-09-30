@@ -45,7 +45,7 @@ interface Patient {
   callingNumber?: string
   address?: string
   houseNumber?: string
-  galiNumber?: string
+  city?: string
   state?: string
   pincode?: string
 }
@@ -88,7 +88,7 @@ export default function CreateInvoicePage() {
     whatsappNumber: "",
     callingNumber: "",
     houseNumber: "",
-    galiNumber: "",
+    city: "",
     state: "",
     pincode: "",
     
@@ -167,7 +167,7 @@ export default function CreateInvoicePage() {
       whatsappNumber: patient.whatsappNumber || "",
       callingNumber: patient.callingNumber || "",
       houseNumber: patient.houseNumber || "",
-      galiNumber: patient.galiNumber || "",
+      city: patient.city || "",
       state: patient.state || "",
       pincode: patient.pincode || ""
     }))
@@ -188,7 +188,7 @@ export default function CreateInvoicePage() {
       whatsappNumber: "",
       callingNumber: "",
       houseNumber: "",
-      galiNumber: "",
+      city: "",
       state: "",
       pincode: ""
     }))
@@ -337,7 +337,7 @@ export default function CreateInvoicePage() {
             whatsappNumber: formData.whatsappNumber || null,
             callingNumber: formData.callingNumber || null,
             houseNumber: formData.houseNumber || null,
-            galiNumber: formData.galiNumber || null,
+            city: formData.city || null,
             state: formData.state || null,
             pincode: formData.pincode || null
           })
