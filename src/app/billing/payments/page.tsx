@@ -51,6 +51,9 @@ interface PaymentRecord {
   calcResult?: any
   state?: string
   stateCode?: string
+  city?: string
+  houseNumber?: string
+  pincode?: string
 }
 
 export default function PaymentsPage() {
