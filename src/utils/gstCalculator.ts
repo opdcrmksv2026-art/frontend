@@ -271,6 +271,7 @@ export function calculateGSTInvoice(
     grossAmount: totalPreGstBase,
     grossMedicines,
     consultancyCharges: parsedConsultancy,
+    discountApplied: effectiveDiscount,
     discountedConsultancy,
     medicineTaxableValue,
     totalTaxableValue,
