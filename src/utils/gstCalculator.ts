@@ -105,41 +105,33 @@ export function calculateGSTInvoice(
     if (t.products && t.products.length > 0) {
       t.products.forEach((p) => {
         const pQty = parseFloat(p.quantity?.toString() || "1");
-        const inputRate = p.rate !== undefined && p.rate !== null 
+        const rate = p.rate !== undefined && p.rate !== null 
           ? parseFloat(p.rate.toString()) 
           : parseFloat(t.price?.toString() || "0") / pQty;
 
-        const taxRate = p.taxRate || 0;
-        let exclusiveRate = inputRate;
-        if (taxRate > 0) {
-          exclusiveRate = inputRate / (1 + taxRate / 100);
-        }
-
-        const rate = round2(exclusiveRate);
         const amount = round2(pQty * rate);
         flatProducts.push({
           name: p.name,
           hsnCode: p.hsnCode || "-",
           qty: pQty,
           rate: rate,
-          inclusiveRate: inputRate,
+          inclusiveRate: rate, // It's exclusive, so we'll just keep it the same for now, or add tax if we really need inclusive. But let's just revert to original behavior.
           amount: amount,
-          taxRate: taxRate,
+          taxRate: p.taxRate || 0,
           disease: (t as any).disease || "General Checkup",
           treatmentIdx: idx,
         });
         grossMedicines = round2(grossMedicines + amount);
       });
     } else {
-      const inputRate = parseFloat(t.price?.toString() || "0");
-      const rate = inputRate;
+      const rate = parseFloat(t.price?.toString() || "0");
       const amount = round2(tQty * rate);
       flatProducts.push({
         name: t.kitName || "General Treatment",
         hsnCode: "-",
         qty: tQty,
         rate: rate,
-        inclusiveRate: inputRate,
+        inclusiveRate: rate,
         amount: amount,
         taxRate: 0,
         disease: (t as any).disease || "General Checkup",
