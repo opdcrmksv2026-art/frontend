@@ -44,6 +44,7 @@ export interface GSTCalculationResult {
     hsnCode: string;
     qty: number;
     rate: number;
+    inclusiveRate?: number;
     grossAmount: number;
     lineDiscount: number;
     taxableValue: number;
@@ -104,31 +105,41 @@ export function calculateGSTInvoice(
     if (t.products && t.products.length > 0) {
       t.products.forEach((p) => {
         const pQty = parseFloat(p.quantity?.toString() || "1");
-        const rate = p.rate !== undefined && p.rate !== null 
+        const inputRate = p.rate !== undefined && p.rate !== null 
           ? parseFloat(p.rate.toString()) 
           : parseFloat(t.price?.toString() || "0") / pQty;
 
+        const taxRate = p.taxRate || 0;
+        let exclusiveRate = inputRate;
+        if (taxRate > 0) {
+          exclusiveRate = inputRate / (1 + taxRate / 100);
+        }
+
+        const rate = round2(exclusiveRate);
         const amount = round2(pQty * rate);
         flatProducts.push({
           name: p.name,
           hsnCode: p.hsnCode || "-",
           qty: pQty,
           rate: rate,
+          inclusiveRate: inputRate,
           amount: amount,
-          taxRate: p.taxRate || 0,
+          taxRate: taxRate,
           disease: (t as any).disease || "General Checkup",
           treatmentIdx: idx,
         });
         grossMedicines = round2(grossMedicines + amount);
       });
     } else {
-      const rate = parseFloat(t.price?.toString() || "0");
+      const inputRate = parseFloat(t.price?.toString() || "0");
+      const rate = inputRate;
       const amount = round2(tQty * rate);
       flatProducts.push({
         name: t.kitName || "General Treatment",
         hsnCode: "-",
         qty: tQty,
         rate: rate,
+        inclusiveRate: inputRate,
         amount: amount,
         taxRate: 0,
         disease: (t as any).disease || "General Checkup",
@@ -148,6 +159,7 @@ export function calculateGSTInvoice(
       hsnCode: "9993",
       qty: 1,
       rate: parsedConsultancy,
+      inclusiveRate: parsedConsultancy,
       amount: parsedConsultancy,
       taxRate: 0,
       disease: "Consultation",
@@ -237,6 +249,7 @@ export function calculateGSTInvoice(
       hsnCode: p.hsnCode,
       qty: p.qty,
       rate: p.rate,
+      inclusiveRate: p.inclusiveRate,
       grossAmount: p.amount,
       lineDiscount,
       taxableValue,
