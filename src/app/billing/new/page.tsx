@@ -178,11 +178,13 @@ export default function CreateInvoicePage() {
   useEffect(() => {
     import("@/lib/maxxiDefaults")
       .then(maxxi => {
-        const maxxiCat = localStorage.getItem("maxxi_app_catalog") 
+        let maxxiCat = localStorage.getItem("maxxi_app_catalog") 
           ? JSON.parse(localStorage.getItem("maxxi_app_catalog")!) 
           : maxxi.DEFAULT_MAXXI_CATALOG
 
-        setCatalog([...(maxxiCat || [])])
+        maxxiCat = (maxxiCat || []).filter((c: any) => !c.id?.startsWith('cat_mx_'))
+
+        setCatalog([...maxxiCat])
       })
       .catch(err => console.error("Error loading Maxxi catalog:", err))
   }, [])
