@@ -85,28 +85,19 @@ export default function MaxxiPharmaPage() {
 
       setCompanies(storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_MAXXI_COMPANIES)
       setParties(storedParties ? JSON.parse(storedParties) : DEFAULT_MAXXI_PARTIES)
-      
-      let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_MAXXI_CATALOG
-      let catalogChanged = false
-      DEFAULT_MAXXI_CATALOG.forEach(defaultItem => {
-        if (!parsedCatalog.some((c: any) => c.name.toLowerCase() === defaultItem.name.toLowerCase())) {
-          parsedCatalog.push(defaultItem)
-          catalogChanged = true
-        }
-      })
-      if (catalogChanged && storedCatalog) {
-        localStorage.setItem('maxxi_app_catalog', JSON.stringify(parsedCatalog))
-      }
+
+      let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : []
+      parsedCatalog = parsedCatalog.filter((c: any) => !c.id.startsWith('cat_mx_'))
       setCatalog(parsedCatalog)
 
-      setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_MAXXI_INVOICES)
+      setInvoices(storedInvoices ? JSON.parse(storedInvoices) : [])
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
     } catch (e) {
       console.error('Failed to load Maxxi Pharma storage data:', e)
       setCompanies(DEFAULT_MAXXI_COMPANIES)
       setParties(DEFAULT_MAXXI_PARTIES)
-      setCatalog(DEFAULT_MAXXI_CATALOG)
-      setInvoices(SEEDED_MAXXI_INVOICES)
+      setCatalog([])
+      setInvoices([])
       setOpeningStock([])
     }
   }, [])
@@ -140,6 +131,23 @@ export default function MaxxiPharmaPage() {
   // Invoice Handlers
   const handleSaveInvoice = (invoice: KiyavaInvoice, shouldPrint: boolean = false) => {
     const exists = invoices.some((inv) => inv.id === invoice.id)
+
+    // Adjust inventory dynamically
+    if (!exists) {
+      let updatedCatalog = [...catalog];
+      invoice.items.forEach(item => {
+        const catalogItemIndex = updatedCatalog.findIndex(c => c.name === item.description);
+        if (catalogItemIndex !== -1) {
+          const currentQty = updatedCatalog[catalogItemIndex].quantity || 0;
+          updatedCatalog[catalogItemIndex] = {
+            ...updatedCatalog[catalogItemIndex],
+            quantity: invoice.type === 'PURCHASE' ? currentQty + item.quantity : currentQty - item.quantity
+          };
+        }
+      });
+      saveCatalog(updatedCatalog);
+    }
+
     let updated: KiyavaInvoice[]
     if (exists) {
       updated = invoices.map((inv) => (inv.id === invoice.id ? invoice : inv))
@@ -158,6 +166,23 @@ export default function MaxxiPharmaPage() {
 
   const handleDeleteInvoice = (id: string) => {
     if (confirm('Are you sure you want to delete this invoice from Maxxi Pharma ledger?')) {
+      const invoiceToDelete = invoices.find(inv => inv.id === id);
+      if (invoiceToDelete) {
+        let updatedCatalog = [...catalog];
+        invoiceToDelete.items.forEach(item => {
+          const catalogItemIndex = updatedCatalog.findIndex(c => c.name === item.description);
+          if (catalogItemIndex !== -1) {
+            const currentQty = updatedCatalog[catalogItemIndex].quantity || 0;
+            // Reverse the operation
+            updatedCatalog[catalogItemIndex] = {
+              ...updatedCatalog[catalogItemIndex],
+              quantity: invoiceToDelete.type === 'PURCHASE' ? currentQty - item.quantity : currentQty + item.quantity
+            };
+          }
+        });
+        saveCatalog(updatedCatalog);
+      }
+
       const updated = invoices.filter((inv) => inv.id !== id)
       saveInvoices(updated)
     }
@@ -832,6 +857,7 @@ export default function MaxxiPharmaPage() {
                     <th className="p-3">Product Name</th>
                     <th className="p-3">Category</th>
                     <th className="p-3">HSN Code</th>
+                    <th className="p-3 text-right">Stock Qty</th>
                     <th className="p-3 text-right">Default Unit</th>
                     <th className="p-3 text-right">Default Rate (₹)</th>
                     <th className="p-3 text-right">Tax Rate (%)</th>
@@ -851,6 +877,9 @@ export default function MaxxiPharmaPage() {
                         </span>
                       </td>
                       <td className="p-3 font-mono text-slate-600">{item.hsnCode}</td>
+                      <td className="p-3 text-right font-extrabold text-blue-600">
+                        {item.quantity || 0}
+                      </td>
                       <td className="p-3 text-right font-semibold uppercase">{item.defaultUnit}</td>
                       <td className="p-3 text-right font-mono font-bold text-slate-900">
                         ₹{item.defaultRate?.toLocaleString('en-IN')}

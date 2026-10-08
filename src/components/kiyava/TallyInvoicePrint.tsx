@@ -132,7 +132,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
         {/* Header Ribbon: GSTIN | TAX INVOICE | Copy Type */}
         <div className="border-b border-black px-2 py-1 flex justify-between items-center bg-white text-[10px]">
           <div>
-            GSTIN : <strong className="font-mono text-[11px] font-black">{invoice.company.gstin}</strong>
+            GSTIN : <strong className="font-mono text-[11px] font-black">07AAAAA0000A1Z5</strong>
           </div>
           <div className="text-xs font-black uppercase tracking-widest text-center">
             TAX INVOICE
@@ -145,24 +145,14 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
         {/* Company / Seller Banner */}
         <div className="border-b border-black p-2.5 text-center bg-white">
           <h1 className="text-xl font-black tracking-wide uppercase font-serif text-black leading-none">
-            {invoice.company.name}
+            KSV HEALTHCARE & AYURVEDA
           </h1>
-          {invoice.company.tagline && (
-            <p className="text-[9.5px] font-semibold text-neutral-700 mt-0.5 tracking-wide">
-              {invoice.company.tagline}
-            </p>
-          )}
-          <p className="text-[10px] font-medium text-black mt-1">
-            {invoice.company.addressLine1}
-            {invoice.company.addressLine2 ? `, ${invoice.company.addressLine2}` : ''}
+          <p className="text-[10.5px] font-bold text-neutral-800 mt-1 tracking-wide">
+            Specialized Medical Care & Ayurvedic OPD Clinic
           </p>
-          <p className="text-[10px] font-medium text-black">
-            {invoice.company.city}, {invoice.company.state} - {invoice.company.pincode}
-          </p>
-          <div className="flex justify-center items-center gap-4 text-[9.5px] font-semibold text-neutral-800 mt-1 flex-wrap">
-            <span>State Name : <strong>{invoice.company.state}</strong>, Code : <strong>{invoice.company.stateCode}</strong></span>
-            {invoice.company.phone && <span>Tel : <strong>{invoice.company.phone}</strong></span>}
-            {invoice.company.email && <span>E-Mail : <strong>{invoice.company.email}</strong></span>}
+          <div className="flex justify-center items-center gap-4 text-[10px] font-bold text-black mt-1.5 flex-wrap">
+            <span>Helpline : <strong>+91 98765 43210</strong></span>
+            <span>GSTIN : <strong>07AAAAA0000A1Z5</strong></span>
           </div>
         </div>
 

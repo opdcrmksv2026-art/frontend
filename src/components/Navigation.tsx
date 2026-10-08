@@ -117,7 +117,7 @@ export default function Navigation() {
   return (
     <>
       {/* Mobile Top Bar */}
-      <div className="md:hidden flex items-center justify-between bg-[#0B1220] text-white p-4 border-b border-white/5 relative z-50">
+      <div className="md:hidden flex items-center justify-between bg-[#0B1220] text-white p-4 border-b border-white/5 relative z-50 print:hidden">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg flex items-center justify-center shadow-lg shadow-emerald-500/20">
             <Hexagon className="w-5 h-5 text-white fill-emerald-500/50" />
@@ -144,7 +144,7 @@ export default function Navigation() {
       <aside className={`
         fixed inset-y-0 left-0 z-50 flex flex-col bg-[#0B1220] border-r border-white/[0.05] shadow-2xl md:shadow-none
         transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
-        md:relative w-[300px] shrink-0
+        md:relative w-[300px] shrink-0 print:hidden
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         {/* Subtle glass layered background */}

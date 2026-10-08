@@ -101,7 +101,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_ston_80',
     name: 'STONVAIDHA KSG 80',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 2500.0,
     defaultTaxRate: 5,
@@ -111,7 +111,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_ston_40',
     name: 'STONVAIDHA KSG 40',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -121,7 +121,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_ston_12',
     name: 'STONVAIDHA KSGA 12',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -131,7 +131,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_ston_6',
     name: 'STONVAIDHA KSGA 6',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -141,7 +141,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_ston_108',
     name: 'STONVAIDHA KSS 108',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -151,7 +151,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_ston_72',
     name: 'STONVAIDHA KSS 72',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -161,7 +161,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_ston_36',
     name: 'STONVAIDHA KSS 36',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -171,7 +171,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_vidhu_tr_30',
     name: 'VIDHUVAIDHA TR 30 CHURAN',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -181,7 +181,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_vidhu_aks_30',
     name: 'VIDHUVAIDHA AKS 30 CHURAN',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -191,7 +191,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_vidhu_ls_30',
     name: 'VIDHUVAIDHA LS 30 CHURAN',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -201,7 +201,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_madhu_sm_30',
     name: 'MADHUVAIDHA SM 30 CHURAN',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -211,7 +211,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_vidhu_bbn_30',
     name: 'VIDHUVAIDHA BBN 30 CHURAN',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -221,7 +221,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_vidhu_hgp_30',
     name: 'VIDHUVAIDHA HGP 30 CHURAN',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -231,7 +231,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_vidhu_pssf_30',
     name: 'VIDHUVAIDHA PSSF 30 CHURAN',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -241,7 +241,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_vidhu_pssf_60',
     name: 'VIDHUVAIDHA PSSF 60 CHURAN',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,
@@ -251,7 +251,7 @@ export const DEFAULT_MAXXI_CATALOG: CatalogItem[] = [
   {
     id: 'cat_mx_vidhu_hbp_30',
     name: 'VIDHUVAIDHA HBP 30 CHURAN',
-    hsnCode: '30031000',
+    hsnCode: '3003',
     defaultUnit: 'NOS',
     defaultRate: 0.0,
     defaultTaxRate: 5,

@@ -28,10 +28,21 @@ import {
   Edit
 } from "lucide-react"
 
+import { calculateGSTInvoice, findDiscountForTargetPayable } from "@/utils/gstCalculator"
+
+interface TreatmentProduct {
+  name: string
+  quantity: string
+  rate: number
+  hsnCode?: string
+  taxRate?: number
+}
+
 interface TreatmentItem {
   id: string
   disease: string
   kitName: string
+  products: TreatmentProduct[]
   durationDays: string
   price: string
 }
@@ -50,6 +61,35 @@ interface Patient {
   state?: string
   pincode?: string
 }
+
+const INDIAN_STATES = [
+  "Himachal Pradesh",
+  "Punjab",
+  "Haryana",
+  "Delhi",
+  "Chandigarh",
+  "Uttarakhand",
+  "Uttar Pradesh",
+  "Rajasthan",
+  "Jammu and Kashmir",
+  "Ladakh",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Gujarat",
+  "Bihar",
+  "West Bengal",
+  "Karnataka",
+  "Tamil Nadu",
+  "Telangana",
+  "Andhra Pradesh",
+  "Kerala",
+  "Assam",
+  "Odisha",
+  "Jharkhand",
+  "Chhattisgarh",
+  "Goa",
+  "Other"
+]
 
 export default function CreateInvoicePage() {
   const router = useRouter()
@@ -76,7 +116,7 @@ export default function CreateInvoicePage() {
 
   // Treatments list (multiple diseases support)
   const [treatments, setTreatments] = useState<TreatmentItem[]>([
-    { id: "1", disease: "", kitName: "", durationDays: "30", price: "0" }
+    { id: "1", disease: "", kitName: "", products: [], durationDays: "30", price: "0" }
   ])
 
   // Printable Modal state
@@ -94,10 +134,11 @@ export default function CreateInvoicePage() {
     callingNumber: "",
     houseNumber: "",
     city: "",
-    state: "",
+    state: "Himachal Pradesh",
     pincode: "",
 
     // Pricing & Payments
+    consultancyCharges: "0",
     discountApplied: "0",
     amountCash: "0",
     amountOnline: "0",
@@ -149,8 +190,31 @@ export default function CreateInvoicePage() {
   const handleAddTreatment = () => {
     setTreatments(prev => [
       ...prev,
-      { id: Date.now().toString(), disease: "", kitName: "", durationDays: "30", price: "0" }
+      { id: Date.now().toString(), disease: "", kitName: "", products: [], durationDays: "30", price: "0" }
     ])
+  }
+
+  const handleProductQuantityChange = (treatmentId: string, productIndex: number, newQuantity: string) => {
+    setTreatments(prev => prev.map(t => {
+      if (t.id === treatmentId) {
+        const updatedProducts = [...t.products];
+        updatedProducts[productIndex].quantity = newQuantity;
+        const newPrice = updatedProducts.reduce((sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate), 0).toString();
+        return { ...t, products: updatedProducts, price: newPrice };
+      }
+      return t;
+    }))
+  }
+  
+  const handleRemoveProduct = (treatmentId: string, productIndex: number) => {
+    setTreatments(prev => prev.map(t => {
+      if (t.id === treatmentId) {
+        const updatedProducts = t.products.filter((_, i) => i !== productIndex);
+        const newPrice = updatedProducts.reduce((sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate), 0).toString();
+        return { ...t, products: updatedProducts, price: newPrice };
+      }
+      return t;
+    }))
   }
 
   const handleRemoveTreatment = (id: string) => {
@@ -186,7 +250,7 @@ export default function CreateInvoicePage() {
       callingNumber: patient.callingNumber || "",
       houseNumber: patient.houseNumber || "",
       city: patient.city || "",
-      state: patient.state || "",
+      state: patient.state || "Himachal Pradesh",
       pincode: patient.pincode || ""
     }))
   }
@@ -207,7 +271,7 @@ export default function CreateInvoicePage() {
       callingNumber: "",
       houseNumber: "",
       city: "",
-      state: "",
+      state: "Himachal Pradesh",
       pincode: ""
     }))
   }
@@ -217,13 +281,17 @@ export default function CreateInvoicePage() {
     const { name, value } = e.target
     setFormData(prev => {
       const updated = { ...prev, [name]: value }
-      if (name === "billingType") {
-        let tDue = netSubtotal
-        if (value.includes("+18%")) {
-          tDue = Math.round((netSubtotal + netSubtotal * 0.18) * 100) / 100
-        }
+      if (name === "billingType" || name === "state") {
+        const tempCalc = calculateGSTInvoice(
+          treatments,
+          parseFloat(updated.discountApplied || "0"),
+          parseFloat(updated.consultancyCharges || "0"),
+          "Himachal Pradesh",
+          updated.state || "Himachal Pradesh",
+          true
+        );
         if (updated.amountOnline === "0" || !updated.amountOnline) {
-          updated.amountCash = tDue.toString()
+          updated.amountCash = tempCalc.grandTotal.toString()
         }
       }
       return updated
@@ -234,39 +302,50 @@ export default function CreateInvoicePage() {
   const handleNumericChange = (name: string, value: string) => {
     setFormData(prev => {
       const updated = { ...prev, [name]: value }
+      
+      const baseCalc = calculateGSTInvoice(
+        treatments as any,
+        0,
+        parseFloat(updated.consultancyCharges || "0"),
+        "Himachal Pradesh",
+        updated.state || "Himachal Pradesh",
+        true,
+        updated.stateCode
+      );
+
       if (name === "discountApplied") {
-        const dVal = parseFloat(value || "0")
-        const net = Math.max(0, priceVal - dVal)
-        let tDue = net
-        if (prev.billingType.includes("+18%")) {
-          tDue = Math.round((net + net * 0.18) * 100) / 100
+        const typedDiscount = Math.max(0, parseFloat(value || "0"));
+        if (typedDiscount > baseCalc.grossAmount) {
+          setError(`Product discount (₹${typedDiscount.toLocaleString("en-IN")}) cannot exceed gross pre-tax total (₹${baseCalc.grossAmount.toLocaleString("en-IN")})`);
+        } else {
+          setError("");
         }
-        if (updated.amountOnline === "0" || !updated.amountOnline) {
-          updated.amountCash = tDue.toString()
-        }
+      } else {
+        setError("");
       }
+
       return updated
     })
   }
 
   // Financial values calculations
-  const priceVal = treatments.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0)
-  const discountVal = parseFloat(formData.discountApplied || "0")
-  const netSubtotal = Math.max(0, priceVal - discountVal)
+  const calcResult = calculateGSTInvoice(
+    treatments as any,
+    parseFloat(formData.discountApplied || "0"),
+    parseFloat(formData.consultancyCharges || "0"),
+    "Himachal Pradesh",
+    formData.state || "Himachal Pradesh",
+    true,
+    formData.stateCode
+  )
+  const originalBillTotal = calcResult.originalInvoiceTotal
 
-  let gstVal = 0
-  let totalDueVal = netSubtotal
-
-  if (formData.billingType.includes("+18%") || formData.billingType === "GST (+18% Extra)") {
-    gstVal = Math.round(netSubtotal * 0.18 * 100) / 100
-    totalDueVal = Math.round((netSubtotal + gstVal) * 100) / 100
-  } else if (formData.billingType.includes("Inclusive") || formData.billingType === "GST (18% Inclusive)" || formData.billingType === "GST") {
-    gstVal = Math.round((netSubtotal - netSubtotal / 1.18) * 100) / 100
-    totalDueVal = netSubtotal
-  } else {
-    gstVal = 0
-    totalDueVal = netSubtotal
-  }
+  const priceVal = calcResult.grossAmount
+  const discountVal = calcResult.discountApplied
+  const netSubtotal = calcResult.medicineTaxableValue
+  const gstVal = calcResult.totalTax
+  const consultancyVal = calcResult.consultancyCharges
+  const totalDueVal = calcResult.grandTotal
 
   const cashVal = parseFloat(formData.amountCash || "0")
   const onlineVal = parseFloat(formData.amountOnline || "0")
@@ -291,12 +370,20 @@ export default function CreateInvoicePage() {
         setError("Kam se kam 1 Bimari ya Kit Name enter karein")
         return
       }
-      // Auto-fill Cash Collected to full amount by default
-      setFormData(prev => ({
-        ...prev,
-        amountCash: totalDueVal.toString(),
-        amountOnline: "0"
-      }))
+      
+      // Auto-fill Cash Collected to full amount by default if not already set
+      setFormData(prev => {
+        const cash = parseFloat(prev.amountCash || "0");
+        const online = parseFloat(prev.amountOnline || "0");
+        if (cash === 0 && online === 0) {
+          return {
+            ...prev,
+            amountCash: calcResult.grandTotal.toString(),
+            amountOnline: "0"
+          };
+        }
+        return prev;
+      });
       setCurrentStep(3)
     }
   }
@@ -314,7 +401,10 @@ export default function CreateInvoicePage() {
     setSuccess("")
 
     const invoiceNo = `INV-${Math.floor(100000 + Math.random() * 900000)}`
-    const combinedKitName = treatments.map(t => `${t.disease || t.kitName || 'Treatment'} (${t.durationDays}d)`).join(" + ")
+    const combinedKitName = treatments.map(t => {
+      const prodString = t.products.map(p => `${p.quantity}x ${p.name}`).join(" + ");
+      return `${prodString || t.kitName || 'Treatment'} (${t.durationDays}d)`;
+    }).join(" | ")
     const combinedDiseases = treatments.map(t => t.disease).filter(Boolean).join(", ")
 
     const billData = {
@@ -324,6 +414,12 @@ export default function CreateInvoicePage() {
       age: formData.age,
       gender: formData.gender,
       whatsappNumber: formData.whatsappNumber,
+      callingNumber: formData.callingNumber,
+      houseNumber: formData.houseNumber,
+      city: formData.city,
+      state: formData.state || "Himachal Pradesh",
+      stateCode: formData.stateCode || "02",
+      pincode: formData.pincode,
       treatments,
       combinedKitName,
       combinedDiseases,
@@ -333,12 +429,14 @@ export default function CreateInvoicePage() {
       date: formData.date,
       nextFollowUpDate: formData.nextFollowUpDate,
       priceVal,
+      consultancyVal: parseFloat(formData.consultancyCharges || "0"),
       discountVal,
       gstVal,
       totalDueVal,
       cashVal,
       onlineVal,
       totalPaidVal,
+      calcResult,
     }
 
     // Try posting to backend (non-blocking)
@@ -367,6 +465,7 @@ export default function CreateInvoicePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kitName: combinedKitName,
+          treatments: treatments,
           totalAmount: totalDueVal,
           amountCash: cashVal,
           amountOnline: onlineVal,
@@ -393,10 +492,32 @@ export default function CreateInvoicePage() {
       console.warn("Backend offline or network error, generating local bill receipt:", err)
     } finally {
       // Save locally to localStorage so offline bill generation ALWAYS works
+      // Save locally to localStorage so offline bill generation ALWAYS works
       try {
         const existingOffline = JSON.parse(localStorage.getItem("ksv_offline_bills") || "[]")
         existingOffline.unshift(billData)
         localStorage.setItem("ksv_offline_bills", JSON.stringify(existingOffline))
+        
+        // Also deduct inventory from Maxxi Pharma catalog
+        const maxxiCat = JSON.parse(localStorage.getItem("maxxi_app_catalog") || "[]")
+        let updatedCatalog = [...maxxiCat]
+        treatments.forEach(t => {
+          if (t.products) {
+            t.products.forEach(p => {
+              const qtyToDeduct = parseFloat(p.quantity || "1");
+              const index = updatedCatalog.findIndex((c: any) => c.name === p.name);
+              if (index !== -1) {
+                const currentQty = updatedCatalog[index].quantity || 0;
+                updatedCatalog[index] = {
+                  ...updatedCatalog[index],
+                  quantity: currentQty - qtyToDeduct
+                }
+              }
+            })
+          }
+        })
+        localStorage.setItem("maxxi_app_catalog", JSON.stringify(updatedCatalog))
+        
       } catch (e) {
         console.warn("Local storage write error:", e)
       }
@@ -470,22 +591,54 @@ export default function CreateInvoicePage() {
 
         {/* Existing Patient Selected Profile */}
         {isExistingPatient && selectedPatient ? (
-          <div className="p-5 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-start gap-4">
-            <div className="p-3 bg-blue-100/50 rounded-xl text-blue-600">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-slate-800 text-base">{selectedPatient.name}</h3>
-                <span className="text-[10px] font-extrabold tracking-wider uppercase text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
-                  Verified Patient
-                </span>
+          <div className="p-5 bg-blue-50/50 rounded-2xl border border-blue-100 flex flex-col gap-4">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-100/50 rounded-xl text-blue-600">
+                <ShieldCheck className="w-6 h-6" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-2.5 gap-x-4 mt-4 text-xs text-slate-500 font-semibold">
-                <div><span className="text-slate-400">ID / Mobile:</span> {selectedPatient.uniqueId}</div>
-                <div><span className="text-slate-400">Age / Gender:</span> {selectedPatient.age || "N/A"} yrs / {selectedPatient.gender || "N/A"}</div>
-                {selectedPatient.whatsappNumber && <div><span className="text-slate-400">WhatsApp:</span> {selectedPatient.whatsappNumber}</div>}
-                {selectedPatient.address && <div className="col-span-1 sm:col-span-2 md:col-span-3 border-t border-slate-100/80 pt-3 mt-1"><span className="text-slate-400">Full Address:</span> {selectedPatient.address}</div>}
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-slate-800 text-base">{selectedPatient.name}</h3>
+                  <span className="text-[10px] font-extrabold tracking-wider uppercase text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
+                    Verified Patient
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-2.5 gap-x-4 mt-3 text-xs text-slate-500 font-semibold">
+                  <div><span className="text-slate-400">ID / Mobile:</span> {selectedPatient.uniqueId}</div>
+                  <div><span className="text-slate-400">Age / Gender:</span> {selectedPatient.age || "N/A"} yrs / {selectedPatient.gender || "N/A"}</div>
+                  {selectedPatient.whatsappNumber && <div><span className="text-slate-400">WhatsApp:</span> {selectedPatient.whatsappNumber}</div>}
+                  {selectedPatient.city && <div><span className="text-slate-400">City:</span> {selectedPatient.city}</div>}
+                  {selectedPatient.address && <div className="col-span-1 sm:col-span-2 md:col-span-3"><span className="text-slate-400">Address:</span> {selectedPatient.address}</div>}
+                </div>
+              </div>
+            </div>
+
+            {/* State & Tax Mode Bar */}
+            <div className="pt-3 border-t border-blue-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Billing State:</label>
+                <select
+                  name="state"
+                  value={formData.state || "Himachal Pradesh"}
+                  onChange={handleInputChange}
+                  className="px-3 py-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-extrabold text-slate-800 outline-none cursor-pointer"
+                >
+                  {INDIAN_STATES.map((st) => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                {(formData.state || "Himachal Pradesh").trim().toLowerCase() === "himachal pradesh" ? (
+                  <span className="text-xs font-bold text-emerald-700 bg-emerald-100/60 px-3 py-1.5 rounded-xl border border-emerald-200 inline-flex items-center gap-1.5">
+                    🏛️ Intra-State Billing (CGST + SGST applied)
+                  </span>
+                ) : (
+                  <span className="text-xs font-bold text-indigo-700 bg-indigo-100/60 px-3 py-1.5 rounded-xl border border-indigo-200 inline-flex items-center gap-1.5">
+                    🚚 Inter-State Billing ({formData.state || "Other"} → IGST applied)
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -497,35 +650,141 @@ export default function CreateInvoicePage() {
               <span className="text-xs font-bold uppercase tracking-wider">Patient Not Registered — Quick Auto-Register Mode</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="flex flex-col">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                   Patient Mobile / ID
                 </label>
                 <input
                   type="text"
                   disabled
                   value={formData.uniqueId}
-                  className="w-full px-4 py-3 bg-slate-100 border-2 border-slate-200 rounded-2xl text-sm font-semibold text-slate-500 cursor-not-allowed"
+                  className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-500 cursor-not-allowed"
                 />
               </div>
 
               <div className="flex flex-col">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                   Patient Full Name *
                 </label>
                 <div className="relative">
-                  <User className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
+                  <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
                     name="name"
-                    placeholder="Enter patient full name to register..."
+                    placeholder="Enter patient full name..."
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-3 pl-11 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-100/50 focus:border-blue-500/20 rounded-2xl outline-none transition-all text-sm font-semibold text-slate-700 placeholder-slate-400"
+                    className="w-full px-4 py-2.5 pl-10 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none transition-all text-sm font-semibold text-slate-700 placeholder-slate-400"
                   />
                 </div>
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Age &amp; Gender
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    name="age"
+                    placeholder="Age"
+                    value={formData.age}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700"
+                  />
+                  <select
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  WhatsApp / Alternate Number
+                </label>
+                <input
+                  type="tel"
+                  name="whatsappNumber"
+                  placeholder="WhatsApp number..."
+                  value={formData.whatsappNumber}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700"
+                />
+              </div>
+
+              {/* State Selection Dropdown */}
+              <div className="flex flex-col">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>State (GST Calculation) *</span>
+                </label>
+                <select
+                  name="state"
+                  value={formData.state || "Himachal Pradesh"}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2.5 bg-white border-2 border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-bold text-slate-800 transition-all cursor-pointer"
+                >
+                  {INDIAN_STATES.map((st) => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+                <div className="mt-1.5">
+                  {(formData.state || "Himachal Pradesh").trim().toLowerCase() === "himachal pradesh" ? (
+                    <span className="text-[11px] font-extrabold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 inline-block">
+                      🏛️ Intra-State GST: CGST + SGST applied
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-extrabold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 inline-block">
+                      🚚 Inter-State GST: IGST applied
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  City / District &amp; Pincode
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    name="city"
+                    placeholder="City / District"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700"
+                  />
+                  <input
+                    type="text"
+                    name="pincode"
+                    placeholder="Pincode"
+                    value={formData.pincode}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col md:col-span-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Full House / Clinic Address (Optional)
+                </label>
+                <input
+                  type="text"
+                  name="houseNumber"
+                  placeholder="House / Street / Locality..."
+                  value={formData.houseNumber}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700"
+                />
               </div>
             </div>
           </div>
@@ -594,38 +853,39 @@ export default function CreateInvoicePage() {
                   />
                 </div>
 
-                <div className="flex flex-col relative">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Product Name</label>
-                  <textarea
-                    rows={2}
+                <div className="flex flex-col relative md:col-span-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Search & Add Product</label>
+                  <input
+                    type="text"
                     value={treatment.kitName}
                     onChange={(e) => handleTreatmentChange(treatment.id, "kitName", e.target.value)}
                     onFocus={() => setActiveTreatmentId(treatment.id)}
                     onBlur={() => setTimeout(() => setActiveTreatmentId(null), 200)}
                     placeholder="e.g. KSG 80-1, KSGA 12-1..."
-                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700 placeholder-slate-400 resize-none"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700 placeholder-slate-400"
                   />
 
-                  {activeTreatmentId === treatment.id && (() => {
-                    const lines = treatment.kitName.split('\n')
-                    const currentLine = lines[lines.length - 1]
-                    const matches = currentLine.trim() === '' 
-                      ? catalog 
-                      : catalog.filter(c => c.name.toLowerCase().includes(currentLine.toLowerCase()))
+                  {/* Autocomplete */}
+                  {activeTreatmentId === treatment.id && treatment.kitName.trim() !== '' && (() => {
+                    const matches = catalog.filter(c => c.name.toLowerCase().includes(treatment.kitName.toLowerCase()))
                       
-                    if (matches.length > 0 && !catalog.some(c => c.name.toLowerCase() === currentLine.trim().toLowerCase())) {
+                    if (matches.length > 0) {
                       return (
-                        <div className="absolute z-50 left-0 top-[105%] w-full bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                        <div className="absolute z-50 left-0 top-[80px] w-full bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
                           {matches.map(c => (
                             <div
                               key={c.id}
                               onMouseDown={(e) => {
                                 e.preventDefault()
-                                lines[lines.length - 1] = c.name
-                                handleTreatmentChange(treatment.id, 'kitName', lines.join('\n') + '\n')
-                                
-                                const newPrice = (parseFloat(treatment.price || "0") + (c.defaultRate || 0)).toString()
-                                handleTreatmentChange(treatment.id, 'price', newPrice)
+                                setTreatments(prev => prev.map(t => {
+                                  if (t.id === treatment.id) {
+                                    const newProducts = [...t.products, { name: c.name, quantity: "1", rate: c.defaultRate || 0, hsnCode: c.hsnCode || '-', taxRate: c.defaultTaxRate || 0 }];
+                                    const newPrice = newProducts.reduce((sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate), 0).toString();
+                                    return { ...t, kitName: "", products: newProducts, price: newPrice };
+                                  }
+                                  return t;
+                                }))
+                                setTimeout(() => setActiveTreatmentId(null), 0)
                               }}
                               className="px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer border-b border-slate-100 last:border-0 transition-colors flex justify-between"
                             >
@@ -638,6 +898,29 @@ export default function CreateInvoicePage() {
                     }
                     return null
                   })()}
+
+                  {/* Selected Products List */}
+                  {treatment.products.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {treatment.products.map((p, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-slate-50 border border-slate-200 p-2.5 rounded-xl shadow-sm">
+                          <span className="text-sm font-extrabold text-slate-700 flex-1 truncate pr-4" title={p.name}>{p.name}</span>
+                          <div className="flex items-center gap-4 shrink-0">
+                             <div className="flex items-center gap-2">
+                               <span className="text-[10px] uppercase font-bold text-slate-400">Qty:</span>
+                               <input type="number" min="1" value={p.quantity} onChange={(e) => handleProductQuantityChange(treatment.id, idx, e.target.value)} className="w-16 px-2 py-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-sm text-center font-bold outline-none" />
+                             </div>
+                             <div className="text-sm font-black text-slate-800 w-20 text-right">
+                               ₹{(parseFloat(p.quantity || "0") * p.rate).toLocaleString("en-IN")}
+                             </div>
+                             <button type="button" onClick={() => handleRemoveProduct(treatment.id, idx)} className="text-rose-400 hover:text-rose-600 p-1.5 hover:bg-rose-50 rounded-lg transition-colors" title="Remove Product">
+                               <Trash2 className="w-4 h-4" />
+                             </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col">
@@ -744,34 +1027,37 @@ export default function CreateInvoicePage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              {/* Discount selection */}
-              <div className="flex flex-col">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">Discount (₹)</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-3.5 text-slate-400 text-sm font-semibold">₹</span>
-                  <input
-                    type="number"
-                    value={formData.discountApplied}
-                    onChange={(e) => handleNumericChange("discountApplied", e.target.value)}
-                    className="w-full px-4 py-3 pl-8 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-100/50 focus:border-blue-500/20 rounded-2xl outline-none transition-all text-sm font-bold text-slate-700 text-right"
-                  />
+              {/* Discount and Consultancy */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:col-span-2">
+                <div className="flex flex-col">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">Consultancy Charges (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-3.5 text-slate-400 text-sm font-semibold">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={formData.consultancyCharges}
+                      onChange={(e) => handleNumericChange("consultancyCharges", e.target.value)}
+                      className="w-full px-4 py-3 pl-8 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-100/50 focus:border-blue-500/20 rounded-2xl outline-none transition-all text-sm font-bold text-slate-700 text-right"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Billing type */}
-              <div className="flex flex-col">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">Invoice Billing Type</label>
-                <select
-                  name="billingType"
-                  value={formData.billingType}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-100/50 focus:border-blue-500/20 rounded-2xl outline-none transition-all text-sm font-bold text-slate-700 cursor-pointer"
-                >
-                  <option value="Non-GST">Non-GST Invoice</option>
-                  <option value="GST (+18% Extra)">GST Invoice (+18% GST Extra)</option>
-                  <option value="GST (18% Inclusive)">GST Invoice (18% Inclusive)</option>
-                  <option value="Govt Claim">Govt Claim / Insurance</option>
-                </select>
+                <div className="flex flex-col">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">Product Discount (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-3.5 text-slate-400 text-sm font-semibold">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={formData.discountApplied}
+                      onChange={(e) => handleNumericChange("discountApplied", e.target.value)}
+                      className="w-full px-4 py-3 pl-8 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-100/50 focus:border-blue-500/20 rounded-2xl outline-none transition-all text-sm font-bold text-slate-700 text-right"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Payment Mode Breakdown */}
@@ -789,6 +1075,7 @@ export default function CreateInvoicePage() {
                       <input
                         type="number"
                         min="0"
+                        step="any"
                         value={formData.amountCash}
                         onChange={(e) => handleNumericChange("amountCash", e.target.value)}
                         placeholder="0"
@@ -807,6 +1094,7 @@ export default function CreateInvoicePage() {
                       <input
                         type="number"
                         min="0"
+                        step="any"
                         value={formData.amountOnline}
                         onChange={(e) => handleNumericChange("amountOnline", e.target.value)}
                         placeholder="0"
@@ -817,9 +1105,13 @@ export default function CreateInvoicePage() {
                 </div>
 
                 {/* Clean Total Payment Summary bar */}
-                <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-sm">
-                  <div className="flex items-center gap-6">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Payable: <strong className="text-slate-800 text-sm font-extrabold ml-1">₹{totalDueVal.toLocaleString("en-IN")}</strong></span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-sm">
+                  <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Original Bill: <strong className="text-slate-700 text-sm font-extrabold ml-1">₹{originalBillTotal.toLocaleString("en-IN")}</strong></span>
+                    {discountVal > 0 && (
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Product Discount: <strong className="text-rose-600 text-sm font-extrabold ml-1">-₹{discountVal.toLocaleString("en-IN")}</strong></span>
+                    )}
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Final Payable: <strong className="text-slate-900 text-sm font-extrabold ml-1">₹{totalDueVal.toLocaleString("en-IN")}</strong></span>
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Collected: <strong className="text-blue-600 text-sm font-extrabold ml-1">₹{totalPaidVal.toLocaleString("en-IN")}</strong></span>
                   </div>
                   {totalPaidVal < totalDueVal ? (
@@ -894,11 +1186,20 @@ export default function CreateInvoicePage() {
                   <div key={t.id} className="mt-1.5 pb-1.5 border-b border-slate-50 last:border-0">
                     <div className="flex justify-between items-center text-slate-800">
                       <span className="font-bold text-[11px] truncate max-w-[160px]">
-                        {t.disease || t.kitName || `Treatment #${idx + 1}`}
+                        {t.disease || `Treatment #${idx + 1}`}
                       </span>
                       <span className="text-[11px] font-extrabold text-slate-700">₹{parseFloat(t.price || "0").toLocaleString("en-IN")}</span>
                     </div>
-                    {(t.kitName || t.durationDays) && (
+                    {t.products && t.products.length > 0 ? (
+                      <div className="mt-1">
+                        {t.products.map((p, pIdx) => (
+                           <div key={pIdx} className="flex justify-between items-center text-[10px] text-slate-500 font-semibold mt-0.5">
+                             <span>{p.quantity}x {p.name} (HSN: {p.hsnCode || "-"})</span>
+                             <span>GST: {p.taxRate || 0}% | ₹{(parseFloat(p.quantity || "1") * p.rate).toLocaleString("en-IN")}</span>
+                           </div>
+                        ))}
+                      </div>
+                    ) : (
                       <div className="flex justify-between items-center text-[10px] text-slate-400 font-semibold mt-0.5">
                         <span>{t.kitName || "Course"}</span>
                         <span>{t.durationDays || "30"} Days</span>
@@ -910,28 +1211,34 @@ export default function CreateInvoicePage() {
 
               <div className="border-t border-slate-100 pt-3 space-y-2 font-semibold">
                 <div className="flex justify-between text-slate-500">
-                  <span>Medicine Subtotal:</span>
-                  <span>₹{priceVal.toLocaleString("en-IN")}</span>
+                  <span>Gross Medicines:</span>
+                  <span>₹{priceVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                </div>
+                {gstVal > 0 && (
+                  <div className="flex justify-between text-indigo-600">
+                    <span>GST (Product-wise):</span>
+                    <span>+ ₹{gstVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  </div>
+                )}
+                {consultancyVal > 0 && (
+                  <div className="flex justify-between text-slate-700">
+                    <span>Consultancy Charges:</span>
+                    <span>+ ₹{consultancyVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-700 font-bold border-t border-slate-100/80 pt-1">
+                  <span>Original Bill Total:</span>
+                  <span>₹{originalBillTotal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                 </div>
                 {discountVal > 0 && (
                   <div className="flex justify-between text-rose-500">
-                    <span>Discount:</span>
-                    <span>- ₹{discountVal.toLocaleString("en-IN")}</span>
+                    <span>Product Discount:</span>
+                    <span>- ₹{discountVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                   </div>
                 )}
-                {gstVal > 0 && (
-                  <div className="flex justify-between text-indigo-600">
-                    <span>GST (18%):</span>
-                    <span>{formData.billingType.includes("+18%") ? `+ ₹${gstVal.toLocaleString("en-IN")}` : `₹${gstVal.toLocaleString("en-IN")} (Included)`}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-slate-500">
-                  <span>Billing Type:</span>
-                  <span>{formData.billingType}</span>
-                </div>
                 <div className="flex justify-between font-extrabold text-sm border-t border-slate-100 pt-2 text-slate-800">
-                  <span>Total Amount Payable:</span>
-                  <span className="text-blue-600 text-base">₹{totalDueVal.toLocaleString("en-IN")}</span>
+                  <span>Final Amount Payable:</span>
+                  <span className="text-blue-600 text-base">₹{totalDueVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                 </div>
               </div>
 
@@ -1005,9 +1312,9 @@ export default function CreateInvoicePage() {
 
   return (
     <div className="w-full pt-0 pb-16 animate-in fade-in duration-500 text-slate-700">
-
-      {/* Sleek Compact Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-3 border-b border-slate-200/60">
+      <div className="print:hidden">
+        {/* Sleek Compact Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-3 border-b border-slate-200/60">
         <div className="flex items-center gap-3">
           <Link
             href="/"
@@ -1107,18 +1414,19 @@ export default function CreateInvoicePage() {
         {currentStep === 2 && renderStep2()}
         {currentStep === 3 && renderStep3()}
       </form>
+      </div>
 
       {/* PRINTABLE RECEIPT MODAL TEMPLATE */}
       {showReceiptModal && generatedBill && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-300 print:bg-transparent print:p-0"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-300 print:relative print:inset-auto print:bg-transparent print:p-0 print:block print:overflow-visible print:z-auto"
           onClick={() => {
             setShowReceiptModal(false)
             router.push("/patients")
           }}
         >
           <div
-            className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 relative my-8 text-slate-800 flex flex-col overflow-hidden print:shadow-none print:border-none print:my-0 print:max-w-none print:w-full"
+            className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-100 relative my-8 text-slate-800 flex flex-col overflow-hidden print:shadow-none print:border-none print:my-0 print:max-w-none print:w-full print:overflow-visible print:block"
             onClick={(e) => e.stopPropagation()}
           >
 
@@ -1174,9 +1482,9 @@ export default function CreateInvoicePage() {
                 {/* Header Letterhead */}
                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4">
                   <div>
-                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">KSV HEALTHCARE &amp; AYURVEDA</h1>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">Specialized Medical Care &amp; Ayurvedic OPD Clinic</p>
-                    <p className="text-[11px] text-slate-400 font-semibold mt-1">Helpline: +91 98765 43210 | GSTIN: 07AAAAA0000A1Z5</p>
+                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">Maxxi Pharma Private Limited</h1>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">Kapoor Happy Home 2 Hospital Road Solan, Solan</p>
+                    <p className="text-[11px] text-slate-400 font-semibold mt-1">GSTIN/UIN: 02AASCM1970C1ZN | State: Himachal Pradesh, Code: 02</p>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg inline-block">
@@ -1200,10 +1508,6 @@ export default function CreateInvoicePage() {
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Age / Gender</span>
                     <span>{generatedBill.age ? `${generatedBill.age} yrs` : "-"} / {generatedBill.gender || "Male"}</span>
                   </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Billing Type</span>
-                    <span className="font-bold text-indigo-600">{generatedBill.billingType}</span>
-                  </div>
                 </div>
 
                 {/* Treatment Items Table */}
@@ -1213,23 +1517,51 @@ export default function CreateInvoicePage() {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-100/80 border-b border-slate-200 text-slate-600 uppercase font-bold text-[10px] tracking-wider">
                         <tr>
-                          <th className="py-3 px-4">#</th>
-                          <th className="py-3 px-4">Disease / Condition</th>
-                          <th className="py-3 px-4">Medicine Kit Name</th>
-                          <th className="py-3 px-4 text-center">Duration</th>
-                          <th className="py-3 px-4 text-right">Price (₹)</th>
+                          <th className="py-3 px-3">#</th>
+                          <th className="py-3 px-3">Course</th>
+                          <th className="py-3 px-3">Product Name</th>
+                          <th className="py-3 px-3">HSN Code</th>
+                          <th className="py-3 px-3 text-center">Qty</th>
+                          <th className="py-3 px-3 text-right">Rate (₹)</th>
+                          <th className="py-3 px-3 text-center">GST %</th>
+                          <th className="py-3 px-3 text-right">GST Amt (₹)</th>
+                          <th className="py-3 px-3 text-right">Total (₹)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {generatedBill.treatments.map((t: any, idx: number) => (
-                          <tr key={t.id}>
-                            <td className="py-3 px-4 font-bold text-slate-400">{idx + 1}</td>
-                            <td className="py-3 px-4 font-extrabold text-slate-900">{t.disease || "General Checkup"}</td>
-                            <td className="py-3 px-4 text-slate-600">{t.kitName || "Custom Kit"}</td>
-                            <td className="py-3 px-4 text-center text-slate-500">{t.durationDays} Days</td>
-                            <td className="py-3 px-4 text-right font-extrabold text-slate-800">₹{parseFloat(t.price || "0").toLocaleString("en-IN")}</td>
-                          </tr>
-                        ))}
+                        {(() => {
+                          let flatIdx = 0;
+                          return generatedBill.treatments.map((t: any, idx: number) => {
+                            const products = t.products && t.products.length > 0 
+                              ? t.products 
+                              : [{}]; // Dummy for iteration
+                            
+                            return products.map((p: any, pIdx: number) => {
+                              const calcLine = generatedBill.calcResult?.lines[flatIdx++];
+                              if (!calcLine) return null;
+
+                              return (
+                                <tr key={`${t.id}-${pIdx}`}>
+                                  {pIdx === 0 && (
+                                    <>
+                                      <td className="py-3 px-3 font-bold text-slate-400" rowSpan={products.length}>{idx + 1}</td>
+                                      <td className="py-3 px-3 font-extrabold text-slate-900" rowSpan={products.length}>{t.disease || "General Checkup"}</td>
+                                    </>
+                                  )}
+                                  <td className="py-3 px-3 text-slate-600">{calcLine.name}</td>
+                                  <td className="py-3 px-3 text-slate-500 font-mono text-[10px]">{calcLine.hsnCode || "-"}</td>
+                                  <td className="py-3 px-3 text-center text-slate-600">{calcLine.qty}</td>
+                                  <td className="py-3 px-3 text-right text-slate-500">₹{calcLine.rate.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                  <td className="py-3 px-3 text-center text-slate-500">{calcLine.taxRate}%</td>
+                                  <td className="py-3 px-3 text-right text-slate-500">₹{calcLine.totalTax.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                  <td className="py-3 px-3 text-right font-extrabold text-slate-800">
+                                    ₹{calcLine.finalAmount.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          })
+                        })()}
                       </tbody>
                     </table>
                   </div>
@@ -1248,41 +1580,149 @@ export default function CreateInvoicePage() {
                 )}
 
                 {/* Financial Calculation Breakdown */}
-                <div className="flex justify-end pt-2">
-                  <div className="w-full sm:w-72 space-y-2 text-xs font-semibold text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                <div className="flex flex-col sm:flex-row justify-between pt-2 gap-4">
+                  {/* HSN Summary */}
+                  {generatedBill.calcResult?.hsnSummary && generatedBill.calcResult.hsnSummary.length > 0 && (
+                    <div className="flex-1 max-w-lg overflow-x-auto border border-slate-200/80 rounded-xl p-2 bg-white">
+                      <h4 className="text-[10px] font-extrabold text-slate-500 uppercase mb-2 px-1">HSN/SAC Tax Summary</h4>
+                      <table className="w-full text-[10px] text-right">
+                        <thead className="bg-slate-50 text-slate-400 font-bold border-b border-slate-100">
+                          <tr>
+                            <th className="py-1 px-2 text-left">HSN/SAC</th>
+                            <th className="py-1 px-2">Taxable Value</th>
+                            {generatedBill.calcResult.isInterState ? (
+                              <>
+                                <th className="py-1 px-2 text-center">IGST Rate</th>
+                                <th className="py-1 px-2">IGST Amt</th>
+                              </>
+                            ) : (
+                              <>
+                                <th className="py-1 px-2 text-center">CGST Rate</th>
+                                <th className="py-1 px-2">CGST Amt</th>
+                                <th className="py-1 px-2 text-center">SGST Rate</th>
+                                <th className="py-1 px-2">SGST Amt</th>
+                              </>
+                            )}
+                            <th className="py-1 px-2 font-extrabold">Total Tax</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 text-slate-600 font-semibold">
+                          {generatedBill.calcResult.hsnSummary.map((hsn: any, idx: number) => (
+                            <tr key={idx}>
+                              <td className="py-1.5 px-2 text-left font-mono">{hsn.hsn}</td>
+                              <td className="py-1.5 px-2">₹{hsn.taxableValue.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                              {generatedBill.calcResult.isInterState ? (
+                                <>
+                                  <td className="py-1.5 px-2 text-center text-slate-400">{hsn.taxRate}%</td>
+                                  <td className="py-1.5 px-2">₹{hsn.igstAmount.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-1.5 px-2 text-center text-slate-400">{hsn.taxRate > 0 ? `${(hsn.taxRate / 2).toFixed(2).replace(/\.?0+$/, '')}%` : '0%'}</td>
+                                  <td className="py-1.5 px-2">₹{hsn.cgstAmount.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                  <td className="py-1.5 px-2 text-center text-slate-400">{hsn.taxRate > 0 ? `${(hsn.taxRate / 2).toFixed(2).replace(/\.?0+$/, '')}%` : '0%'}</td>
+                                  <td className="py-1.5 px-2">₹{hsn.sgstAmount.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                </>
+                              )}
+                              <td className="py-1.5 px-2 font-extrabold text-slate-800">₹{hsn.totalTax.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-900">
+                          <tr>
+                            <td className="py-2 px-2 text-left font-black uppercase text-[10px]">Total</td>
+                            <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalTaxableValue.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                            {generatedBill.calcResult.isInterState ? (
+                              <>
+                                <td className="py-2 px-2 text-center text-slate-400">-</td>
+                                <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalIgst.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="py-2 px-2 text-center text-slate-400">-</td>
+                                <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalCgst.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                <td className="py-2 px-2 text-center text-slate-400">-</td>
+                                <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalSgst.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                              </>
+                            )}
+                            <td className="py-2 px-2 font-black text-slate-900">₹{generatedBill.calcResult.totalTax.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="w-full sm:w-72 space-y-1.5 text-[11px] font-semibold text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
                     <div className="flex justify-between">
-                      <span>Medicine Subtotal:</span>
-                      <span>₹{generatedBill.priceVal.toLocaleString("en-IN")}</span>
+                      <span>Gross Medicines:</span>
+                      <span>₹{generatedBill.calcResult?.grossAmount.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    </div>
+                    {generatedBill.consultancyVal > 0 && (
+                      <div className="flex justify-between text-slate-700">
+                        <span>Consultation Charges:</span>
+                        <span>+ ₹{generatedBill.consultancyVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t border-slate-200 pt-1.5 mt-1.5 font-bold text-slate-800">
+                      <span>{generatedBill.consultancyVal > 0 ? "Taxable Value (incl. Consult.):" : "Taxable Value:"}</span>
+                      <span>₹{generatedBill.calcResult?.totalTaxableValue.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    </div>
+                    {generatedBill.calcResult?.isInterState ? (
+                      <div className="flex justify-between text-indigo-600">
+                        <span>IGST:</span>
+                        <span>₹{generatedBill.calcResult?.totalIgst.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-indigo-600">
+                          <span>CGST:</span>
+                          <span>₹{generatedBill.calcResult?.totalCgst.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="flex justify-between text-indigo-600">
+                          <span>SGST:</span>
+                          <span>₹{generatedBill.calcResult?.totalSgst.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between border-t border-slate-200/80 pt-1 font-bold text-slate-700">
+                      <span>Original Bill Total:</span>
+                      <span>₹{generatedBill.calcResult?.originalInvoiceTotal?.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                     </div>
                     {generatedBill.discountVal > 0 && (
-                      <div className="flex justify-between text-rose-500">
-                        <span>Discount Applied:</span>
-                        <span>- ₹{generatedBill.discountVal.toLocaleString("en-IN")}</span>
+                      <div className="flex justify-between text-rose-500 font-semibold">
+                        <span>Product Discount:</span>
+                        <span>- ₹{generatedBill.discountVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
                     )}
-                    {generatedBill.gstVal > 0 && (
-                      <div className="flex justify-between text-indigo-600">
-                        <span>GST (18%):</span>
-                        <span>₹{generatedBill.gstVal.toLocaleString("en-IN")}</span>
+                    {generatedBill.calcResult?.roundOff !== 0 && (
+                      <div className="flex justify-between text-slate-500">
+                        <span>Round Off:</span>
+                        <span>{generatedBill.calcResult?.roundOff > 0 ? "+" : ""} ₹{generatedBill.calcResult?.roundOff.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
                     )}
-                    <div className="border-t border-slate-300 pt-2 flex justify-between font-extrabold text-sm text-slate-900">
-                      <span>Total Amount Payable:</span>
-                      <span className="text-blue-600 font-black">₹{generatedBill.totalDueVal.toLocaleString("en-IN")}</span>
+                    <div className="border-t border-slate-300 pt-2 flex justify-between font-extrabold text-[13px] text-slate-900">
+                      <span>Final Payable:</span>
+                      <span className="text-blue-600 font-black">₹{generatedBill.totalDueVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                     </div>
-                    <div className="border-t border-slate-200/80 pt-2 space-y-1 text-[11px]">
+                    <div className="border-t border-slate-200/80 pt-2 mt-2 space-y-1">
                       <div className="flex justify-between text-slate-500">
                         <span>Cash Paid:</span>
-                        <span>₹{generatedBill.cashVal.toLocaleString("en-IN")}</span>
+                        <span>₹{generatedBill.cashVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
                       <div className="flex justify-between text-slate-500">
                         <span>Online / UPI Paid:</span>
-                        <span>₹{generatedBill.onlineVal.toLocaleString("en-IN")}</span>
+                        <span>₹{generatedBill.onlineVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
                       <div className="flex justify-between font-bold text-emerald-600 border-t border-slate-200/60 pt-1">
                         <span>Total Paid:</span>
-                        <span>₹{generatedBill.totalPaidVal.toLocaleString("en-IN")}</span>
+                        <span>₹{generatedBill.totalPaidVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
+                      {Math.max(0, generatedBill.totalDueVal - generatedBill.totalPaidVal) > 0 && (
+                        <div className="flex justify-between font-bold text-amber-600 pt-1">
+                          <span>Balance Due:</span>
+                          <span>₹{Math.max(0, generatedBill.totalDueVal - generatedBill.totalPaidVal).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -20,6 +20,35 @@ import {
   CheckCircle2
 } from "lucide-react"
 
+const INDIAN_STATES = [
+  "Himachal Pradesh",
+  "Punjab",
+  "Haryana",
+  "Delhi",
+  "Chandigarh",
+  "Uttarakhand",
+  "Uttar Pradesh",
+  "Rajasthan",
+  "Jammu and Kashmir",
+  "Ladakh",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Gujarat",
+  "Bihar",
+  "West Bengal",
+  "Karnataka",
+  "Tamil Nadu",
+  "Telangana",
+  "Andhra Pradesh",
+  "Kerala",
+  "Assam",
+  "Odisha",
+  "Jharkhand",
+  "Chhattisgarh",
+  "Goa",
+  "Other"
+]
+
 export default function NewPatientPage() {
   const router = useRouter()
   const [formData, setFormData] = useState({
@@ -27,7 +56,8 @@ export default function NewPatientPage() {
     name: "",
     houseNumber: "",
     city: "",
-    state: "",
+    state: "Himachal Pradesh",
+    stateCode: "02",
     pincode: "",
     age: "",
     gender: "Male",
@@ -41,7 +71,13 @@ export default function NewPatientPage() {
   const [error, setError] = useState("")
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+    const { name, value } = e.target;
+    if (name === "state") {
+      const code = value === "Himachal Pradesh" ? "02" : value === "Punjab" ? "03" : value === "Haryana" ? "06" : value === "Delhi" ? "07" : "99";
+      setFormData(prev => ({ ...prev, state: value, stateCode: code }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,19 +87,26 @@ export default function NewPatientPage() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-      const res = await fetch(`${API_URL}/api/patients/register`, {
+      const payload = {
+        ...formData,
+        age: formData.age ? parseInt(formData.age) : null,
+      }
+
+      await fetch(`${API_URL}/api/patients/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          age: formData.age ? parseInt(formData.age) : null,
-        }),
+        body: JSON.stringify(payload),
+      }).catch((err) => {
+        console.warn("Backend register API unavailable, saving locally:", err)
       })
 
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to register patient")
+      // Also save to offline patients list for local lookup
+      try {
+        const offlinePatients = JSON.parse(localStorage.getItem("ksv_offline_patients") || "[]")
+        offlinePatients.unshift(payload)
+        localStorage.setItem("ksv_offline_patients", JSON.stringify(offlinePatients))
+      } catch (storageErr) {
+        console.warn("Error saving to local storage:", storageErr)
       }
 
       alert("Patient registered successfully!")
@@ -254,17 +297,24 @@ export default function NewPatientPage() {
                 </div>
 
                 <div className="flex flex-col">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <Map className="w-3.5 h-3.5 text-slate-400" />
-                    State
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5"><Map className="w-3.5 h-3.5 text-slate-400" /> State</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${formData.state === 'Himachal Pradesh' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-indigo-50 text-indigo-600 border border-indigo-200'}`}>
+                      {formData.state === 'Himachal Pradesh' ? 'Intra-State (CGST+SGST)' : 'Inter-State (IGST)'}
+                    </span>
                   </label>
-                  <input
+                  <select
                     name="state"
                     value={formData.state}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-50 focus:border-primary/20 rounded-2xl outline-none transition-all text-sm font-semibold text-slate-700"
-                    placeholder="e.g. Delhi"
-                  />
+                    className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-50 focus:border-primary/20 rounded-2xl outline-none transition-all text-sm font-bold text-slate-700 cursor-pointer"
+                  >
+                    {INDIAN_STATES.map((st) => (
+                      <option key={st} value={st}>
+                        {st} {st === "Himachal Pradesh" ? "(02 - Home State)" : st === "Punjab" ? "(03)" : st === "Haryana" ? "(06)" : st === "Delhi" ? "(07)" : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="flex flex-col">

@@ -21,9 +21,10 @@ import {
   LayoutGrid,
   Trash2,
   RotateCcw,
-  AlertTriangle,
   Edit
 } from "lucide-react"
+
+import { calculateGSTInvoice } from "@/utils/gstCalculator"
 
 interface PaymentRecord {
   id: string
@@ -40,12 +41,14 @@ interface PaymentRecord {
   billingType: string
   priceVal: number
   discountVal: number
+  consultancyVal?: number
   gstVal: number
   totalDueVal: number
   cashVal: number
   onlineVal: number
   totalPaidVal: number
   nextFollowUpDate?: string
+  calcResult?: any
 }
 
 export default function PaymentsPage() {
@@ -89,7 +92,7 @@ export default function PaymentsPage() {
         const res = await fetch(`${API_URL}/api/patients`)
         if (res.ok) {
           const patientsData = await res.json()
-          
+
           patientsData.forEach((p: any) => {
             if (p.orders && Array.isArray(p.orders)) {
               p.orders.forEach((o: any, idx: number) => {
@@ -146,7 +149,7 @@ export default function PaymentsPage() {
       try {
         const storedTrash = localStorage.getItem("ksv_trash_bills")
         if (storedTrash) trashList = JSON.parse(storedTrash)
-      } catch (e) {}
+      } catch (e) { }
 
       setTrashRecords(trashList)
 
@@ -227,6 +230,29 @@ export default function PaymentsPage() {
       const existingTrash: PaymentRecord[] = storedTrash ? JSON.parse(storedTrash) : []
       existingTrash.unshift(record)
       localStorage.setItem("ksv_trash_bills", JSON.stringify(existingTrash))
+
+      // Also restore inventory to Maxxi Pharma
+      const maxxiCat = JSON.parse(localStorage.getItem("maxxi_app_catalog") || "[]")
+      let updatedCatalog = [...maxxiCat]
+      if (record.treatments) {
+        record.treatments.forEach((t: any) => {
+          if (t.products) {
+            t.products.forEach((p: any) => {
+              const qtyToRestore = parseFloat(p.quantity || "1");
+              const index = updatedCatalog.findIndex((c: any) => c.name === p.name);
+              if (index !== -1) {
+                const currentQty = updatedCatalog[index].quantity || 0;
+                updatedCatalog[index] = {
+                  ...updatedCatalog[index],
+                  quantity: currentQty + qtyToRestore
+                }
+              }
+            })
+          }
+        })
+        localStorage.setItem("maxxi_app_catalog", JSON.stringify(updatedCatalog))
+      }
+
     } catch (e) {
       console.warn("Could not update local storage on delete:", e)
     }
@@ -249,6 +275,28 @@ export default function PaymentsPage() {
       const existingOffline: PaymentRecord[] = storedOffline ? JSON.parse(storedOffline) : []
       existingOffline.unshift(record)
       localStorage.setItem("ksv_offline_bills", JSON.stringify(existingOffline))
+
+      // Also deduct inventory from Maxxi Pharma
+      const maxxiCat = JSON.parse(localStorage.getItem("maxxi_app_catalog") || "[]")
+      let updatedCatalog = [...maxxiCat]
+      if (record.treatments) {
+        record.treatments.forEach((t: any) => {
+          if (t.products) {
+            t.products.forEach((p: any) => {
+              const qtyToDeduct = parseFloat(p.quantity || "1");
+              const index = updatedCatalog.findIndex((c: any) => c.name === p.name);
+              if (index !== -1) {
+                const currentQty = updatedCatalog[index].quantity || 0;
+                updatedCatalog[index] = {
+                  ...updatedCatalog[index],
+                  quantity: currentQty - qtyToDeduct
+                }
+              }
+            })
+          }
+        })
+        localStorage.setItem("maxxi_app_catalog", JSON.stringify(updatedCatalog))
+      }
     } catch (e) {
       console.warn("Could not restore record:", e)
     }
@@ -285,7 +333,7 @@ export default function PaymentsPage() {
 
   return (
     <div className="w-full pt-0 pb-16 animate-in fade-in duration-500 text-slate-700">
-      
+      <div className="print:hidden">
       {/* Sleek Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200/60">
         <div className="flex items-center gap-3">
@@ -309,26 +357,24 @@ export default function PaymentsPage() {
 
         {/* Top Header Buttons & Trash Tab Switch */}
         <div className="flex items-center gap-2">
-          
+
           {/* Main Active vs Trash View Switcher */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 text-xs font-extrabold">
             <button
               onClick={() => setActiveTab("ACTIVE")}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                activeTab === "ACTIVE"
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === "ACTIVE"
                   ? "bg-white text-blue-600 shadow-sm"
                   : "text-slate-500 hover:text-slate-800"
-              }`}
+                }`}
             >
               Active Invoices ({records.length})
             </button>
             <button
               onClick={() => setActiveTab("TRASH")}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                activeTab === "TRASH"
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === "TRASH"
                   ? "bg-rose-500 text-white shadow-sm font-black"
                   : "text-slate-500 hover:text-rose-600"
-              }`}
+                }`}
             >
               <Trash2 className="w-3.5 h-3.5" />
               Trash Bin ({trashRecords.length})
@@ -355,7 +401,7 @@ export default function PaymentsPage() {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-        
+
         {/* Total Revenue */}
         <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
@@ -404,7 +450,7 @@ export default function PaymentsPage() {
 
       {/* Search & Filter Toolbar */}
       <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        
+
         {/* Live Search */}
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
@@ -430,25 +476,22 @@ export default function PaymentsPage() {
           <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-2xl border border-slate-200/60 text-xs w-full sm:w-auto justify-center">
             <button
               onClick={() => setPaymentFilter("ALL")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
-                paymentFilter === "ALL" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "ALL" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" /> All Modes
             </button>
             <button
               onClick={() => setPaymentFilter("CASH")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
-                paymentFilter === "CASH" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "CASH" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
             >
               <Banknote className="w-3.5 h-3.5 text-emerald-600" /> Cash Only
             </button>
             <button
               onClick={() => setPaymentFilter("SPLIT")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
-                paymentFilter === "SPLIT" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "SPLIT" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
             >
               <Wallet className="w-3.5 h-3.5 text-blue-600" /> Cash + Online Split
             </button>
@@ -508,9 +551,24 @@ export default function PaymentsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                  {filteredRecords.map((r) => (
+                  {filteredRecords.map((r) => {
+                    const patientState = r.state || (r.calcResult?.isInterState ? "Punjab" : "Himachal Pradesh");
+                    const rowCalc = calculateGSTInvoice(
+                      r.treatments || [],
+                      r.discountVal || 0,
+                      r.consultancyVal || 0,
+                      "Himachal Pradesh", 
+                      patientState, 
+                      true,
+                      r.stateCode
+                    );
+                    const grandTotal = rowCalc.grandTotal;
+                    const balanceDue = Math.max(0, grandTotal - (r.totalPaidVal || 0));
+                    const isFullyPaid = balanceDue === 0;
+
+                    return (
                     <tr key={r.id} className="hover:bg-slate-50/60 transition-colors">
-                      
+
                       {/* Invoice No & Date */}
                       <td className="py-4 px-6">
                         <span className="font-extrabold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-lg block w-fit text-[11px]">
@@ -537,8 +595,8 @@ export default function PaymentsPage() {
 
                       {/* Price & Subtotal */}
                       <td className="py-4 px-6 text-right">
-                        <div className="font-bold text-slate-700">₹{r.priceVal.toLocaleString("en-IN")}</div>
-                        {r.gstVal > 0 && <span className="text-[10px] text-slate-400 block">+ ₹{r.gstVal} GST</span>}
+                        <div className="font-bold text-slate-700">₹{rowCalc.totalTaxableValue.toLocaleString("en-IN")}</div>
+                        {rowCalc.totalTax > 0 && <span className="text-[10px] text-slate-400 block">+ ₹{rowCalc.totalTax.toLocaleString("en-IN")} GST</span>}
                       </td>
 
                       {/* Payment Mode Breakdown Split */}
@@ -562,9 +620,15 @@ export default function PaymentsPage() {
                         <div className="font-extrabold text-slate-900 text-sm">
                           ₹{r.totalPaidVal.toLocaleString("en-IN")}
                         </div>
-                        <span className="text-[10px] text-emerald-600 font-extrabold flex items-center justify-end gap-1 mt-0.5">
-                          <CheckCircle2 className="w-3 h-3" /> Paid in Full
-                        </span>
+                        {isFullyPaid ? (
+                          <span className="text-[10px] text-emerald-600 font-extrabold flex items-center justify-end gap-1 mt-0.5">
+                            <CheckCircle2 className="w-3 h-3" /> Paid in Full
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-amber-600 font-extrabold flex items-center justify-end gap-1 mt-0.5">
+                            <Banknote className="w-3 h-3" /> Due: ₹{balanceDue.toLocaleString("en-IN")}
+                          </span>
+                        )}
                       </td>
 
                       {/* View / Print Receipt Action & Delete */}
@@ -594,7 +658,7 @@ export default function PaymentsPage() {
                       </td>
 
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -605,7 +669,7 @@ export default function PaymentsPage() {
       {/* --- TAB 2: TRASH BIN RECYCLE VIEW --- */}
       {activeTab === "TRASH" && (
         <div className="bg-white rounded-3xl border border-rose-100 shadow-[0_10px_40px_rgba(0,0,0,0.02)] overflow-hidden">
-          
+
           <div className="p-4 bg-rose-50/60 border-b border-rose-100 flex items-center justify-between text-xs text-rose-800 font-semibold">
             <span className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
@@ -634,7 +698,7 @@ export default function PaymentsPage() {
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                   {filteredTrash.map((r) => (
                     <tr key={r.id || r.invoiceNo} className="hover:bg-slate-50/60 transition-colors">
-                      
+
                       <td className="py-4 px-6">
                         <span className="font-extrabold text-rose-600 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-lg block w-fit text-[11px]">
                           {r.invoiceNo}
@@ -684,22 +748,40 @@ export default function PaymentsPage() {
           )}
         </div>
       )}
+      </div>
 
       {/* REPRINTABLE RECEIPT MODAL */}
       {showReceiptModal && selectedBill && (
-        <div 
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-300 print:bg-transparent print:p-0"
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-300 print:relative print:inset-auto print:bg-transparent print:p-0 print:block print:overflow-visible print:z-auto"
           onClick={() => setShowReceiptModal(false)}
         >
-          <div 
-            className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 relative my-8 text-slate-800 flex flex-col overflow-hidden print:shadow-none print:border-none print:my-0 print:max-w-none print:w-full"
+          {(() => {
+            const patientState = selectedBill.state || (selectedBill.calcResult?.isInterState ? "Punjab" : "Himachal Pradesh");
+            const calcData = calculateGSTInvoice(
+              selectedBill.treatments || [],
+              selectedBill.discountVal || 0,
+              selectedBill.consultancyVal || 0,
+              "Himachal Pradesh", 
+              patientState, 
+              true,
+              selectedBill.stateCode
+            );
+
+            const totalPaid = (selectedBill.cashVal || 0) + (selectedBill.onlineVal || 0);
+            const balanceDue = Math.max(0, calcData.grandTotal - totalPaid);
+            const isFullyPaid = balanceDue === 0;
+
+            return (
+          <div
+            className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-100 relative my-8 text-slate-800 flex flex-col overflow-hidden print:shadow-none print:border-none print:my-0 print:max-w-none print:w-full print:rounded-none print:overflow-visible print:block"
             onClick={(e) => e.stopPropagation()}
           >
-            
+
             {/* Top Modal Actions Header Bar (Non-printable) */}
             <div className="px-6 py-4 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0 print:hidden">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Paid Invoice Record
+              <span className={`text-xs font-extrabold uppercase tracking-wider px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${isFullyPaid ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>
+                <CheckCircle2 className="w-3.5 h-3.5" /> {isFullyPaid ? "Paid Invoice Record" : "Partial / Due Record"}
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -733,15 +815,14 @@ export default function PaymentsPage() {
             {/* Scrollable Receipt Body Container */}
             <div className="p-6 sm:p-8 overflow-y-auto max-h-[75vh] print:max-h-none print:p-0 print:overflow-visible">
               
-              {/* PRINT AREA / OFFICIAL CLINIC RECEIPT TEMPLATE */}
               <div id="printable-receipt" className="space-y-6">
-                
+
                 {/* Header Letterhead */}
                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4">
                   <div>
-                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">KSV HEALTHCARE &amp; AYURVEDA</h1>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">Specialized Medical Care &amp; Ayurvedic OPD Clinic</p>
-                    <p className="text-[11px] text-slate-400 font-semibold mt-1">Helpline: +91 98765 43210 | GSTIN: 07AAAAA0000A1Z5</p>
+                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">Maxxi Pharma Private Limited</h1>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">Kapoor Happy Home 2 Hospital Road Solan, Solan</p>
+                    <p className="text-[11px] text-slate-400 font-semibold mt-1">GSTIN/UIN: 02AASCM1970C1ZN | State: Himachal Pradesh, Code: 02</p>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg inline-block">
@@ -766,9 +847,22 @@ export default function PaymentsPage() {
                     <span>{selectedBill.age ? `${selectedBill.age} yrs` : "-"} / {selectedBill.gender || "Male"}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Billing Type</span>
-                    <span className="font-bold text-indigo-600">{selectedBill.billingType}</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">State &amp; GST Type</span>
+                    <span className="font-extrabold text-slate-800">
+                      {patientState}
+                      {calcData.isInterState ? (
+                        <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded ml-1 font-bold">IGST</span>
+                      ) : (
+                        <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded ml-1 font-bold">CGST+SGST</span>
+                      )}
+                    </span>
                   </div>
+                  {(selectedBill.city || selectedBill.houseNumber || selectedBill.pincode) && (
+                    <div className="col-span-2 sm:col-span-4 border-t border-slate-200/60 pt-2 text-[11px] text-slate-500">
+                      <span className="text-slate-400 font-bold uppercase text-[9px] mr-1.5">Address:</span>
+                      {[selectedBill.houseNumber, selectedBill.city, selectedBill.state, selectedBill.pincode].filter(Boolean).join(", ")}
+                    </div>
+                  )}
                 </div>
 
                 {/* Treatment Items Table */}
@@ -778,23 +872,52 @@ export default function PaymentsPage() {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-100/80 border-b border-slate-200 text-slate-600 uppercase font-bold text-[10px] tracking-wider">
                         <tr>
-                          <th className="py-3 px-4">#</th>
-                          <th className="py-3 px-4">Disease / Condition</th>
-                          <th className="py-3 px-4">Medicine Kit Name</th>
-                          <th className="py-3 px-4 text-center">Duration</th>
-                          <th className="py-3 px-4 text-right">Price (₹)</th>
+                          <th className="py-3 px-3">#</th>
+                          <th className="py-3 px-3">Course</th>
+                          <th className="py-3 px-3">Product Name</th>
+                          <th className="py-3 px-3">HSN Code</th>
+                          <th className="py-3 px-3 text-center">Qty</th>
+                          <th className="py-3 px-3 text-right">Rate (₹)</th>
+                          <th className="py-3 px-3 text-center">GST %</th>
+                          <th className="py-3 px-3 text-right">GST Amt (₹)</th>
+                          <th className="py-3 px-3 text-right">Total (₹)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {(selectedBill.treatments || []).map((t: any, idx: number) => (
-                          <tr key={t.id || idx}>
-                            <td className="py-3 px-4 font-bold text-slate-400">{idx + 1}</td>
-                            <td className="py-3 px-4 font-extrabold text-slate-900">{t.disease || "General Checkup"}</td>
-                            <td className="py-3 px-4 text-slate-600">{t.kitName || "Custom Kit"}</td>
-                            <td className="py-3 px-4 text-center text-slate-500">{t.durationDays || "30"} Days</td>
-                            <td className="py-3 px-4 text-right font-extrabold text-slate-800">₹{parseFloat(t.price || selectedBill.priceVal || "0").toLocaleString("en-IN")}</td>
-                          </tr>
-                        ))}
+                        {(() => {
+                          let flatIdx = 0;
+                          return (selectedBill.treatments || []).map((t: any, idx: number) => {
+                            const products = t.products && t.products.length > 0 
+                              ? t.products 
+                              : [{}];
+                            
+                            return products.map((p: any, pIdx: number) => {
+                              const medLines = calcData.lines.filter((l: any) => !l.isConsultation);
+                              const calcLine = medLines[flatIdx++];
+                              if (!calcLine) return null;
+
+                              return (
+                                <tr key={`${t.id || idx}-${pIdx}`}>
+                                  {pIdx === 0 && (
+                                    <>
+                                      <td className="py-3 px-3 font-bold text-slate-400" rowSpan={products.length}>{idx + 1}</td>
+                                      <td className="py-3 px-3 font-extrabold text-slate-900" rowSpan={products.length}>{t.disease || "General Checkup"}</td>
+                                    </>
+                                  )}
+                                  <td className="py-3 px-3 text-slate-600">{calcLine.name}</td>
+                                  <td className="py-3 px-3 text-slate-500 font-mono text-[10px]">{calcLine.hsnCode || "-"}</td>
+                                  <td className="py-3 px-3 text-center text-slate-600">{calcLine.qty}</td>
+                                  <td className="py-3 px-3 text-right text-slate-500">₹{calcLine.rate.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                  <td className="py-3 px-3 text-center text-slate-500">{calcLine.taxRate}%</td>
+                                  <td className="py-3 px-3 text-right text-slate-500">₹{calcLine.totalTax.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                  <td className="py-3 px-3 text-right font-extrabold text-slate-800">
+                                    ₹{calcLine.finalAmount.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          })
+                        })()}
                       </tbody>
                     </table>
                   </div>
@@ -813,41 +936,149 @@ export default function PaymentsPage() {
                 )}
 
                 {/* Financial Calculation Breakdown */}
-                <div className="flex justify-end pt-2">
-                  <div className="w-full sm:w-72 space-y-2 text-xs font-semibold text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                <div className="flex flex-col sm:flex-row justify-between pt-2 gap-4">
+                  {/* HSN Summary */}
+                  {calcData.hsnSummary && calcData.hsnSummary.length > 0 && (
+                    <div className="flex-1 max-w-lg overflow-x-auto border border-slate-200/80 rounded-xl p-2 bg-white">
+                      <h4 className="text-[10px] font-extrabold text-slate-500 uppercase mb-2 px-1">HSN/SAC Tax Summary</h4>
+                      <table className="w-full text-[10px] text-right">
+                        <thead className="bg-slate-50 text-slate-400 font-bold border-b border-slate-100">
+                          <tr>
+                            <th className="py-1 px-2 text-left">HSN/SAC</th>
+                            <th className="py-1 px-2">Taxable Value</th>
+                            {calcData.isInterState ? (
+                              <>
+                                <th className="py-1 px-2 text-center">IGST Rate</th>
+                                <th className="py-1 px-2">IGST Amt</th>
+                              </>
+                            ) : (
+                              <>
+                                <th className="py-1 px-2 text-center">CGST Rate</th>
+                                <th className="py-1 px-2">CGST Amt</th>
+                                <th className="py-1 px-2 text-center">SGST Rate</th>
+                                <th className="py-1 px-2">SGST Amt</th>
+                              </>
+                            )}
+                            <th className="py-1 px-2 font-extrabold">Total Tax</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 text-slate-600 font-semibold">
+                          {calcData.hsnSummary.map((hsn: any, idx: number) => (
+                            <tr key={idx}>
+                              <td className="py-1.5 px-2 text-left font-mono">{hsn.hsn}</td>
+                              <td className="py-1.5 px-2">₹{hsn.taxableValue.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                              {calcData.isInterState ? (
+                                <>
+                                  <td className="py-1.5 px-2 text-center text-slate-400">{hsn.taxRate}%</td>
+                                  <td className="py-1.5 px-2">₹{hsn.igstAmount.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-1.5 px-2 text-center text-slate-400">{hsn.taxRate > 0 ? `${(hsn.taxRate / 2).toFixed(2).replace(/\.?0+$/, '')}%` : '0%'}</td>
+                                  <td className="py-1.5 px-2">₹{hsn.cgstAmount.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                  <td className="py-1.5 px-2 text-center text-slate-400">{hsn.taxRate > 0 ? `${(hsn.taxRate / 2).toFixed(2).replace(/\.?0+$/, '')}%` : '0%'}</td>
+                                  <td className="py-1.5 px-2">₹{hsn.sgstAmount.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                </>
+                              )}
+                              <td className="py-1.5 px-2 font-extrabold text-slate-800">₹{hsn.totalTax.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-900">
+                          <tr>
+                            <td className="py-2 px-2 text-left font-black uppercase text-[10px]">Total</td>
+                            <td className="py-2 px-2 font-black">₹{calcData.totalTaxableValue.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                            {calcData.isInterState ? (
+                              <>
+                                <td className="py-2 px-2 text-center text-slate-400">-</td>
+                                <td className="py-2 px-2 font-black">₹{calcData.totalIgst.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="py-2 px-2 text-center text-slate-400">-</td>
+                                <td className="py-2 px-2 font-black">₹{calcData.totalCgst.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                <td className="py-2 px-2 text-center text-slate-400">-</td>
+                                <td className="py-2 px-2 font-black">₹{calcData.totalSgst.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                              </>
+                            )}
+                            <td className="py-2 px-2 font-black text-slate-900">₹{calcData.totalTax.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="w-full sm:w-72 space-y-1.5 text-[11px] font-semibold text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
                     <div className="flex justify-between">
-                      <span>Medicine Subtotal:</span>
-                      <span>₹{selectedBill.priceVal.toLocaleString("en-IN")}</span>
+                      <span>Gross Medicines:</span>
+                      <span>₹{calcData.grossAmount.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                     </div>
-                    {selectedBill.discountVal > 0 && (
-                      <div className="flex justify-between text-rose-500">
-                        <span>Discount Applied:</span>
-                        <span>- ₹{selectedBill.discountVal.toLocaleString("en-IN")}</span>
+                    {calcData.consultancyCharges > 0 && (
+                      <div className="flex justify-between text-slate-700">
+                        <span>Consultation Charges:</span>
+                        <span>+ ₹{calcData.consultancyCharges.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
                     )}
-                    {selectedBill.gstVal > 0 && (
+                    <div className="flex justify-between border-t border-slate-200 pt-1.5 mt-1.5 font-bold text-slate-800">
+                      <span>{calcData.consultancyCharges > 0 ? "Taxable Value (incl. Consult.):" : "Taxable Value:"}</span>
+                      <span>₹{calcData.totalTaxableValue.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    </div>
+                    {calcData.isInterState ? (
                       <div className="flex justify-between text-indigo-600">
-                        <span>GST (18%):</span>
-                        <span>₹{selectedBill.gstVal.toLocaleString("en-IN")}</span>
+                        <span>IGST:</span>
+                        <span>₹{calcData.totalIgst.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-indigo-600">
+                          <span>CGST:</span>
+                          <span>₹{calcData.totalCgst.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="flex justify-between text-indigo-600">
+                          <span>SGST:</span>
+                          <span>₹{calcData.totalSgst.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between border-t border-slate-200/80 pt-1 font-bold text-slate-700">
+                      <span>Original Bill Total:</span>
+                      <span>₹{calcData.originalInvoiceTotal?.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    </div>
+                    {calcData.discountApplied > 0 && (
+                      <div className="flex justify-between text-rose-500 font-semibold">
+                        <span>Product Discount:</span>
+                        <span>- ₹{calcData.discountApplied.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
                     )}
-                    <div className="border-t border-slate-300 pt-2 flex justify-between font-extrabold text-sm text-slate-900">
-                      <span>Total Amount Payable:</span>
-                      <span className="text-blue-600 font-black">₹{selectedBill.totalDueVal.toLocaleString("en-IN")}</span>
+                    {calcData.roundOff !== 0 && (
+                      <div className="flex justify-between text-slate-500">
+                        <span>Round Off:</span>
+                        <span>{calcData.roundOff > 0 ? "+" : ""} ₹{calcData.roundOff.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-slate-300 pt-2 flex justify-between font-extrabold text-[13px] text-slate-900">
+                      <span>Final Payable:</span>
+                      <span className="text-blue-600 font-black">₹{calcData.grandTotal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                     </div>
-                    <div className="border-t border-slate-200/80 pt-2 space-y-1 text-[11px]">
+                    <div className="border-t border-slate-200/80 pt-2 mt-2 space-y-1">
                       <div className="flex justify-between text-slate-500">
                         <span>Cash Paid:</span>
-                        <span>₹{selectedBill.cashVal.toLocaleString("en-IN")}</span>
+                        <span>₹{(selectedBill.cashVal || 0).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
                       <div className="flex justify-between text-slate-500">
                         <span>Online / UPI Paid:</span>
-                        <span>₹{selectedBill.onlineVal.toLocaleString("en-IN")}</span>
+                        <span>₹{(selectedBill.onlineVal || 0).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
                       <div className="flex justify-between font-bold text-emerald-600 border-t border-slate-200/60 pt-1">
                         <span>Total Paid:</span>
-                        <span>₹{selectedBill.totalPaidVal.toLocaleString("en-IN")}</span>
+                        <span>₹{totalPaid.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
+                      {balanceDue > 0 && (
+                        <div className="flex justify-between font-bold text-amber-600 pt-1">
+                          <span>Balance Due:</span>
+                          <span>₹{balanceDue.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -870,7 +1101,6 @@ export default function PaymentsPage() {
                 </div>
 
               </div>
-
             </div>
 
             {/* Bottom Non-printable Close Button Footer */}
@@ -886,6 +1116,8 @@ export default function PaymentsPage() {
             </div>
 
           </div>
+          );
+          })()}
         </div>
       )}
 

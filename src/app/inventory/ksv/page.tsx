@@ -94,7 +94,7 @@ export default function KsvPage() {
       const storedMfgLogs = localStorage.getItem('ksv_app_manufacturing')
 
       setCompanies(storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_KSV_COMPANIES)
-      
+
       // Migration: Ensure MAXXI PHARMA exists in parties if it was missed in older localStorage
       let parsedParties = storedParties ? JSON.parse(storedParties) : DEFAULT_KSV_PARTIES
       if (!parsedParties.some((p: any) => p.id === 'party_maxxi')) {
@@ -107,7 +107,8 @@ export default function KsvPage() {
       setParties(parsedParties)
 
       // Migration: Ensure all finished goods from manufacturing logs are in the catalog
-      let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_KSV_CATALOG
+      let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : []
+      parsedCatalog = parsedCatalog.filter((c: any) => !c.id.startsWith('cat_ksv_'))
       if (storedMfgLogs) {
         const parsedLogs = JSON.parse(storedMfgLogs)
         let catalogChanged = false
@@ -143,7 +144,7 @@ export default function KsvPage() {
         }
         setInvoices(parsed)
       } else {
-        setInvoices(SEEDED_KSV_INVOICES)
+        setInvoices([])
       }
 
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
@@ -152,8 +153,8 @@ export default function KsvPage() {
       console.error('Failed to load KSV storage data:', e)
       setCompanies(DEFAULT_KSV_COMPANIES)
       setParties(DEFAULT_KSV_PARTIES)
-      setCatalog(DEFAULT_KSV_CATALOG)
-      setInvoices(SEEDED_KSV_INVOICES)
+      setCatalog([])
+      setInvoices([])
       setOpeningStock([])
       setManufacturingLogs([])
     }
@@ -222,23 +223,23 @@ export default function KsvPage() {
       try {
         const maxxiStored = localStorage.getItem('maxxi_app_invoices')
         const maxxiInvoices = maxxiStored ? JSON.parse(maxxiStored) : []
-        
+
         const maxxiPurchaseInvoice = JSON.parse(JSON.stringify(invoice))
         maxxiPurchaseInvoice.type = 'PURCHASE'
-        
+
         const existingIndex = maxxiInvoices.findIndex((inv: any) => inv.id === invoice.id)
         if (existingIndex >= 0) {
           maxxiInvoices[existingIndex] = maxxiPurchaseInvoice
         } else {
           maxxiInvoices.unshift(maxxiPurchaseInvoice)
         }
-        
+
         localStorage.setItem('maxxi_app_invoices', JSON.stringify(maxxiInvoices))
 
         // Also sync products to Maxxi catalog so they appear in Live Stock
         const maxxiCatalogStored = localStorage.getItem('maxxi_app_catalog')
         const maxxiCatalog = maxxiCatalogStored ? JSON.parse(maxxiCatalogStored) : [...DEFAULT_MAXXI_CATALOG]
-        
+
         let catalogChanged = false
         invoice.items.forEach(item => {
           if (!maxxiCatalog.some((c: any) => c.name.toLowerCase() === item.description.toLowerCase())) {
@@ -255,7 +256,7 @@ export default function KsvPage() {
             catalogChanged = true
           }
         })
-        
+
         if (catalogChanged) {
           localStorage.setItem('maxxi_app_catalog', JSON.stringify(maxxiCatalog))
         }
@@ -560,8 +561,8 @@ export default function KsvPage() {
         <button
           onClick={() => setActiveTab('stock-register')}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'stock-register'
-              ? 'bg-teal-600 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            ? 'bg-teal-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
         >
           <TrendingUp className="w-3.5 h-3.5" />
