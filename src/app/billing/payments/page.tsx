@@ -915,9 +915,11 @@ export default function PaymentsPage() {
                                   <td className="py-3 px-3 text-center text-slate-600">{calcLine.qty}</td>
                                   <td className="py-3 px-3 text-right text-slate-500">₹{calcLine.rate.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                   <td className="py-3 px-3 text-center text-slate-500">{calcLine.taxRate}%</td>
-                                  <td className="py-3 px-3 text-right text-slate-500">₹{calcLine.totalTax.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                  <td className="py-3 px-3 text-right text-slate-500">
+                                    ₹{(calcLine.grossAmount * calcLine.taxRate / 100).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                  </td>
                                   <td className="py-3 px-3 text-right font-extrabold text-slate-800">
-                                    ₹{calcLine.finalAmount.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                    ₹{(calcLine.grossAmount + (calcLine.grossAmount * calcLine.taxRate / 100)).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                                   </td>
                                 </tr>
                               );
