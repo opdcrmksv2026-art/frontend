@@ -49,6 +49,8 @@ interface PaymentRecord {
   totalPaidVal: number
   nextFollowUpDate?: string
   calcResult?: any
+  state?: string
+  stateCode?: string
 }
 
 export default function PaymentsPage() {
