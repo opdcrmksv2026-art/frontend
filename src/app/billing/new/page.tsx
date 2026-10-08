@@ -135,6 +135,7 @@ export default function CreateInvoicePage() {
     houseNumber: "",
     city: "",
     state: "Himachal Pradesh",
+    stateCode: "02",
     pincode: "",
 
     // Pricing & Payments
