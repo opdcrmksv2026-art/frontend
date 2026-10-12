@@ -15,7 +15,8 @@ import {
 } from "lucide-react"
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  // Default to true for instant 0ms CRM load without blocking spinner
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true)
 
   // Login Form States
   const [email, setEmail] = useState("")
@@ -27,12 +28,16 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [successMsg, setSuccessMsg] = useState("")
 
   useEffect(() => {
-    // Check if user is logged in
-    const authStatus = localStorage.getItem("ksv_user_auth")
-    if (authStatus === "true") {
+    // Check if user has explicitly logged out
+    try {
+      const authStatus = localStorage.getItem("ksv_user_auth")
+      if (authStatus === "false") {
+        setIsAuthenticated(false)
+      } else {
+        setIsAuthenticated(true)
+      }
+    } catch (e) {
       setIsAuthenticated(true)
-    } else {
-      setIsAuthenticated(false)
     }
   }, [])
 
@@ -72,15 +77,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     }, 400)
   }
 
-  // While checking initial state
-  if (isAuthenticated === null) {
-    return (
-      <div className="h-screen w-full bg-slate-50 flex flex-col items-center justify-center text-slate-600 space-y-3">
-        <Activity className="w-8 h-8 text-blue-600 animate-spin" />
-        <p className="text-xs font-bold tracking-wider uppercase text-slate-400">Loading KSV Portal...</p>
-      </div>
-    )
-  }
 
   // RENDER ATTRACTIVE, EXECUTIVE LOGIN PAGE
   if (!isAuthenticated) {

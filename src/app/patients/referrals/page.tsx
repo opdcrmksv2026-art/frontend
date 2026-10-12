@@ -41,27 +41,97 @@ export default function ReferralPatientsPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [isRefreshing, setIsRefreshing] = useState(false)
 
+  // Fast 0ms cache loader
+  const loadFromCache = (): Patient[] => {
+    try {
+      const cached = localStorage.getItem("ksv_cached_patients")
+      const storedOffline = localStorage.getItem("ksv_offline_patients")
+      let list: Patient[] = []
+      if (cached) list = JSON.parse(cached)
+      if (storedOffline) {
+        const offlineList: Patient[] = JSON.parse(storedOffline)
+        const map = new Map<string, Patient>()
+        list.forEach(p => map.set(p.uniqueId, p))
+        offlineList.forEach(p => {
+          if (!map.has(p.uniqueId)) {
+            map.set(p.uniqueId, { ...p, id: p.id || `loc_${p.uniqueId}` })
+          }
+        })
+        list = Array.from(map.values())
+      }
+      return list
+    } catch (e) {
+      return []
+    }
+  }
+
   const loadPatients = async (silent = false) => {
-    if (!silent) setLoading(true)
+    if (!silent && patients.length === 0) setLoading(true)
     setError("")
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 1500)
+
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-      const res = await fetch(`${API_URL}/api/patients`)
-      if (!res.ok) {
-        throw new Error("Failed to load patient directory")
+      let patientList: Patient[] = []
+
+      // Try fetching from backend
+      try {
+        const res = await fetch(`${API_URL}/api/patients`, { signal: controller.signal })
+        clearTimeout(timer)
+        if (res.ok) {
+          patientList = await res.json()
+        }
+      } catch (e) {
+        // Backend offline or timed out
       }
-      const data = await res.json()
-      setPatients(data)
+
+      // Merge with offline registered patients
+      try {
+        const storedOffline = localStorage.getItem("ksv_offline_patients")
+        if (storedOffline) {
+          const offlineList: Patient[] = JSON.parse(storedOffline)
+          const map = new Map<string, Patient>()
+          patientList.forEach(p => map.set(p.uniqueId, p))
+          offlineList.forEach(p => {
+            if (!map.has(p.uniqueId)) {
+              map.set(p.uniqueId, { ...p, id: p.id || `loc_${p.uniqueId}` })
+            }
+          })
+          patientList = Array.from(map.values())
+        }
+      } catch (storageErr) {
+        console.warn("Offline patients read error:", storageErr)
+      }
+
+      if (patientList.length > 0) {
+        setPatients(patientList)
+        try {
+          localStorage.setItem("ksv_cached_patients", JSON.stringify(patientList))
+        } catch (e) {}
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error loading referrals data")
+      if (patients.length === 0) {
+        setError(err instanceof Error ? err.message : "Error loading referrals data")
+      }
     } finally {
+      clearTimeout(timer)
       setLoading(false)
       setIsRefreshing(false)
     }
   }
 
+  // Instant 0ms render on tab switch:
   useEffect(() => {
-    loadPatients()
+    const cached = loadFromCache()
+    if (cached.length > 0) {
+      setPatients(cached)
+      setLoading(false)
+      loadPatients(true)
+    } else {
+      loadPatients(false)
+    }
   }, [])
 
   const handleRefresh = () => {
@@ -85,15 +155,15 @@ export default function ReferralPatientsPage() {
 
     patients.forEach((p) => {
       if (p.referredById) {
-        const referrer = patients.find(r => r.id === p.referredById)
+        const referrer = patients.find(r => r.id === p.referredById || r.uniqueId === p.referredById)
         if (referrer) {
-          if (!referrersMap.has(referrer.id)) {
-            referrersMap.set(referrer.id, {
+          if (!referrersMap.has(referrer.id || referrer.uniqueId)) {
+            referrersMap.set(referrer.id || referrer.uniqueId, {
               referrer,
               referredPatients: []
             })
           }
-          referrersMap.get(referrer.id)?.referredPatients.push(p)
+          referrersMap.get(referrer.id || referrer.uniqueId)?.referredPatients.push(p)
         }
       }
     })

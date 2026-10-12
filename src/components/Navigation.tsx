@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Search, Menu, X, LayoutDashboard, Users, FileText,
   Pill, Package, Factory, Stethoscope, Briefcase, MessagesSquare,
@@ -75,7 +75,7 @@ const navigationGroups: NavGroup[] = [
     label: "CRM",
     items: [
       { name: 'Agents', href: '/agents', icon: Users },
-      { name: 'Patient Referrals', href: '/referrals', icon: UserPlus },
+      { name: 'Patient Referrals', href: '/patients/referrals', icon: UserPlus },
       { name: 'WhatsApp', href: '/whatsapp', icon: MessagesSquare, badge: { text: '18', color: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/20' } },
       { name: 'Reports', href: '/reports', icon: FileText }
     ]
@@ -95,6 +95,33 @@ export default function Navigation() {
     'Patients': true,
   })
   const pathname = usePathname()
+  const router = useRouter()
+
+  // Pre-load all routes in browser cache and warm up dev compiler for instantaneous 0ms tab switching
+  useEffect(() => {
+    const mainRoutes = [
+      '/',
+      '/patients/new',
+      '/patients',
+      '/patients/history',
+      '/patients/followups',
+      '/patients/referrals',
+      '/billing/new',
+      '/billing/payments',
+      '/inventory/kiyava',
+      '/inventory/ksv',
+      '/inventory/maxxi-pharma'
+    ]
+    mainRoutes.forEach((route) => {
+      try {
+        router.prefetch(route)
+        // Background fetch to warm up Next.js compiler so tabs open instantly
+        if (typeof window !== 'undefined') {
+          fetch(route, { priority: 'low' } as any).catch(() => {})
+        }
+      } catch (e) {}
+    })
+  }, [router])
 
   const toggleMenu = (name: string) => {
     setExpandedMenus(prev => ({ ...prev, [name]: !prev[name] }))
@@ -203,6 +230,12 @@ export default function Navigation() {
                       {item.href ? (
                         <Link
                           href={item.href}
+                          prefetch={true}
+                          onMouseEnter={() => {
+                            if (item.href) {
+                              try { router.prefetch(item.href) } catch (e) {}
+                            }
+                          }}
                           onClick={() => setIsOpen(false)}
                           className="relative block group outline-none"
                         >
@@ -293,6 +326,10 @@ export default function Navigation() {
                                   <Link
                                     key={subItem.name}
                                     href={subItem.href}
+                                    prefetch={true}
+                                    onMouseEnter={() => {
+                                      try { router.prefetch(subItem.href) } catch (e) {}
+                                    }}
                                     onClick={() => setIsOpen(false)}
                                     className={`flex items-center justify-between px-3 py-2 text-sm font-medium transition-all rounded-xl relative group ${isSubActive ? 'text-blue-400 bg-white/5' : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
                                       }`}

@@ -28,7 +28,8 @@ import {
   Edit
 } from "lucide-react"
 
-import { calculateGSTInvoice, findDiscountForTargetPayable } from "@/utils/gstCalculator"
+import { calculateGSTInvoice, findDiscountForTargetPayable, getStateCode, STATE_GST_CODES } from "@/utils/gstCalculator"
+import { numberToIndianWords } from "@/lib/tallyNumberToWords"
 
 interface TreatmentProduct {
   name: string
@@ -137,6 +138,7 @@ export default function CreateInvoicePage() {
     state: "Himachal Pradesh",
     stateCode: "02",
     pincode: "",
+    tokenNo: "",
 
     // Pricing & Payments
     consultancyCharges: "0",
@@ -156,25 +158,56 @@ export default function CreateInvoicePage() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
-  // Fetch patients list for autocomplete on mount
+  // Fetch patients list for autocomplete on mount with instant cache (0ms)
   useEffect(() => {
+    // 1. Instant load from local cache
+    try {
+      const cached = localStorage.getItem("ksv_cached_patients")
+      const offline = localStorage.getItem("ksv_offline_patients")
+      let list: Patient[] = []
+      if (cached) list = JSON.parse(cached)
+      if (offline) {
+        const offList: Patient[] = JSON.parse(offline)
+        const map = new Map<string, Patient>()
+        list.forEach(p => map.set(p.uniqueId, p))
+        offList.forEach(p => {
+          if (!map.has(p.uniqueId)) {
+            map.set(p.uniqueId, { ...p, id: p.id || `loc_${p.uniqueId}` })
+          }
+        })
+        list = Array.from(map.values())
+      }
+      if (list.length > 0) {
+        setPatients(list)
+        setLoadingPatients(false)
+      }
+    } catch (e) {}
+
+    // 2. Background revalidation with fast 1500ms timeout
     async function fetchPatients() {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 1500)
       try {
-        const res = await fetch(`${API_URL}/api/patients`)
+        const res = await fetch(`${API_URL}/api/patients`, { signal: controller.signal })
+        clearTimeout(timer)
         if (res.ok) {
           const data = await res.json()
           setPatients(data)
+          try {
+            localStorage.setItem("ksv_cached_patients", JSON.stringify(data))
+          } catch (e) {}
         }
       } catch (err) {
-        console.error("Error loading patients:", err)
+        // Silent background fallback
       } finally {
+        clearTimeout(timer)
         setLoadingPatients(false)
       }
     }
     fetchPatients()
   }, [API_URL])
 
-  // Load Maxxi catalog for product autocomplete (only Maxxi as requested)
+  // Load Maxxi catalog for product autocomplete (instant)
   useEffect(() => {
     import("@/lib/maxxiDefaults")
       .then(maxxi => {
@@ -182,9 +215,7 @@ export default function CreateInvoicePage() {
           ? JSON.parse(localStorage.getItem("maxxi_app_catalog")!) 
           : maxxi.DEFAULT_MAXXI_CATALOG
 
-        maxxiCat = (maxxiCat || []).filter((c: any) => !c.id?.startsWith('cat_mx_'))
-
-        setCatalog([...maxxiCat])
+        setCatalog([...(maxxiCat || [])])
       })
       .catch(err => console.error("Error loading Maxxi catalog:", err))
   }, [])
@@ -251,10 +282,12 @@ export default function CreateInvoicePage() {
       gender: patient.gender || "Male",
       whatsappNumber: patient.whatsappNumber || "",
       callingNumber: patient.callingNumber || "",
-      houseNumber: patient.houseNumber || "",
+      houseNumber: patient.houseNumber || patient.address || "",
       city: patient.city || "",
       state: patient.state || "Himachal Pradesh",
-      pincode: patient.pincode || ""
+      stateCode: getStateCode(patient.state || "Himachal Pradesh"),
+      pincode: patient.pincode || "",
+      tokenNo: (patient as any).tokenNo || (patient as any).agentToken || prev.tokenNo || `TK-${Math.floor(10 + Math.random() * 90)}`
     }))
   }
 
@@ -275,7 +308,9 @@ export default function CreateInvoicePage() {
       houseNumber: "",
       city: "",
       state: "Himachal Pradesh",
-      pincode: ""
+      stateCode: "02",
+      pincode: "",
+      tokenNo: `TK-${Math.floor(10 + Math.random() * 90)}`
     }))
   }
 
@@ -284,6 +319,9 @@ export default function CreateInvoicePage() {
     const { name, value } = e.target
     setFormData(prev => {
       const updated = { ...prev, [name]: value }
+      if (name === "state") {
+        updated.stateCode = getStateCode(value)
+      }
       if (name === "billingType" || name === "state") {
         const tempCalc = calculateGSTInvoice(
           treatments,
@@ -291,7 +329,8 @@ export default function CreateInvoicePage() {
           parseFloat(updated.consultancyCharges || "0"),
           "Himachal Pradesh",
           updated.state || "Himachal Pradesh",
-          true
+          true,
+          updated.stateCode || getStateCode(updated.state || "Himachal Pradesh")
         );
         if (updated.amountOnline === "0" || !updated.amountOnline) {
           updated.amountCash = tempCalc.grandTotal.toString()
@@ -410,8 +449,13 @@ export default function CreateInvoicePage() {
     }).join(" | ")
     const combinedDiseases = treatments.map(t => t.disease).filter(Boolean).join(", ")
 
+    const effectiveTokenNo = formData.tokenNo || `TK-${invoiceNo.replace(/\D/g, '').slice(-3) || '01'}`
+    const fullAddress = [formData.houseNumber, formData.city, formData.pincode].filter(Boolean).join(", ") || formData.houseNumber || formData.city || "Local Address"
+    const effectiveStateCode = formData.stateCode || getStateCode(formData.state || "Himachal Pradesh")
+
     const billData = {
       invoiceNo,
+      tokenNo: effectiveTokenNo,
       patientName: formData.name,
       patientId: formData.uniqueId,
       age: formData.age,
@@ -421,8 +465,9 @@ export default function CreateInvoicePage() {
       houseNumber: formData.houseNumber,
       city: formData.city,
       state: formData.state || "Himachal Pradesh",
-      stateCode: formData.stateCode || "02",
+      stateCode: effectiveStateCode,
       pincode: formData.pincode,
+      address: fullAddress,
       treatments,
       combinedKitName,
       combinedDiseases,
@@ -467,6 +512,7 @@ export default function CreateInvoicePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          invoiceNo,
           kitName: combinedKitName,
           treatments: treatments,
           totalAmount: totalDueVal,
@@ -611,25 +657,46 @@ export default function CreateInvoicePage() {
                   <div><span className="text-slate-400">Age / Gender:</span> {selectedPatient.age || "N/A"} yrs / {selectedPatient.gender || "N/A"}</div>
                   {selectedPatient.whatsappNumber && <div><span className="text-slate-400">WhatsApp:</span> {selectedPatient.whatsappNumber}</div>}
                   {selectedPatient.city && <div><span className="text-slate-400">City:</span> {selectedPatient.city}</div>}
-                  {selectedPatient.address && <div className="col-span-1 sm:col-span-2 md:col-span-3"><span className="text-slate-400">Address:</span> {selectedPatient.address}</div>}
+                  {(selectedPatient.address || formData.houseNumber) && (
+                    <div className="col-span-1 sm:col-span-2 md:col-span-3">
+                      <span className="text-slate-400">Address:</span> {formData.houseNumber || selectedPatient.address}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* State & Tax Mode Bar */}
+            {/* State, State Code & Token Bar */}
             <div className="pt-3 border-t border-blue-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Billing State:</label>
-                <select
-                  name="state"
-                  value={formData.state || "Himachal Pradesh"}
-                  onChange={handleInputChange}
-                  className="px-3 py-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-extrabold text-slate-800 outline-none cursor-pointer"
-                >
-                  {INDIAN_STATES.map((st) => (
-                    <option key={st} value={st}>{st}</option>
-                  ))}
-                </select>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">State:</label>
+                  <select
+                    name="state"
+                    value={formData.state || "Himachal Pradesh"}
+                    onChange={handleInputChange}
+                    className="px-3 py-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-extrabold text-slate-800 outline-none cursor-pointer"
+                  >
+                    {INDIAN_STATES.map((st) => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                  <span className="font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg text-xs font-black">
+                    Code: {formData.stateCode || getStateCode(formData.state || "Himachal Pradesh")}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Token No:</label>
+                  <input
+                    type="text"
+                    name="tokenNo"
+                    placeholder="e.g. 15 or TK-15"
+                    value={formData.tokenNo}
+                    onChange={handleInputChange}
+                    className="px-3 py-1.5 bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs font-black text-purple-700 outline-none w-28 font-mono shadow-sm"
+                  />
+                </div>
               </div>
 
               <div>
@@ -776,14 +843,29 @@ export default function CreateInvoicePage() {
                 </div>
               </div>
 
+              <div className="flex flex-col">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Token No / Queue #</span>
+                  <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">OPD Token</span>
+                </label>
+                <input
+                  type="text"
+                  name="tokenNo"
+                  placeholder="e.g. 15 or TK-15"
+                  value={formData.tokenNo}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl outline-none text-sm font-bold text-purple-900"
+                />
+              </div>
+
               <div className="flex flex-col md:col-span-2">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Full House / Clinic Address (Optional)
+                  Full Customer / Patient Address
                 </label>
                 <input
                   type="text"
                   name="houseNumber"
-                  placeholder="House / Street / Locality..."
+                  placeholder="House # / Street / Locality / Landmark..."
                   value={formData.houseNumber}
                   onChange={handleInputChange}
                   className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700"
@@ -1477,10 +1559,10 @@ export default function CreateInvoicePage() {
             </div>
 
             {/* Scrollable Receipt Body Container */}
-            <div className="p-6 sm:p-8 overflow-y-auto max-h-[75vh] print:max-h-none print:p-0 print:overflow-visible">
+            <div className="p-6 sm:p-8 print:p-0 overflow-y-auto max-h-[75vh] print:max-h-none print:overflow-visible">
 
               {/* PRINT AREA / OFFICIAL CLINIC RECEIPT TEMPLATE */}
-              <div id="printable-receipt" className="space-y-6">
+              <div id="printable-receipt" className="space-y-4 print:space-y-2">
 
                 {/* Header Letterhead */}
                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4">
@@ -1489,16 +1571,21 @@ export default function CreateInvoicePage() {
                     <p className="text-xs font-bold text-slate-500 mt-0.5">Kapoor Happy Home 2 Hospital Road Solan, Solan</p>
                     <p className="text-[11px] text-slate-400 font-semibold mt-1">GSTIN/UIN: 02AASCM1970C1ZN | State: Himachal Pradesh, Code: 02</p>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg inline-block">
-                      {generatedBill.invoiceNo}
+                  <div className="text-right space-y-1">
+                    <div className="flex items-center gap-2 justify-end">
+                      <div className="text-xs font-black text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg">
+                        TOKEN NO: {generatedBill.tokenNo || "TK-01"}
+                      </div>
+                      <div className="text-sm font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg">
+                        {generatedBill.invoiceNo}
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-bold mt-1.5">Date: {generatedBill.date}</p>
+                    <p className="text-[11px] text-slate-400 font-bold mt-1">Date: {generatedBill.date}</p>
                   </div>
                 </div>
 
                 {/* Patient Details */}
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/60 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-semibold text-slate-700">
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/60 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-semibold text-slate-700">
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Patient Name</span>
                     <strong className="text-slate-900 text-sm font-extrabold">{generatedBill.patientName}</strong>
@@ -1510,6 +1597,36 @@ export default function CreateInvoicePage() {
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Age / Gender</span>
                     <span>{generatedBill.age ? `${generatedBill.age} yrs` : "-"} / {generatedBill.gender || "Male"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Token No</span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-purple-100/70 text-purple-800 border border-purple-200 font-mono font-black text-xs">
+                      #{generatedBill.tokenNo || "TK-01"}
+                    </span>
+                  </div>
+
+                  {/* Customer Address & State Code Row */}
+                  <div className="col-span-2 sm:col-span-4 border-t border-slate-200/60 pt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Customer Address</span>
+                      <p className="text-slate-800 font-bold text-xs mt-0.5">
+                        {generatedBill.address || [generatedBill.houseNumber, generatedBill.city, generatedBill.pincode].filter(Boolean).join(", ") || "Local Address"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">State Code &amp; Place of Supply</span>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-slate-900 font-extrabold">{generatedBill.state || "Himachal Pradesh"}</span>
+                        <span className="font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-black">
+                          STATE CODE: {getStateCode(generatedBill.state || "Himachal Pradesh")}
+                        </span>
+                        {generatedBill.calcResult?.isInterState ? (
+                          <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded font-black">IGST (Inter-State)</span>
+                        ) : (
+                          <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-black">CGST + SGST</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1732,8 +1849,28 @@ export default function CreateInvoicePage() {
                   </div>
                 </div>
 
+                {/* Tax & Total Amount in Words */}
+                <div className="bg-slate-50/90 rounded-2xl p-3.5 print:p-2 border border-slate-200/80 space-y-1.5 print:space-y-1 text-xs print:text-[10.5px]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-200/60 pb-1.5 print:pb-1">
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider">
+                      Total Invoice Amount (in words):
+                    </span>
+                    <strong className="text-slate-900 text-xs print:text-[10.5px] sm:text-right font-serif tracking-wide">
+                      {numberToIndianWords(generatedBill.totalDueVal || 0, "Rupees", "Only")}
+                    </strong>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider">
+                      Total Tax Amount (in words):
+                    </span>
+                    <strong className="text-slate-800 text-xs print:text-[10.5px] sm:text-right font-serif tracking-wide">
+                      {numberToIndianWords(generatedBill.calcResult?.totalTax || 0, "Rupees", "Only")}
+                    </strong>
+                  </div>
+                </div>
+
                 {/* Follow-up Note & Signatures */}
-                <div className="border-t border-slate-200 pt-4 flex justify-between items-end text-xs">
+                <div className="border-t border-slate-200 pt-3 print:pt-1.5 flex justify-between items-end text-xs">
                   <div>
                     {generatedBill.nextFollowUpDate && (
                       <p className="font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg inline-block border border-emerald-100">

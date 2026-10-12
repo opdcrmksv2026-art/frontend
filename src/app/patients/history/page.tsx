@@ -73,18 +73,78 @@ export default function PatientHistoryPage() {
     date: new Date().toISOString().split("T")[0]
   })
 
-  // Load patient directory for autocomplete list
+  // Fast 0ms cache loader
+  const loadFromCache = (): Patient[] => {
+    try {
+      const cached = localStorage.getItem("ksv_cached_patients")
+      const storedOffline = localStorage.getItem("ksv_offline_patients")
+      let list: Patient[] = []
+      if (cached) list = JSON.parse(cached)
+      if (storedOffline) {
+        const offlineList: Patient[] = JSON.parse(storedOffline)
+        const map = new Map<string, Patient>()
+        list.forEach(p => map.set(p.uniqueId, p))
+        offlineList.forEach(p => {
+          if (!map.has(p.uniqueId)) {
+            map.set(p.uniqueId, { ...p, id: p.id || `loc_${p.uniqueId}` })
+          }
+        })
+        list = Array.from(map.values())
+      }
+      return list
+    } catch (e) {
+      return []
+    }
+  }
+
+  // Load patient directory for autocomplete list with instant cache + background sync
   useEffect(() => {
+    // 1. Immediately populate from cache (0ms delay)
+    const cached = loadFromCache()
+    if (cached.length > 0) {
+      setPatients(cached)
+    }
+
+    // 2. Background revalidation
     const loadPatients = async () => {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 1500)
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-        const res = await fetch(`${API_URL}/api/patients`)
-        if (res.ok) {
-          const data = await res.json()
-          setPatients(data)
+        let list: Patient[] = []
+        try {
+          const res = await fetch(`${API_URL}/api/patients`, { signal: controller.signal })
+          clearTimeout(timer)
+          if (res.ok) {
+            list = await res.json()
+          }
+        } catch (e) {
+          // Backend offline or timed out
+        }
+
+        // Merge offline registered patients
+        try {
+          const offlineList: Patient[] = JSON.parse(localStorage.getItem("ksv_offline_patients") || "[]")
+          const map = new Map<string, Patient>()
+          list.forEach(p => map.set(p.uniqueId, p))
+          offlineList.forEach(p => {
+            if (!map.has(p.uniqueId)) {
+              map.set(p.uniqueId, { ...p, id: p.id || `loc_${p.uniqueId}` })
+            }
+          })
+          list = Array.from(map.values())
+        } catch (storageErr) { }
+
+        if (list.length > 0) {
+          setPatients(list)
+          try {
+            localStorage.setItem("ksv_cached_patients", JSON.stringify(list))
+          } catch (e) {}
         }
       } catch (err) {
         console.error("Failed to load autocomplete patient directory:", err)
+      } finally {
+        clearTimeout(timer)
       }
     }
     loadPatients()
@@ -102,15 +162,64 @@ export default function PatientHistoryPage() {
   // Fetch patient history details
   const loadPatientHistory = async (uniqueId: string) => {
     setLoading(true)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 1500)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-      const res = await fetch(`${API_URL}/api/patients/${uniqueId}/history`)
-      if (!res.ok) {
-        throw new Error("Failed to load patient history")
+      let foundPatient: any = null
+      let ordersList: any[] = []
+
+      try {
+        const res = await fetch(`${API_URL}/api/patients/${uniqueId}/history`, { signal: controller.signal })
+        clearTimeout(timer)
+        if (res.ok) {
+          const data = await res.json()
+          foundPatient = data
+          ordersList = data.orders || []
+        }
+      } catch (e) {
+        console.warn("Backend history fetch failed, using offline records:", e)
+      } finally {
+        clearTimeout(timer)
       }
-      const data = await res.json()
-      setSelectedPatient(data)
-      setHistory(data.orders || [])
+
+      // Check offline bills to complement
+      try {
+        const offlineBills = JSON.parse(localStorage.getItem("ksv_offline_bills") || "[]")
+        const patientBills = offlineBills.filter((b: any) => b.patientId === uniqueId)
+        
+        // Merge offline bills into orders if not already present
+        const orderIds = new Set(ordersList.map((o: any) => o.id || o.invoiceNo))
+        patientBills.forEach((b: any) => {
+          if (!orderIds.has(b.invoiceNo) && !orderIds.has(b.id)) {
+            ordersList.push({
+              id: b.id || b.invoiceNo,
+              kitName: b.combinedKitName || "OPD Checkup",
+              totalAmount: b.totalDueVal || 0,
+              amountCash: b.cashVal || 0,
+              amountOnline: b.onlineVal || 0,
+              billingType: b.billingType || "Non-GST",
+              status: "COMPLETED",
+              symptoms: b.symptoms || "",
+              notes: b.notes || "",
+              createdAt: b.date || new Date().toISOString()
+            })
+          }
+        })
+      } catch (storageErr) { }
+
+      if (!foundPatient) {
+        const localPatients = JSON.parse(localStorage.getItem("ksv_offline_patients") || "[]")
+        const p = localPatients.find((lp: any) => lp.uniqueId === uniqueId)
+        if (p) {
+          foundPatient = p
+        }
+      }
+
+      if (foundPatient) {
+        setSelectedPatient(foundPatient)
+        setHistory(ordersList)
+      }
     } catch (err) {
       console.error(err)
     } finally {

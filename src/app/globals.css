@@ -75,8 +75,19 @@
   }
 }
 
-/* Print CSS Stylesheet - Ensures only the clean bill / invoice card is printed without layout distortion */
+/* Print CSS Stylesheet - Ensures clean single-page bill print without layout distortion */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 6mm 8mm;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
   body * {
     visibility: hidden !important;
   }
@@ -97,6 +108,10 @@
     background: white !important;
     box-shadow: none !important;
     color: #000000 !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   .print\:hidden {

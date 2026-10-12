@@ -27,18 +27,27 @@ export default function StockRegisterTab({
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
 
+  // Helper for flexible product name matching
+  const isItemMatch = (desc?: string, catName?: string, catId?: string, rowId?: string) => {
+    if (rowId && catId && rowId === catId) return true
+    if (!desc || !catName) return false
+    const d = desc.toLowerCase().trim()
+    const c = catName.toLowerCase().trim()
+    return d === c || d.includes(c) || c.includes(d)
+  }
+
   // Calculate live stock
   const stockData = useMemo(() => {
     return catalog.map(item => {
       // 1. Opening
-      const openingEntry = openingStock.find(s => s.itemId === item.id || s.itemName === item.name)
+      const openingEntry = openingStock.find(s => s.itemId === item.id || isItemMatch(s.itemName, item.name, item.id, s.itemId))
       const openingQty = openingEntry ? openingEntry.quantity : 0
 
       // 2. Purchases (IN)
       let purchasedQty = 0
       invoices.filter(inv => (inv.type || 'SALE') === 'PURCHASE').forEach(inv => {
         inv.items.forEach(row => {
-          if (row.description === item.name) {
+          if (isItemMatch(row.description, item.name, item.id, row.id)) {
             purchasedQty += row.quantity
           }
         })
@@ -48,7 +57,7 @@ export default function StockRegisterTab({
       let soldQty = 0
       invoices.filter(inv => (inv.type || 'SALE') === 'SALE').forEach(inv => {
         inv.items.forEach(row => {
-          if (row.description === item.name) {
+          if (isItemMatch(row.description, item.name, item.id, row.id)) {
             soldQty += row.quantity
           }
         })
@@ -57,7 +66,7 @@ export default function StockRegisterTab({
       // 4. Manufacturing IN (Produced)
       let mfgProducedQty = 0
       manufacturingLogs.forEach(log => {
-        if (log.finishedGoodName === item.name || log.finishedGoodItemId === item.id) {
+        if (log.finishedGoodItemId === item.id || isItemMatch(log.finishedGoodName, item.name, item.id, log.finishedGoodItemId)) {
           mfgProducedQty += log.producedQuantity
         }
       })
@@ -66,7 +75,7 @@ export default function StockRegisterTab({
       let mfgConsumedQty = 0
       manufacturingLogs.forEach(log => {
         log.rawMaterialsConsumed.forEach(raw => {
-          if (raw.itemName === item.name || raw.itemId === item.id) {
+          if (raw.itemId === item.id || isItemMatch(raw.itemName, item.name, item.id, raw.itemId)) {
             mfgConsumedQty += raw.quantity
           }
         })

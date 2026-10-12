@@ -25,11 +25,13 @@ import {
   AlertTriangle
 } from "lucide-react"
 
-import { calculateGSTInvoice } from "@/utils/gstCalculator"
+import { calculateGSTInvoice, getStateCode, STATE_GST_CODES } from "@/utils/gstCalculator"
+import { numberToIndianWords } from "@/lib/tallyNumberToWords"
 
 interface PaymentRecord {
   id: string
   invoiceNo: string
+  tokenNo?: string
   date: string
   patientName: string
   patientId: string
@@ -55,6 +57,9 @@ interface PaymentRecord {
   city?: string
   houseNumber?: string
   pincode?: string
+  address?: string
+  whatsappNumber?: string
+  callingNumber?: string
 }
 
 export default function PaymentsPage() {
@@ -75,10 +80,14 @@ export default function PaymentsPage() {
   // Printable Receipt Modal State
   const [selectedBill, setSelectedBill] = useState<PaymentRecord | null>(null)
   const [showReceiptModal, setShowReceiptModal] = useState(false)
+  const [receiptLetterhead, setReceiptLetterhead] = useState<"KSV" | "MAXXI">("KSV")
+
+  // Edit Bill Modal State
+  const [editingBill, setEditingBill] = useState<PaymentRecord | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   // Fetch all payment records on mount
   const fetchRecords = async () => {
-    setLoading(true)
     setError("")
     try {
       // 1. Read offline bills from localStorage first
@@ -92,10 +101,46 @@ export default function PaymentsPage() {
         console.warn("Could not parse local bills:", e)
       }
 
-      // 2. Fetch from backend API
+      // Read deleted records to prevent resurrection
+      let permanentlyDeleted = new Set<string>()
+      try {
+        const storedDel = localStorage.getItem("ksv_deleted_invoices")
+        if (storedDel) {
+          permanentlyDeleted = new Set(JSON.parse(storedDel))
+        }
+      } catch (e) { }
+
+      // Filter out bills that are already in Trash Bin
+      let trashList: PaymentRecord[] = []
+      try {
+        const storedTrash = localStorage.getItem("ksv_trash_bills")
+        if (storedTrash) trashList = JSON.parse(storedTrash)
+      } catch (e) { }
+
+      setTrashRecords(trashList)
+      const trashNos = new Set(trashList.map(t => t.invoiceNo))
+      const trashIds = new Set(trashList.map(t => t.id).filter(Boolean))
+
+      // INSTANT RENDER (0ms): If local bills exist, display immediately without waiting for API
+      const initialSorted = localBills
+        .map((b, idx) => ({ ...b, id: b.id || `loc_${b.invoiceNo || idx}` }))
+        .filter(b => !trashNos.has(b.invoiceNo) && !permanentlyDeleted.has(b.invoiceNo))
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+      if (initialSorted.length > 0) {
+        setRecords(initialSorted)
+        setLoading(false)
+      }
+
+      // 2. Fetch from backend API with fast 1500ms timeout
       let apiBills: PaymentRecord[] = []
       try {
-        const res = await fetch(`${API_URL}/api/patients`)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 1500)
+
+        const res = await fetch(`${API_URL}/api/patients`, { signal: controller.signal })
+        clearTimeout(timeoutId)
+
         if (res.ok) {
           const patientsData = await res.json()
 
@@ -106,10 +151,11 @@ export default function PaymentsPage() {
                 const cash = parseFloat(o.amountCash || 0)
                 const online = parseFloat(o.amountOnline || 0)
                 const paid = cash + online
+                const invoiceNumber = o.invoiceNo || `INV-${(o.id || idx).toString().slice(-6).toUpperCase()}`
 
                 apiBills.push({
                   id: o.id || `ord_${p.uniqueId}_${idx}`,
-                  invoiceNo: `INV-${(o.id || idx).toString().slice(-6).toUpperCase()}`,
+                  invoiceNo: invoiceNumber,
                   date: o.createdAt ? new Date(o.createdAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
                   patientName: p.name || "Patient",
                   patientId: p.uniqueId || "N/A",
@@ -135,38 +181,54 @@ export default function PaymentsPage() {
                   cashVal: cash > 0 ? cash : (online === 0 ? totalDue : 0),
                   onlineVal: online,
                   totalPaidVal: paid > 0 ? paid : totalDue,
-                  nextFollowUpDate: p.nextFollowUpDate
+                  nextFollowUpDate: p.nextFollowUpDate,
+                  state: p.state,
+                  city: p.city,
+                  houseNumber: p.houseNumber,
+                  pincode: p.pincode,
+                  address: p.address,
+                  whatsappNumber: p.whatsappNumber,
+                  callingNumber: p.callingNumber
                 })
               })
             }
           })
         }
       } catch (err) {
-        console.warn("Backend offline, relying on local records:", err)
+        console.warn("Backend sync finished or timed out, relying on local records:", err)
       }
 
-      // Merge local and API bills without duplicates
+      // Deduplicate: local bills take highest priority for offline-first speed and detail
       const mergedMap = new Map<string, PaymentRecord>()
-      apiBills.forEach(b => mergedMap.set(b.id || b.invoiceNo, b))
-      localBills.forEach(b => mergedMap.set(b.id || b.invoiceNo, b))
+      
+      localBills.forEach((b, idx) => {
+        const normalized = {
+          ...b,
+          id: b.id || `loc_${b.invoiceNo || idx}`
+        }
+        if (!trashNos.has(normalized.invoiceNo) && !permanentlyDeleted.has(normalized.invoiceNo)) {
+          mergedMap.set(normalized.invoiceNo, normalized)
+        }
+      })
 
-      // Filter out bills that are already in Trash Bin
-      let trashList: PaymentRecord[] = []
-      try {
-        const storedTrash = localStorage.getItem("ksv_trash_bills")
-        if (storedTrash) trashList = JSON.parse(storedTrash)
-      } catch (e) { }
+      apiBills.forEach(b => {
+        if (
+          !mergedMap.has(b.invoiceNo) &&
+          !trashNos.has(b.invoiceNo) &&
+          !trashIds.has(b.id) &&
+          !permanentlyDeleted.has(b.invoiceNo) &&
+          !permanentlyDeleted.has(b.id)
+        ) {
+          mergedMap.set(b.invoiceNo, b)
+        }
+      })
 
-      setTrashRecords(trashList)
-
-      const trashNos = new Set(trashList.map(t => t.invoiceNo))
       const sorted = Array.from(mergedMap.values())
-        .filter(b => !trashNos.has(b.invoiceNo))
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
       setRecords(sorted)
     } catch (err) {
-      setError("Payment history record load karne me issue aaya")
+      console.warn("Payment records load warning:", err)
     } finally {
       setLoading(false)
     }
@@ -323,6 +385,11 @@ export default function PaymentsPage() {
         const updatedTrash = localTrash.filter(b => b.invoiceNo !== record.invoiceNo && b.id !== record.id)
         localStorage.setItem("ksv_trash_bills", JSON.stringify(updatedTrash))
       }
+
+      const storedDel = JSON.parse(localStorage.getItem("ksv_deleted_invoices") || "[]")
+      if (!storedDel.includes(record.invoiceNo)) storedDel.push(record.invoiceNo)
+      if (record.id && !storedDel.includes(record.id)) storedDel.push(record.id)
+      localStorage.setItem("ksv_deleted_invoices", JSON.stringify(storedDel))
     } catch (e) {
       console.warn("Permanent delete error:", e)
     }
@@ -333,8 +400,39 @@ export default function PaymentsPage() {
     if (!confirm("Kya aap Trash Bin ke SARE deleted invoices permanently delete karna chahte hain?")) {
       return
     }
+    try {
+      const storedDel = JSON.parse(localStorage.getItem("ksv_deleted_invoices") || "[]")
+      trashRecords.forEach(r => {
+        if (!storedDel.includes(r.invoiceNo)) storedDel.push(r.invoiceNo)
+        if (r.id && !storedDel.includes(r.id)) storedDel.push(r.id)
+      })
+      localStorage.setItem("ksv_deleted_invoices", JSON.stringify(storedDel))
+    } catch (e) { }
+
     setTrashRecords([])
     localStorage.removeItem("ksv_trash_bills")
+  }
+
+  // Save changes from Edit Invoice modal
+  const handleSaveEditedBill = (updated: PaymentRecord) => {
+    setRecords(prev => prev.map(r => r.invoiceNo === updated.invoiceNo ? updated : r))
+    try {
+      const storedOffline = localStorage.getItem("ksv_offline_bills")
+      if (storedOffline) {
+        const localBills: PaymentRecord[] = JSON.parse(storedOffline)
+        const idx = localBills.findIndex(b => b.invoiceNo === updated.invoiceNo)
+        if (idx !== -1) {
+          localBills[idx] = updated
+        } else {
+          localBills.unshift(updated)
+        }
+        localStorage.setItem("ksv_offline_bills", JSON.stringify(localBills))
+      }
+    } catch (e) {
+      console.warn("Error persisting updated bill:", e)
+    }
+    setShowEditModal(false)
+    setEditingBill(null)
   }
 
   return (
@@ -559,6 +657,7 @@ export default function PaymentsPage() {
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                   {filteredRecords.map((r) => {
                     const patientState = r.state || (r.calcResult?.isInterState ? "Punjab" : "Himachal Pradesh");
+                    const patientStateCode = getStateCode(patientState);
                     const rowCalc = calculateGSTInvoice(
                       r.treatments || [],
                       r.discountVal || 0,
@@ -566,7 +665,7 @@ export default function PaymentsPage() {
                       "Himachal Pradesh", 
                       patientState, 
                       true,
-                      r.stateCode
+                      patientStateCode
                     );
                     const grandTotal = rowCalc.grandTotal;
                     const balanceDue = Math.max(0, grandTotal - (r.totalPaidVal || 0));
@@ -647,7 +746,10 @@ export default function PaymentsPage() {
                             <Printer className="w-3.5 h-3.5" /> View Receipt
                           </button>
                           <button
-                            onClick={() => alert("Edit feature coming soon!")}
+                            onClick={() => {
+                              setEditingBill(r)
+                              setShowEditModal(true)
+                            }}
                             className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all border border-transparent hover:border-amber-100 cursor-pointer"
                             title="Edit Invoice"
                           >
@@ -764,6 +866,7 @@ export default function PaymentsPage() {
         >
           {(() => {
             const patientState = selectedBill.state || (selectedBill.calcResult?.isInterState ? "Punjab" : "Himachal Pradesh");
+            const patientStateCode = getStateCode(patientState);
             const calcData = calculateGSTInvoice(
               selectedBill.treatments || [],
               selectedBill.discountVal || 0,
@@ -771,7 +874,7 @@ export default function PaymentsPage() {
               "Himachal Pradesh", 
               patientState, 
               true,
-              selectedBill.stateCode
+              patientStateCode
             );
 
             const totalPaid = (selectedBill.cashVal || 0) + (selectedBill.onlineVal || 0);
@@ -786,9 +889,30 @@ export default function PaymentsPage() {
 
             {/* Top Modal Actions Header Bar (Non-printable) */}
             <div className="px-6 py-4 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0 print:hidden">
-              <span className={`text-xs font-extrabold uppercase tracking-wider px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${isFullyPaid ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>
-                <CheckCircle2 className="w-3.5 h-3.5" /> {isFullyPaid ? "Paid Invoice Record" : "Partial / Due Record"}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className={`text-xs font-extrabold uppercase tracking-wider px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${isFullyPaid ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>
+                  <CheckCircle2 className="w-3.5 h-3.5" /> {isFullyPaid ? "Paid Invoice Record" : "Partial / Due Record"}
+                </span>
+
+                {/* Letterhead Switcher */}
+                <div className="flex items-center bg-slate-200/80 p-1 rounded-xl text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setReceiptLetterhead("KSV")}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${receiptLetterhead === "KSV" ? "bg-white text-emerald-800 shadow-sm font-black" : "text-slate-600 hover:text-slate-900"}`}
+                  >
+                    KSV Clinic
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReceiptLetterhead("MAXXI")}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${receiptLetterhead === "MAXXI" ? "bg-white text-blue-800 shadow-sm font-black" : "text-slate-600 hover:text-slate-900"}`}
+                  >
+                    Maxxi Pharma
+                  </button>
+                </div>
+              </div>
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -806,7 +930,7 @@ export default function PaymentsPage() {
                   className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 font-extrabold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                   title="Move invoice to Trash Bin"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Move to Trash
+                  <Trash2 className="w-4 h-4" /> Move to Trash
                 </button>
                 <button
                   type="button"
@@ -819,27 +943,58 @@ export default function PaymentsPage() {
             </div>
 
             {/* Scrollable Receipt Body Container */}
-            <div className="p-6 sm:p-8 overflow-y-auto max-h-[75vh] print:max-h-none print:p-0 print:overflow-visible">
+            <div className="p-6 sm:p-8 print:p-0 overflow-y-auto max-h-[75vh] print:max-h-none print:overflow-visible">
               
-              <div id="printable-receipt" className="space-y-6">
+              <div id="printable-receipt" className="space-y-4 print:space-y-2">
 
                 {/* Header Letterhead */}
                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4">
-                  <div>
-                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">Maxxi Pharma Private Limited</h1>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">Kapoor Happy Home 2 Hospital Road Solan, Solan</p>
-                    <p className="text-[11px] text-slate-400 font-semibold mt-1">GSTIN/UIN: 02AASCM1970C1ZN | State: Himachal Pradesh, Code: 02</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg inline-block">
-                      {selectedBill.invoiceNo}
+                  {receiptLetterhead === "KSV" ? (
+                    <div>
+                      <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
+                        KARAN SINGH VAIDH (KSV)
+                      </h1>
+                      <p className="text-xs font-bold text-slate-500 mt-0.5">
+                        Ayurvedic Treatment &amp; Clinical Center &bull; Dr. Vikas Rajput (Chief Doctor)
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+                        Vill- Radiyana, PO Subathu, Teh &amp; Distt Solan, Himachal Pradesh - 173206
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                        GSTIN: 02DFBPS6121B2Z2 | Phone: +91 98160 12345 | State Code: 02
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-bold mt-1.5">Date: {selectedBill.date}</p>
+                  ) : (
+                    <div>
+                      <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
+                        Maxxi Pharma Private Limited
+                      </h1>
+                      <p className="text-xs font-bold text-slate-500 mt-0.5">
+                        Pharmaceutical Manufacturing &amp; Healthcare Formulations
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+                        Plot No. 45, Industrial Area Phase 1, Near ESI Hospital, Solan, H.P. - 173212
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                        GSTIN/UIN: 02AASCM1970C1ZN | State: Himachal Pradesh, Code: 02
+                      </p>
+                    </div>
+                  )}
+                  <div className="text-right space-y-1">
+                    <div className="flex items-center gap-2 justify-end">
+                      <div className="text-xs font-black text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg">
+                        TOKEN NO: {selectedBill.tokenNo || (selectedBill as any).agentToken || "TK-01"}
+                      </div>
+                      <div className="text-sm font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg">
+                        {selectedBill.invoiceNo}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-bold mt-1">Date: {selectedBill.date}</p>
                   </div>
                 </div>
 
                 {/* Patient Details */}
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/60 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-semibold text-slate-700">
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/60 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-semibold text-slate-700">
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Patient Name</span>
                     <strong className="text-slate-900 text-sm font-extrabold">{selectedBill.patientName}</strong>
@@ -847,28 +1002,44 @@ export default function PaymentsPage() {
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Patient ID / Mobile</span>
                     <span>{selectedBill.patientId}</span>
+                    {(selectedBill.whatsappNumber || selectedBill.callingNumber) && selectedBill.whatsappNumber !== selectedBill.patientId && (
+                      <span className="block text-[10px] text-slate-500 mt-0.5">{selectedBill.whatsappNumber ? `WA: ${selectedBill.whatsappNumber}` : `Call: ${selectedBill.callingNumber}`}</span>
+                    )}
                   </div>
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Age / Gender</span>
                     <span>{selectedBill.age ? `${selectedBill.age} yrs` : "-"} / {selectedBill.gender || "Male"}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">State &amp; GST Type</span>
-                    <span className="font-extrabold text-slate-800">
-                      {patientState}
-                      {calcData.isInterState ? (
-                        <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded ml-1 font-bold">IGST</span>
-                      ) : (
-                        <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded ml-1 font-bold">CGST+SGST</span>
-                      )}
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Token No</span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-purple-100/70 text-purple-800 border border-purple-200 font-mono font-black text-xs">
+                      #{selectedBill.tokenNo || (selectedBill as any).agentToken || "TK-01"}
                     </span>
                   </div>
-                  {(selectedBill.city || selectedBill.houseNumber || selectedBill.pincode) && (
-                    <div className="col-span-2 sm:col-span-4 border-t border-slate-200/60 pt-2 text-[11px] text-slate-500">
-                      <span className="text-slate-400 font-bold uppercase text-[9px] mr-1.5">Address:</span>
-                      {[selectedBill.houseNumber, selectedBill.city, selectedBill.state, selectedBill.pincode].filter(Boolean).join(", ")}
+
+                  {/* Customer Address & State Code Row */}
+                  <div className="col-span-2 sm:col-span-4 border-t border-slate-200/60 pt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Customer Address</span>
+                      <p className="text-slate-800 font-bold text-xs mt-0.5">
+                        {selectedBill.address || [selectedBill.houseNumber, selectedBill.city, selectedBill.pincode].filter(Boolean).join(", ") || "Local Address"}
+                      </p>
                     </div>
-                  )}
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">State Code &amp; Place of Supply</span>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-slate-900 font-extrabold">{patientState}</span>
+                        <span className="font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-black">
+                          STATE CODE: {patientStateCode}
+                        </span>
+                        {calcData.isInterState ? (
+                          <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded font-black">IGST (Inter-State)</span>
+                        ) : (
+                          <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-black">CGST + SGST</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Treatment Items Table */}
@@ -1091,8 +1262,28 @@ export default function PaymentsPage() {
                   </div>
                 </div>
 
+                {/* Tax & Total Amount in Words */}
+                <div className="bg-slate-50/90 rounded-2xl p-3.5 print:p-2 border border-slate-200/80 space-y-1.5 print:space-y-1 text-xs print:text-[10.5px]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-200/60 pb-1.5 print:pb-1">
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider">
+                      Total Invoice Amount (in words):
+                    </span>
+                    <strong className="text-slate-900 text-xs print:text-[10.5px] sm:text-right font-serif tracking-wide">
+                      {numberToIndianWords(calcData.grandTotal || 0, "Rupees", "Only")}
+                    </strong>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider">
+                      Total Tax Amount (in words):
+                    </span>
+                    <strong className="text-slate-800 text-xs print:text-[10.5px] sm:text-right font-serif tracking-wide">
+                      {numberToIndianWords(calcData.totalTax || 0, "Rupees", "Only")}
+                    </strong>
+                  </div>
+                </div>
+
                 {/* Follow-up Note & Signatures */}
-                <div className="border-t border-slate-200 pt-4 flex justify-between items-end text-xs">
+                <div className="border-t border-slate-200 pt-3 print:pt-1.5 flex justify-between items-end text-xs">
                   <div>
                     {selectedBill.nextFollowUpDate && (
                       <p className="font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg inline-block border border-emerald-100">
@@ -1126,6 +1317,230 @@ export default function PaymentsPage() {
           </div>
           );
           })()}
+        </div>
+      )}
+
+      {/* EDIT INVOICE MODAL */}
+      {showEditModal && editingBill && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+          onClick={() => {
+            setShowEditModal(false)
+            setEditingBill(null)
+          }}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 p-6 sm:p-8 space-y-5 text-slate-800 my-8 max-h-[90vh] overflow-y-auto custom-scrollbar"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <Edit className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    Edit Invoice Record
+                    <span className="text-xs bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-lg border border-blue-200 font-mono">
+                      {editingBill.invoiceNo}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400 font-medium">Update patient details, payment amounts &amp; notes</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditModal(false)
+                  setEditingBill(null)
+                }}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                const cash = parseFloat(editingBill.cashVal?.toString() || "0") || 0
+                const online = parseFloat(editingBill.onlineVal?.toString() || "0") || 0
+                const updated: PaymentRecord = {
+                  ...editingBill,
+                  cashVal: cash,
+                  onlineVal: online,
+                  totalPaidVal: cash + online
+                }
+                handleSaveEditedBill(updated)
+              }}
+              className="space-y-4 text-xs font-semibold"
+            >
+              {/* Patient Basic Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Patient Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingBill.patientName}
+                    onChange={(e) => setEditingBill({ ...editingBill, patientName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-bold outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Patient ID / Aadhaar / Mobile</label>
+                  <input
+                    type="text"
+                    value={editingBill.patientId}
+                    onChange={(e) => setEditingBill({ ...editingBill, patientId: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-bold outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Contact Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">WhatsApp Number</label>
+                  <input
+                    type="text"
+                    value={editingBill.whatsappNumber || ""}
+                    onChange={(e) => setEditingBill({ ...editingBill, whatsappNumber: e.target.value })}
+                    placeholder="10-digit mobile"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Calling Number</label>
+                  <input
+                    type="text"
+                    value={editingBill.callingNumber || ""}
+                    onChange={(e) => setEditingBill({ ...editingBill, callingNumber: e.target.value })}
+                    placeholder="10-digit mobile"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Age &amp; Gender</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={editingBill.age || ""}
+                      onChange={(e) => setEditingBill({ ...editingBill, age: e.target.value })}
+                      placeholder="Age"
+                      className="w-1/2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-slate-800 outline-none focus:border-blue-500"
+                    />
+                    <select
+                      value={editingBill.gender || "Male"}
+                      onChange={(e) => setEditingBill({ ...editingBill, gender: e.target.value })}
+                      className="w-1/2 bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-slate-800 outline-none focus:border-blue-500 font-bold"
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Breakdown Fields */}
+              <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-3">
+                <p className="text-[11px] font-black uppercase text-blue-800 tracking-wider">Payment Breakdown (Split Cash / Online)</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Total Bill Due (₹)</label>
+                    <input
+                      type="number"
+                      value={editingBill.totalDueVal || 0}
+                      onChange={(e) => setEditingBill({ ...editingBill, totalDueVal: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Cash Received (₹)</label>
+                    <input
+                      type="number"
+                      value={editingBill.cashVal || 0}
+                      onChange={(e) => setEditingBill({ ...editingBill, cashVal: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-emerald-700 outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Online / UPI (₹)</label>
+                    <input
+                      type="number"
+                      value={editingBill.onlineVal || 0}
+                      onChange={(e) => setEditingBill({ ...editingBill, onlineVal: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-indigo-700 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Clinical Notes & Follow-up */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Next Follow-Up Date</label>
+                  <input
+                    type="date"
+                    value={editingBill.nextFollowUpDate || ""}
+                    onChange={(e) => setEditingBill({ ...editingBill, nextFollowUpDate: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-blue-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Clinical Symptoms</label>
+                  <input
+                    type="text"
+                    value={editingBill.symptoms || ""}
+                    onChange={(e) => setEditingBill({ ...editingBill, symptoms: e.target.value })}
+                    placeholder="Patient symptoms..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Notes / Instructions</label>
+                <textarea
+                  rows={2}
+                  value={editingBill.notes || ""}
+                  onChange={(e) => setEditingBill({ ...editingBill, notes: e.target.value })}
+                  placeholder="Doctor prescription notes..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false)
+                    setEditingBill(null)
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Save Invoice Changes
+                </button>
+              </div>
+
+            </form>
+          </div>
         </div>
       )}
 

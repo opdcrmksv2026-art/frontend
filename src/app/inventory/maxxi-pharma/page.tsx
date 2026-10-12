@@ -42,6 +42,8 @@ import {
   TrendingUp
 } from 'lucide-react'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
 export default function MaxxiPharmaPage() {
   // State for data
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
@@ -83,15 +85,143 @@ export default function MaxxiPharmaPage() {
       const storedInvoices = localStorage.getItem('maxxi_app_invoices')
       const storedOpeningStock = localStorage.getItem('maxxi_app_opening_stock')
 
-      setCompanies(storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_MAXXI_COMPANIES)
-      setParties(storedParties ? JSON.parse(storedParties) : DEFAULT_MAXXI_PARTIES)
+      setCompanies(storedCompanies !== null ? JSON.parse(storedCompanies) : DEFAULT_MAXXI_COMPANIES)
+      setParties(storedParties !== null ? JSON.parse(storedParties) : DEFAULT_MAXXI_PARTIES)
 
-      let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : []
-      parsedCatalog = parsedCatalog.filter((c: any) => !c.id.startsWith('cat_mx_'))
+      // Automatic dummy catalog purge - Strip out all seeded/dummy items
+      let parsedCatalog: CatalogItem[] = []
+      if (storedCatalog !== null) {
+        try {
+          parsedCatalog = JSON.parse(storedCatalog)
+        } catch {
+          parsedCatalog = []
+        }
+      }
+
+      // One-time purge of old cached dummy items; future user-added products are fully preserved
+      if (localStorage.getItem('maxxi_dummy_initial_purged') !== 'true') {
+        parsedCatalog = (parsedCatalog || []).filter((item) => {
+          const name = (item.name || '').toUpperCase()
+          const id = item.id || ''
+          return !(
+            id.startsWith('cat_mx_') ||
+            id.startsWith('cat_sync_') ||
+            name.includes('STONVAIDHA') ||
+            name.includes('STONEVAIDHA') ||
+            name.includes('VIDHUVAIDHA') ||
+            name.includes('MADHUVAIDHA')
+          )
+        })
+        localStorage.setItem('maxxi_dummy_initial_purged', 'true')
+        localStorage.setItem('maxxi_app_catalog', JSON.stringify(parsedCatalog))
+      } else {
+        parsedCatalog = (parsedCatalog || []).filter((item) => {
+          const id = item.id || ''
+          return !id.startsWith('cat_mx_') && !id.startsWith('cat_sync_')
+        })
+      }
       setCatalog(parsedCatalog)
 
-      setInvoices(storedInvoices ? JSON.parse(storedInvoices) : [])
-      setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
+      // Automatic dummy invoices purge - Strip out any test/seeded invoices
+      let parsedInvoices: KiyavaInvoice[] = []
+      if (storedInvoices !== null) {
+        try {
+          parsedInvoices = JSON.parse(storedInvoices)
+        } catch {
+          parsedInvoices = []
+        }
+      }
+      parsedInvoices = (parsedInvoices || []).filter((inv) => {
+        const id = inv.id || ''
+        const invNo = inv.invoiceNo || ''
+        const isDummy = id.startsWith('inv_maxxi_pur_') || invNo === 'MXP/2026/012'
+        return !isDummy
+      })
+      setInvoices(parsedInvoices)
+      localStorage.setItem('maxxi_app_invoices', JSON.stringify(parsedInvoices))
+
+      // Clean opening stock linked to dummy items
+      let parsedStock: OpeningStockEntry[] = []
+      if (storedOpeningStock) {
+        try {
+          parsedStock = JSON.parse(storedOpeningStock)
+          parsedStock = parsedStock.filter((s) => {
+            const name = (s.itemName || '').toUpperCase()
+            const id = s.itemId || ''
+            return (
+              !id.startsWith('cat_mx_') &&
+              !id.startsWith('cat_sync_') &&
+              !name.includes('STONVAIDHA') &&
+              !name.includes('STONEVAIDHA') &&
+              !name.includes('VIDHUVAIDHA') &&
+              !name.includes('MADHUVAIDHA')
+            )
+          })
+        } catch {
+          parsedStock = []
+        }
+      }
+      setOpeningStock(parsedStock)
+      localStorage.setItem('maxxi_app_opening_stock', JSON.stringify(parsedStock))
+
+      // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) ---
+      const fetchDatabaseData = async () => {
+        try {
+          // 1. Fetch live product catalog from database
+          const catRes = await fetch(`${API_URL}/api/maxxi/catalog`)
+          if (catRes.ok) {
+            const dbCatalog: CatalogItem[] = await catRes.json()
+            if (Array.isArray(dbCatalog)) {
+              // Strip any legacy dummy items if present in DB
+              const cleanCatalog = dbCatalog.filter((item) => {
+                const id = item.id || ''
+                return !id.startsWith('cat_mx_') && !id.startsWith('cat_sync_')
+              })
+              setCatalog(cleanCatalog)
+              localStorage.setItem('maxxi_app_catalog', JSON.stringify(cleanCatalog))
+            }
+          }
+
+          // 2. Fetch live invoices from database
+          const invRes = await fetch(`${API_URL}/api/maxxi/invoices`)
+          if (invRes.ok) {
+            const dbInvoices: KiyavaInvoice[] = await invRes.json()
+            if (Array.isArray(dbInvoices)) {
+              const cleanInvoices = dbInvoices.filter((inv) => {
+                const id = inv.id || ''
+                const invNo = inv.invoiceNo || ''
+                return !id.startsWith('inv_maxxi_pur_') && invNo !== 'MXP/2026/012'
+              })
+              setInvoices(cleanInvoices)
+              localStorage.setItem('maxxi_app_invoices', JSON.stringify(cleanInvoices))
+            }
+          }
+
+          // 3. Fetch live parties from database
+          const partiesRes = await fetch(`${API_URL}/api/maxxi/parties`)
+          if (partiesRes.ok) {
+            const dbParties = await partiesRes.json()
+            if (Array.isArray(dbParties) && dbParties.length > 0) {
+              setParties(dbParties)
+              localStorage.setItem('maxxi_app_parties', JSON.stringify(dbParties))
+            }
+          }
+
+          // 4. Fetch live companies from database
+          const compRes = await fetch(`${API_URL}/api/maxxi/companies`)
+          if (compRes.ok) {
+            const dbCompanies = await compRes.json()
+            if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
+              setCompanies(dbCompanies)
+              localStorage.setItem('maxxi_app_companies', JSON.stringify(dbCompanies))
+            }
+          }
+        } catch (dbErr) {
+          console.warn('Backend database fetch offline or network error, continuing with local storage:', dbErr)
+        }
+      }
+      fetchDatabaseData()
+
     } catch (e) {
       console.error('Failed to load Maxxi Pharma storage data:', e)
       setCompanies(DEFAULT_MAXXI_COMPANIES)
@@ -162,6 +292,23 @@ export default function MaxxiPharmaPage() {
     } else {
       setActiveTab('invoices')
     }
+
+    // Sync to backend database
+    try {
+      if (exists) {
+        fetch(`${API_URL}/api/maxxi/invoices/${invoice.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        }).catch(() => {})
+      } else {
+        fetch(`${API_URL}/api/maxxi/invoices`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        }).catch(() => {})
+      }
+    } catch (e) {}
   }
 
   const handleDeleteInvoice = (id: string) => {
@@ -185,6 +332,11 @@ export default function MaxxiPharmaPage() {
 
       const updated = invoices.filter((inv) => inv.id !== id)
       saveInvoices(updated)
+
+      // Delete from backend database
+      try {
+        fetch(`${API_URL}/api/maxxi/invoices/${id}`, { method: 'DELETE' }).catch(() => {})
+      } catch (e) {}
     }
   }
 
@@ -244,17 +396,69 @@ export default function MaxxiPharmaPage() {
     }
   }
 
-  // Catalog Handlers
-  const handleSaveCatalogItem = (item: CatalogItem) => {
+  // Catalog Handlers - Integrated with Database (MongoDB) and LocalStorage
+  const handleSaveCatalogItem = async (item: CatalogItem) => {
+    const isEditing = Boolean(editingCatalogItem && editingCatalogItem.id)
+    const originalId = editingCatalogItem?.id || item.id
+
+    // 1. Optimistic Update in State & LocalStorage
     let updated: CatalogItem[]
-    if (editingCatalogItem) {
-      updated = catalog.map((cat) => (cat.id === item.id ? item : cat))
+    if (isEditing) {
+      updated = catalog.map((cat) => (cat.id === originalId ? item : cat))
     } else {
       updated = [...catalog, { ...item, id: item.id || `cat_${Date.now()}` }]
     }
     saveCatalog(updated)
     setIsCatalogModalOpen(false)
     setEditingCatalogItem(null)
+
+    // 2. Persist to Backend Database (MongoDB via Prisma)
+    try {
+      const payload = {
+        name: item.name,
+        hsnCode: item.hsnCode || '',
+        defaultUnit: item.defaultUnit || 'NOS',
+        defaultRate: Number(item.defaultRate) || 0,
+        defaultTaxRate: Number(item.defaultTaxRate) || 0,
+        description: item.description || '',
+        category: item.category || 'medicine',
+        quantity: Number(item.quantity) || 0
+      }
+
+      if (isEditing && originalId) {
+        // Update in DB
+        const res = await fetch(`${API_URL}/api/maxxi/catalog/${originalId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        if (res.ok) {
+          const savedData = await res.json()
+          setCatalog((prev) =>
+            prev.map((c) => (c.id === originalId ? { ...c, ...savedData, id: savedData.id || originalId } : c))
+          )
+        }
+      } else {
+        // Create in DB
+        const res = await fetch(`${API_URL}/api/maxxi/catalog`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        if (res.ok) {
+          const savedData = await res.json()
+          if (savedData && savedData.id) {
+            // Replace temporary ID with MongoDB ObjectID
+            const finalList = updated.map((c) =>
+              c.name === item.name && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
+            )
+            saveCatalog(finalList)
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Backend database sync offline, product saved locally:', err)
+    }
 
     // Sync with Opening Stock
     const existingStock = openingStock.find((s) => s.itemId === item.id)
@@ -278,11 +482,18 @@ export default function MaxxiPharmaPage() {
     }
   }
 
-  const handleDeleteCatalogItem = (id: string) => {
+  const handleDeleteCatalogItem = async (id: string) => {
     if (confirm('Delete this catalog product item?')) {
       saveCatalog(catalog.filter((cat) => cat.id !== id))
+      try {
+        await fetch(`${API_URL}/api/maxxi/catalog/${id}`, { method: 'DELETE' })
+      } catch (err) {
+        console.warn('Could not delete catalog product from database:', err)
+      }
     }
   }
+
+
 
   // Opening Stock Handlers
   const handleSaveOpeningStockEntry = (entry: OpeningStockEntry) => {
@@ -865,47 +1076,55 @@ export default function MaxxiPharmaPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
-                  {catalog.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="p-3">
-                        <div className="font-bold text-slate-900">{item.name}</div>
-                        {item.description && <div className="text-[10px] text-slate-400">{item.description}</div>}
-                      </td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-[10px] font-bold rounded-md uppercase border border-cyan-200/60">
-                          {item.category || 'Pharma'}
-                        </span>
-                      </td>
-                      <td className="p-3 font-mono text-slate-600">{item.hsnCode}</td>
-                      <td className="p-3 text-right font-extrabold text-blue-600">
-                        {item.quantity || 0}
-                      </td>
-                      <td className="p-3 text-right font-semibold uppercase">{item.defaultUnit}</td>
-                      <td className="p-3 text-right font-mono font-bold text-slate-900">
-                        ₹{item.defaultRate?.toLocaleString('en-IN')}
-                      </td>
-                      <td className="p-3 text-right font-mono text-slate-600">{item.defaultTaxRate}%</td>
-                      <td className="p-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => {
-                              setEditingCatalogItem(item)
-                              setIsCatalogModalOpen(true)
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCatalogItem(item.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                  {catalog.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-400">
+                        No catalog products found. Click &quot;Add Catalog Product&quot; to add your own product.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    catalog.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="p-3">
+                          <div className="font-bold text-slate-900">{item.name}</div>
+                          {item.description && <div className="text-[10px] text-slate-400">{item.description}</div>}
+                        </td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-[10px] font-bold rounded-md uppercase border border-cyan-200/60">
+                            {item.category || 'Pharma'}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono text-slate-600">{item.hsnCode}</td>
+                        <td className="p-3 text-right font-extrabold text-blue-600">
+                          {item.quantity || 0}
+                        </td>
+                        <td className="p-3 text-right font-semibold uppercase">{item.defaultUnit}</td>
+                        <td className="p-3 text-right font-mono font-bold text-slate-900">
+                          ₹{item.defaultRate?.toLocaleString('en-IN')}
+                        </td>
+                        <td className="p-3 text-right font-mono text-slate-600">{item.defaultTaxRate}%</td>
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => {
+                                setEditingCatalogItem(item)
+                                setIsCatalogModalOpen(true)
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCatalogItem(item.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

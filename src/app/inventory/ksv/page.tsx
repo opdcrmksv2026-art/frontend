@@ -46,7 +46,6 @@ import {
   CheckCircle2,
   FlaskConical
 } from 'lucide-react'
-import { constants } from 'buffer'
 
 export default function KsvPage() {
   // State for data
@@ -134,15 +133,14 @@ export default function KsvPage() {
       setCatalog(parsedCatalog)
 
       if (storedInvoices) {
-        let parsed = JSON.parse(storedInvoices)
-        // If stored invoices have no sales recorded yet, merge the seeded sale invoice so Sale Summary is immediately visible
-        const hasSale = parsed.some((inv: any) => (inv.type || 'SALE') === 'SALE')
-        if (!hasSale && SEEDED_KSV_INVOICES.some((inv) => (inv.type || 'SALE') === 'SALE')) {
-          const seededSales = SEEDED_KSV_INVOICES.filter((inv) => (inv.type || 'SALE') === 'SALE')
-          parsed = [...seededSales, ...parsed]
-          localStorage.setItem('ksv_app_invoices', JSON.stringify(parsed))
+        try {
+          const parsed = JSON.parse(storedInvoices)
+          const clean = (parsed || []).filter((inv: any) => !inv.id?.startsWith('inv_ksv_pur_') && inv.invoiceNo !== 'KYV/2026/089')
+          setInvoices(clean)
+          localStorage.setItem('ksv_app_invoices', JSON.stringify(clean))
+        } catch {
+          setInvoices([])
         }
-        setInvoices(parsed)
       } else {
         setInvoices([])
       }
@@ -238,7 +236,7 @@ export default function KsvPage() {
 
         // Also sync products to Maxxi catalog so they appear in Live Stock
         const maxxiCatalogStored = localStorage.getItem('maxxi_app_catalog')
-        const maxxiCatalog = maxxiCatalogStored ? JSON.parse(maxxiCatalogStored) : [...DEFAULT_MAXXI_CATALOG]
+        const maxxiCatalog = maxxiCatalogStored ? JSON.parse(maxxiCatalogStored) : []
 
         let catalogChanged = false
         invoice.items.forEach(item => {

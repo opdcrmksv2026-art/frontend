@@ -58,29 +58,103 @@ export default function PatientsListPage() {
   const [sortField, setSortField] = useState<SortField>("createdAt")
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
 
+  // Fast 0ms cache loader
+  const loadFromCache = (): Patient[] => {
+    try {
+      const cached = localStorage.getItem("ksv_cached_patients")
+      const storedOffline = localStorage.getItem("ksv_offline_patients")
+      let list: Patient[] = []
+      if (cached) list = JSON.parse(cached)
+
+      if (storedOffline) {
+        const offlineList: Patient[] = JSON.parse(storedOffline)
+        const map = new Map<string, Patient>()
+        list.forEach(p => map.set(p.uniqueId, p))
+        offlineList.forEach(p => {
+          if (!map.has(p.uniqueId)) {
+            map.set(p.uniqueId, { ...p, id: p.id || `loc_${p.uniqueId}` })
+          }
+        })
+        list = Array.from(map.values())
+      }
+      return list
+    } catch (e) {
+      return []
+    }
+  }
+
   const fetchPatients = async (silent = false) => {
-    if (!silent) setLoading(true)
+    // If not silent and no patients yet, show loader
+    if (!silent && patients.length === 0) setLoading(true)
     setError("")
+
+    // Use fast timeout (1500ms) to ensure UI never freezes
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 1500)
+
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-      const res = await fetch(`${API_URL}/api/patients`)
-      
-      if (!res.ok) {
-        throw new Error("Failed to fetch patients list")
+      let patientList: Patient[] = []
+
+      try {
+        const res = await fetch(`${API_URL}/api/patients`, {
+          signal: controller.signal
+        })
+        clearTimeout(timer)
+        if (res.ok) {
+          patientList = await res.json()
+        }
+      } catch (e) {
+        // Backend offline or timed out - silently continue
       }
-      
-      const data = await res.json()
-      setPatients(data)
+
+      // Merge with offline registered patients
+      try {
+        const storedOffline = localStorage.getItem("ksv_offline_patients")
+        if (storedOffline) {
+          const offlineList: Patient[] = JSON.parse(storedOffline)
+          const map = new Map<string, Patient>()
+          patientList.forEach(p => map.set(p.uniqueId, p))
+          offlineList.forEach(p => {
+            if (!map.has(p.uniqueId)) {
+              map.set(p.uniqueId, { ...p, id: p.id || `loc_${p.uniqueId}` })
+            }
+          })
+          patientList = Array.from(map.values())
+        }
+      } catch (storageErr) {
+        console.warn("Offline patients read error:", storageErr)
+      }
+
+      if (patientList.length > 0) {
+        setPatients(patientList)
+        // Cache to localStorage for instantaneous 0ms subsequent tab clicks
+        try {
+          localStorage.setItem("ksv_cached_patients", JSON.stringify(patientList))
+        } catch (e) {}
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong")
+      if (patients.length === 0) {
+        setError(err instanceof Error ? err.message : "Something went wrong")
+      }
     } finally {
+      clearTimeout(timer)
       setLoading(false)
       setIsRefreshing(false)
     }
   }
 
+  // Instant 0ms render on tab switch:
   useEffect(() => {
-    fetchPatients()
+    const cachedPatients = loadFromCache()
+    if (cachedPatients.length > 0) {
+      setPatients(cachedPatients)
+      setLoading(false)
+      // Background revalidation
+      fetchPatients(true)
+    } else {
+      fetchPatients(false)
+    }
   }, [])
 
   const handleRefresh = () => {

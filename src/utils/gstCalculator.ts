@@ -62,27 +62,77 @@ export interface GSTCalculationResult {
 
 export const round2 = (num: number): number => Math.round((num + Number.EPSILON) * 100) / 100;
 
+export const STATE_GST_CODES: Record<string, string> = {
+  "Jammu and Kashmir": "01",
+  "Himachal Pradesh": "02",
+  "Punjab": "03",
+  "Chandigarh": "04",
+  "Uttarakhand": "05",
+  "Haryana": "06",
+  "Delhi": "07",
+  "Rajasthan": "08",
+  "Uttar Pradesh": "09",
+  "Bihar": "10",
+  "Sikkim": "11",
+  "Arunachal Pradesh": "12",
+  "Nagaland": "13",
+  "Manipur": "14",
+  "Mizoram": "15",
+  "Tripura": "16",
+  "Meghalaya": "17",
+  "Assam": "18",
+  "West Bengal": "19",
+  "Jharkhand": "20",
+  "Odisha": "21",
+  "Chhattisgarh": "22",
+  "Madhya Pradesh": "23",
+  "Gujarat": "24",
+  "Maharashtra": "27",
+  "Andhra Pradesh": "37",
+  "Karnataka": "29",
+  "Goa": "30",
+  "Kerala": "32",
+  "Tamil Nadu": "33",
+  "Telangana": "36",
+  "Ladakh": "38",
+  "Other": "99"
+};
+
+export const getStateCode = (stateName?: string): string => {
+  if (!stateName) return "02";
+  const trimmed = stateName.trim();
+  for (const [name, code] of Object.entries(STATE_GST_CODES)) {
+    if (name.toLowerCase() === trimmed.toLowerCase()) return code;
+  }
+  return STATE_GST_CODES[trimmed] || "02";
+};
+
 export function isInterStateTransaction(
   buyerState: string,
   buyerStateCode?: string,
   companyState = "Himachal Pradesh",
   companyStateCode = "02"
 ): boolean {
-  if (buyerStateCode && buyerStateCode.trim() === "02") {
-    return false;
-  }
-  if (buyerStateCode && buyerStateCode.trim() !== "02" && buyerStateCode.trim() !== "") {
-    return true;
-  }
   const cleanBuyer = (buyerState || "").trim().toLowerCase();
   const cleanCompany = (companyState || "").trim().toLowerCase();
+
+  // 1. If buyer state is explicitly Himachal Pradesh, intra-state (CGST + SGST)
   if (cleanBuyer === "himachal pradesh" || cleanBuyer === "hp") {
     return false;
   }
-  if (!cleanBuyer) {
-    return false;
+
+  // 2. If buyer state is any other state (e.g. Haryana, Punjab, Delhi), inter-state (IGST)
+  if (cleanBuyer && cleanBuyer !== cleanCompany) {
+    return true;
   }
-  return cleanBuyer !== cleanCompany;
+
+  // 3. Check state code derived or provided
+  const code = (buyerStateCode || getStateCode(buyerState)).trim();
+  if (code && code !== "02") {
+    return true;
+  }
+
+  return false;
 }
 
 export function calculateGSTInvoice(
@@ -115,7 +165,7 @@ export function calculateGSTInvoice(
           hsnCode: p.hsnCode || "-",
           qty: pQty,
           rate: rate,
-          inclusiveRate: rate, // It's exclusive, so we'll just keep it the same for now, or add tax if we really need inclusive. But let's just revert to original behavior.
+          inclusiveRate: rate,
           amount: amount,
           taxRate: p.taxRate || 0,
           disease: (t as any).disease || "General Checkup",
@@ -198,12 +248,14 @@ export function calculateGSTInvoice(
     let igstAmount = 0;
 
     if (p.taxRate > 0) {
-      totalLineTax = round2((taxableValue * p.taxRate) / 100);
       if (isInterState) {
-        igstAmount = totalLineTax;
+        igstAmount = round2((taxableValue * p.taxRate) / 100);
+        totalLineTax = igstAmount;
       } else {
-        cgstAmount = round2(totalLineTax / 2);
-        sgstAmount = round2(totalLineTax - cgstAmount);
+        const halfRate = p.taxRate / 2;
+        cgstAmount = round2((taxableValue * halfRate) / 100);
+        sgstAmount = cgstAmount; // CGST and SGST are always identical
+        totalLineTax = round2(cgstAmount + sgstAmount);
       }
     }
 
@@ -234,7 +286,9 @@ export function calculateGSTInvoice(
     hsnSummaryMap[hsnKey].cgstAmount = round2(hsnSummaryMap[hsnKey].cgstAmount + cgstAmount);
     hsnSummaryMap[hsnKey].sgstAmount = round2(hsnSummaryMap[hsnKey].sgstAmount + sgstAmount);
     hsnSummaryMap[hsnKey].igstAmount = round2(hsnSummaryMap[hsnKey].igstAmount + igstAmount);
-    hsnSummaryMap[hsnKey].totalTax = round2(hsnSummaryMap[hsnKey].totalTax + totalLineTax);
+    hsnSummaryMap[hsnKey].totalTax = isInterState
+      ? hsnSummaryMap[hsnKey].igstAmount
+      : round2(hsnSummaryMap[hsnKey].cgstAmount + hsnSummaryMap[hsnKey].sgstAmount);
 
     return {
       name: p.name,
