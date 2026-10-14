@@ -53,7 +53,9 @@ function convertGroup(num: number): string {
 }
 
 export function numberToIndianWords(amount: number, prefix: string = "INR", suffix: string = "Only"): string {
-  if (isNaN(amount) || amount === 0) return `${prefix} Zero ${suffix}`.trim()
+  if (isNaN(amount) || amount === 0) {
+    return prefix === "Rupees" ? `Zero Rupees ${suffix}`.trim() : `${prefix} Zero ${suffix}`.trim()
+  }
 
   const absAmount = Math.abs(amount)
   const integerPart = Math.floor(absAmount)
@@ -92,9 +94,9 @@ export function numberToIndianWords(amount: number, prefix: string = "INR", suff
     if (decimalPart > 0) {
       const paiseWords = convertGroup(decimalPart)
       const wholePart = words ? `${words} and ` : ""
-      return `${wholePart}${paiseWords} Rupees ${suffix}`.replace(/\s+/g, " ").trim()
+      return `${wholePart}${paiseWords} Paise ${suffix}`.replace(/\s+/g, " ").trim()
     }
-    return `Rupees ${words} ${suffix}`.replace(/\s+/g, " ").trim()
+    return `${words} Rupees ${suffix}`.replace(/\s+/g, " ").trim()
   }
 
   let result = prefix ? `${prefix} ${words}` : words
