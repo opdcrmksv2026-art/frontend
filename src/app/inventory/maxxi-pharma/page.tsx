@@ -1,12 +1,13 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   CompanyProfile,
   PartyProfile,
   CatalogItem,
   KiyavaInvoice,
-  OpeningStockEntry
+  OpeningStockEntry,
+  InvoiceItemRow
 } from '@/types/kiyavaBilling'
 import {
   DEFAULT_MAXXI_COMPANIES,
@@ -76,6 +77,64 @@ export default function MaxxiPharmaPage() {
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
   const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE'>('SALE')
 
+  // Real-time synchronization of Maxxi B2B invoices and all Clinic OPD patient bills
+  const allInvoices = useMemo(() => {
+    let combined = [...invoices];
+    try {
+      const offlineBills = JSON.parse(localStorage.getItem('ksv_offline_bills') || '[]');
+      offlineBills.forEach((bill: any) => {
+        const invNo = bill.invoiceNo;
+        if (!invNo) return;
+        const alreadyExists = combined.some(inv => inv.invoiceNo === invNo || inv.id === `bill_${invNo}`);
+        if (!alreadyExists) {
+          const items: InvoiceItemRow[] = (bill.treatments || []).flatMap((t: any) =>
+            (t.products || []).map((p: any, idx: number) => ({
+              id: `${invNo}_item_${idx}`,
+              description: p.name,
+              hsnCode: p.hsnCode || '',
+              quantity: parseFloat(p.quantity || '1') || 1,
+              unit: 'NOS',
+              rate: Number(p.rate) || 0,
+              discountPercent: 0,
+              taxRate: Number(p.taxRate) || 0,
+              amount: (parseFloat(p.quantity || '1') || 1) * (Number(p.rate) || 0)
+            }))
+          );
+          if (items.length > 0) {
+            combined.push({
+              id: `bill_${invNo}`,
+              type: 'SALE',
+              invoiceNo: invNo,
+              invoiceDate: bill.date || new Date().toISOString().split('T')[0],
+              placeOfSupply: bill.state || 'Himachal Pradesh',
+              placeOfSupplyCode: bill.stateCode || '02',
+              company: DEFAULT_MAXXI_COMPANIES[0] || { name: 'Maxxi Pharma Private Limited' },
+              buyer: {
+                id: bill.patientId || 'patient',
+                name: bill.patientName || 'Clinic Patient',
+                address: bill.address || '',
+                city: bill.city || '',
+                state: bill.state || 'Himachal Pradesh',
+                stateCode: bill.stateCode || '02'
+              },
+              items,
+              totalQuantity: items.reduce((sum, it) => sum + it.quantity, 0),
+              subtotal: bill.totalDueVal || 0,
+              isInterState: Boolean(bill.calcResult?.isInterState),
+              cgstAmount: bill.calcResult?.totalCgst || 0,
+              sgstAmount: bill.calcResult?.totalSgst || 0,
+              igstAmount: bill.calcResult?.totalIgst || 0,
+              grandTotal: bill.totalDueVal || 0
+            } as any);
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('Could not parse clinic bills for live stock register:', e);
+    }
+    return combined;
+  }, [invoices]);
+
   // Load Initial Data from localStorage or clean defaults
   useEffect(() => {
     try {
@@ -98,28 +157,7 @@ export default function MaxxiPharmaPage() {
         }
       }
 
-      // One-time purge of old cached dummy items; future user-added products are fully preserved
-      if (localStorage.getItem('maxxi_dummy_initial_purged') !== 'true') {
-        parsedCatalog = (parsedCatalog || []).filter((item) => {
-          const name = (item.name || '').toUpperCase()
-          const id = item.id || ''
-          return !(
-            id.startsWith('cat_mx_') ||
-            id.startsWith('cat_sync_') ||
-            name.includes('STONVAIDHA') ||
-            name.includes('STONEVAIDHA') ||
-            name.includes('VIDHUVAIDHA') ||
-            name.includes('MADHUVAIDHA')
-          )
-        })
-        localStorage.setItem('maxxi_dummy_initial_purged', 'true')
-        localStorage.setItem('maxxi_app_catalog', JSON.stringify(parsedCatalog))
-      } else {
-        parsedCatalog = (parsedCatalog || []).filter((item) => {
-          const id = item.id || ''
-          return !id.startsWith('cat_mx_') && !id.startsWith('cat_sync_')
-        })
-      }
+      // Preserve catalog items entered or stored
       setCatalog(parsedCatalog)
 
       // Automatic dummy invoices purge - Strip out any test/seeded invoices
@@ -140,23 +178,11 @@ export default function MaxxiPharmaPage() {
       setInvoices(parsedInvoices)
       localStorage.setItem('maxxi_app_invoices', JSON.stringify(parsedInvoices))
 
-      // Clean opening stock linked to dummy items
+      // Load opening stock
       let parsedStock: OpeningStockEntry[] = []
       if (storedOpeningStock) {
         try {
           parsedStock = JSON.parse(storedOpeningStock)
-          parsedStock = parsedStock.filter((s) => {
-            const name = (s.itemName || '').toUpperCase()
-            const id = s.itemId || ''
-            return (
-              !id.startsWith('cat_mx_') &&
-              !id.startsWith('cat_sync_') &&
-              !name.includes('STONVAIDHA') &&
-              !name.includes('STONEVAIDHA') &&
-              !name.includes('VIDHUVAIDHA') &&
-              !name.includes('MADHUVAIDHA')
-            )
-          })
         } catch {
           parsedStock = []
         }
@@ -461,11 +487,14 @@ export default function MaxxiPharmaPage() {
     }
 
     // Sync with Opening Stock
-    const existingStock = openingStock.find((s) => s.itemId === item.id)
+    const isStockMatch = (s: OpeningStockEntry) =>
+      s.itemId === item.id ||
+      (s.itemName && item.name && s.itemName.trim().toLowerCase() === item.name.trim().toLowerCase())
+    const existingStock = openingStock.find(isStockMatch)
     if (existingStock) {
       const updatedStock = openingStock.map((s) =>
-        s.itemId === item.id
-          ? { ...s, quantity: Number(item.quantity) || 0, itemName: item.name, unit: item.defaultUnit }
+        isStockMatch(s)
+          ? { ...s, itemId: item.id, quantity: Number(item.quantity) || 0, itemName: item.name, unit: item.defaultUnit }
           : s
       )
       saveOpeningStock(updatedStock)
@@ -1213,7 +1242,7 @@ export default function MaxxiPharmaPage() {
         <StockRegisterTab
           catalog={catalog}
           openingStock={openingStock}
-          invoices={invoices}
+          invoices={allInvoices}
           manufacturingLogs={[]} // Maxxi Pharma doesn't have manufacturing logs right now
           onOpenOpeningStock={() => setActiveTab('opening-stock')}
         />

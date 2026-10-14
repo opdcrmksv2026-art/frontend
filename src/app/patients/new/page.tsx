@@ -299,7 +299,14 @@ export default function NewPatientPage() {
 
                 <div className="flex flex-col">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5"><Map className="w-3.5 h-3.5 text-slate-400" /> State</span>
+                    <span className="flex items-center gap-1.5">
+                      <Map className="w-3.5 h-3.5 text-slate-400" /> State
+                      {getStateCode(formData.state) && (
+                        <span className="font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-black ml-1.5">
+                          Code: {getStateCode(formData.state)}
+                        </span>
+                      )}
+                    </span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${formData.state === 'Himachal Pradesh' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-indigo-50 text-indigo-600 border border-indigo-200'}`}>
                       {formData.state === 'Himachal Pradesh' ? 'Intra-State (CGST+SGST)' : 'Inter-State (IGST)'}
                     </span>
@@ -310,11 +317,14 @@ export default function NewPatientPage() {
                     onChange={handleChange}
                     className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-50 focus:border-primary/20 rounded-2xl outline-none transition-all text-sm font-bold text-slate-700 cursor-pointer"
                   >
-                    {INDIAN_STATES.map((st) => (
-                      <option key={st} value={st}>
-                        {st} {st === "Himachal Pradesh" ? "(02 - Home State)" : st === "Punjab" ? "(03)" : st === "Haryana" ? "(06)" : st === "Delhi" ? "(07)" : ""}
-                      </option>
-                    ))}
+                    {INDIAN_STATES.map((st) => {
+                      const code = getStateCode(st);
+                      return (
+                        <option key={st} value={st}>
+                          {st} {code ? (st === "Himachal Pradesh" ? `(${code} - Home State)` : `(${code})`) : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 

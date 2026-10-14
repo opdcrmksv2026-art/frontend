@@ -31,8 +31,10 @@ export default function StockRegisterTab({
   const isItemMatch = (desc?: string, catName?: string, catId?: string, rowId?: string) => {
     if (rowId && catId && rowId === catId) return true
     if (!desc || !catName) return false
-    const d = desc.toLowerCase().trim()
-    const c = catName.toLowerCase().trim()
+    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim()
+    const d = clean(desc)
+    const c = clean(catName)
+    if (!d || !c) return false
     return d === c || d.includes(c) || c.includes(d)
   }
 

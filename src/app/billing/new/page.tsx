@@ -583,7 +583,12 @@ export default function CreateInvoicePage() {
           if (t.products) {
             t.products.forEach(p => {
               const qtyToDeduct = parseFloat(p.quantity || "1");
-              const index = updatedCatalog.findIndex((c: any) => c.name === p.name);
+              const cleanStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+              const pClean = cleanStr(p.name);
+              const index = updatedCatalog.findIndex((c: any) => {
+                const cClean = cleanStr(c.name);
+                return cClean === pClean || (cClean && pClean && (cClean.includes(pClean) || pClean.includes(cClean)));
+              });
               if (index !== -1) {
                 const currentQty = updatedCatalog[index].quantity || 0;
                 updatedCatalog[index] = {
@@ -595,6 +600,44 @@ export default function CreateInvoicePage() {
           }
         })
         localStorage.setItem("maxxi_app_catalog", JSON.stringify(updatedCatalog))
+
+        // Also record this clinic sale in Maxxi Pharma invoices so Live Stock Register updates in real-time
+        try {
+          const maxxiInvoices = JSON.parse(localStorage.getItem("maxxi_app_invoices") || "[]")
+          const clinicInvItems = treatments.flatMap(t =>
+            (t.products || []).map((p, idx) => ({
+              id: `${invoiceNo}_${idx}`,
+              description: p.name,
+              hsnCode: p.hsnCode || "",
+              quantity: parseFloat(p.quantity || "1") || 1,
+              unit: "NOS",
+              rate: p.rate || 0,
+              discountPercent: 0,
+              taxRate: p.taxRate || 0,
+              amount: (parseFloat(p.quantity || "1") || 1) * (p.rate || 0)
+            }))
+          )
+          if (clinicInvItems.length > 0 && !maxxiInvoices.some((inv: any) => inv.invoiceNo === invoiceNo)) {
+            const maxxiInv = {
+              id: `bill_${invoiceNo}`,
+              type: "SALE",
+              invoiceNo: invoiceNo,
+              invoiceDate: formData.date || new Date().toISOString().split("T")[0],
+              placeOfSupply: formData.state || "Himachal Pradesh",
+              placeOfSupplyCode: effectiveStateCode,
+              company: { id: "comp_maxxi", name: "Maxxi Pharma Private Limited", state: "Himachal Pradesh", stateCode: "02" },
+              buyer: { id: formData.uniqueId || "patient", name: formData.name || "Clinic Patient", city: formData.city || "", state: formData.state || "Himachal Pradesh", stateCode: effectiveStateCode },
+              items: clinicInvItems,
+              totalQuantity: clinicInvItems.reduce((sum, it) => sum + it.quantity, 0),
+              subtotal: totalDueVal,
+              grandTotal: totalDueVal
+            }
+            maxxiInvoices.unshift(maxxiInv)
+            localStorage.setItem("maxxi_app_invoices", JSON.stringify(maxxiInvoices))
+          }
+        } catch (mErr) {
+          console.warn("Could not sync clinic sale to Maxxi invoices:", mErr)
+        }
         
       } catch (e) {
         console.warn("Local storage write error:", e)
@@ -706,9 +749,14 @@ export default function CreateInvoicePage() {
                     onChange={handleInputChange}
                     className="px-3 py-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-extrabold text-slate-800 outline-none cursor-pointer"
                   >
-                    {INDIAN_STATES.map((st) => (
-                      <option key={st} value={st}>{st}</option>
-                    ))}
+                    {INDIAN_STATES.map((st) => {
+                      const code = getStateCode(st);
+                      return (
+                        <option key={st} value={st}>
+                          {st} {code ? (st === "Himachal Pradesh" ? `(${code} - Home State)` : `(${code})`) : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                   {(() => {
                     const c = formData.stateCode || getStateCode(formData.state || "Himachal Pradesh")
@@ -831,6 +879,11 @@ export default function CreateInvoicePage() {
               <div className="flex flex-col">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                   <span>State (GST Calculation) *</span>
+                  {getStateCode(formData.state || "Himachal Pradesh") && (
+                    <span className="font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-black">
+                      State Code: {getStateCode(formData.state || "Himachal Pradesh")}
+                    </span>
+                  )}
                 </label>
                 <select
                   name="state"
@@ -838,9 +891,14 @@ export default function CreateInvoicePage() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-2.5 bg-white border-2 border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-bold text-slate-800 transition-all cursor-pointer"
                 >
-                  {INDIAN_STATES.map((st) => (
-                    <option key={st} value={st}>{st}</option>
-                  ))}
+                  {INDIAN_STATES.map((st) => {
+                    const code = getStateCode(st);
+                    return (
+                      <option key={st} value={st}>
+                        {st} {code ? (st === "Himachal Pradesh" ? `(${code} - Home State)` : `(${code})`) : ""}
+                      </option>
+                    );
+                  })}
                 </select>
                 <div className="mt-1.5">
                   {(formData.state || "Himachal Pradesh").trim().toLowerCase() === "himachal pradesh" ? (
