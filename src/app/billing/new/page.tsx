@@ -710,9 +710,16 @@ export default function CreateInvoicePage() {
                       <option key={st} value={st}>{st}</option>
                     ))}
                   </select>
-                  <span className="font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg text-xs font-black">
-                    Code: {formData.stateCode || getStateCode(formData.state || "Himachal Pradesh")}
-                  </span>
+                  {(() => {
+                    const c = formData.stateCode || getStateCode(formData.state || "Himachal Pradesh")
+                    const isOther = (formData.state || "").trim().toLowerCase() === "other"
+                    if (!c || c === "99" || isOther) return null
+                    return (
+                      <span className="font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg text-xs font-black">
+                        Code: {c}
+                      </span>
+                    )
+                  })()}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1646,9 +1653,16 @@ export default function CreateInvoicePage() {
                       <span className="text-[10px] uppercase font-bold text-slate-400 block">State Code &amp; Place of Supply</span>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-slate-900 font-extrabold">{generatedBill.state || "Himachal Pradesh"}</span>
-                        <span className="font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-black">
-                          STATE CODE: {getStateCode(generatedBill.state || "Himachal Pradesh")}
-                        </span>
+                        {(() => {
+                          const sCode = getStateCode(generatedBill.state || "Himachal Pradesh")
+                          const isOther = (generatedBill.state || "").trim().toLowerCase() === "other"
+                          if (!sCode || sCode === "99" || isOther) return null
+                          return (
+                            <span className="font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-black">
+                              STATE CODE: {sCode}
+                            </span>
+                          )
+                        })()}
                         {generatedBill.calcResult?.isInterState ? (
                           <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded font-black">IGST (Inter-State)</span>
                         ) : (

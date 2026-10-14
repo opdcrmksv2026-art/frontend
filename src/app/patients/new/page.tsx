@@ -19,6 +19,7 @@ import {
   Users,
   CheckCircle2
 } from "lucide-react"
+import { getStateCode } from "@/utils/gstCalculator"
 
 const INDIAN_STATES = [
   "Himachal Pradesh",
@@ -73,7 +74,7 @@ export default function NewPatientPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === "state") {
-      const code = value === "Himachal Pradesh" ? "02" : value === "Punjab" ? "03" : value === "Haryana" ? "06" : value === "Delhi" ? "07" : "99";
+      const code = getStateCode(value);
       setFormData(prev => ({ ...prev, state: value, stateCode: code }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));

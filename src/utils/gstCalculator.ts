@@ -95,16 +95,17 @@ export const STATE_GST_CODES: Record<string, string> = {
   "Tamil Nadu": "33",
   "Telangana": "36",
   "Ladakh": "38",
-  "Other": "99"
+  "Other": ""
 };
 
 export const getStateCode = (stateName?: string): string => {
   if (!stateName) return "02";
   const trimmed = stateName.trim();
+  if (trimmed.toLowerCase() === "other") return "";
   for (const [name, code] of Object.entries(STATE_GST_CODES)) {
     if (name.toLowerCase() === trimmed.toLowerCase()) return code;
   }
-  return STATE_GST_CODES[trimmed] || "02";
+  return STATE_GST_CODES[trimmed] ?? "";
 };
 
 export function isInterStateTransaction(
