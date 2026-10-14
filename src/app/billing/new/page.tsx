@@ -92,6 +92,35 @@ const INDIAN_STATES = [
   "Other"
 ]
 
+const formatReceiptDate = (dateVal?: any) => {
+  if (!dateVal) return ""
+  const cleanStr = String(dateVal).split("T")[0]
+  const parts = cleanStr.split("-")
+  if (parts.length === 3 && parts[0].length === 4) {
+    const [y, m, d] = parts
+    return `${d}-${m}-${y}`
+  }
+  const d = new Date(dateVal)
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, "0")
+    const month = String(d.getMonth() + 1).padStart(2, "0")
+    const year = d.getFullYear()
+    return `${day}-${month}-${year}`
+  }
+  return String(dateVal)
+}
+
+const formatFollowUpDate = (dateVal?: any) => {
+  if (!dateVal) return "-"
+  try {
+    const d = new Date(dateVal)
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })
+    }
+  } catch (e) {}
+  return String(dateVal)
+}
+
 export default function CreateInvoicePage() {
   const router = useRouter()
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -1580,7 +1609,7 @@ export default function CreateInvoicePage() {
                         {generatedBill.invoiceNo}
                       </div>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-bold mt-1">Date: {generatedBill.date}</p>
+                    <p className="text-[11px] text-slate-400 font-bold mt-1">Date: {formatReceiptDate(generatedBill.date)}</p>
                   </div>
                 </div>
 
@@ -1595,13 +1624,13 @@ export default function CreateInvoicePage() {
                     <span>{generatedBill.patientId}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Age / Gender</span>
-                    <span>{generatedBill.age ? `${generatedBill.age} yrs` : "-"} / {generatedBill.gender || "Male"}</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Gender</span>
+                    <span className="capitalize">{generatedBill.gender || "Male"}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Token No</span>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-purple-100/70 text-purple-800 border border-purple-200 font-mono font-black text-xs">
-                      #{generatedBill.tokenNo || "TK-01"}
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Next Checkup Date</span>
+                    <span className="font-extrabold text-emerald-700">
+                      {formatFollowUpDate(generatedBill.nextFollowUpDate)}
                     </span>
                   </div>
 
@@ -1872,11 +1901,6 @@ export default function CreateInvoicePage() {
                 {/* Follow-up Note & Signatures */}
                 <div className="border-t border-slate-200 pt-3 print:pt-1.5 flex justify-between items-end text-xs">
                   <div>
-                    {generatedBill.nextFollowUpDate && (
-                      <p className="font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg inline-block border border-emerald-100">
-                        📅 Next Checkup Date: {new Date(generatedBill.nextFollowUpDate).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
-                    )}
                     <p className="text-[10px] text-slate-400 mt-2 font-semibold">Thank you for visiting KSV Healthcare! Wish you a healthy speedy recovery.</p>
                   </div>
 

@@ -88,6 +88,15 @@ export function numberToIndianWords(amount: number, prefix: string = "INR", suff
 
   words = words.trim()
 
+  if (prefix === "Rupees") {
+    if (decimalPart > 0) {
+      const paiseWords = convertGroup(decimalPart)
+      const wholePart = words ? `${words} and ` : ""
+      return `${wholePart}${paiseWords} Rupees ${suffix}`.replace(/\s+/g, " ").trim()
+    }
+    return `Rupees ${words} ${suffix}`.replace(/\s+/g, " ").trim()
+  }
+
   let result = prefix ? `${prefix} ${words}` : words
 
   if (decimalPart > 0) {
