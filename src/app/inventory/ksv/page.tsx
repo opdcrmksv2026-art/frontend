@@ -47,6 +47,8 @@ import {
   FlaskConical
 } from 'lucide-react'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
 export default function KsvPage() {
   // State for data
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
@@ -147,6 +149,74 @@ export default function KsvPage() {
 
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
+
+      // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) ---
+      const fetchDatabaseData = async () => {
+        try {
+          // 1. Fetch live product catalog from database
+          const catRes = await fetch(`${API_URL}/api/ksv/catalog`)
+          if (catRes.ok) {
+            const dbCatalog: CatalogItem[] = await catRes.json()
+            if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
+              setCatalog(dbCatalog)
+              localStorage.setItem('ksv_app_catalog', JSON.stringify(dbCatalog))
+            } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {
+              // Initial database sync: Seed current catalog into MongoDB
+              for (const it of parsedCatalog) {
+                try {
+                  await fetch(`${API_URL}/api/ksv/catalog`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: it.name,
+                      hsnCode: it.hsnCode || '',
+                      defaultUnit: it.defaultUnit || 'PCS',
+                      defaultRate: Number(it.defaultRate) || 0,
+                      defaultTaxRate: Number(it.defaultTaxRate) || 0,
+                      description: it.description || '',
+                      category: it.category || 'medicine',
+                      quantity: Number(it.quantity) || 0
+                    })
+                  })
+                } catch (_) {}
+              }
+            }
+          }
+
+          // 2. Fetch live invoices from database
+          const invRes = await fetch(`${API_URL}/api/ksv/invoices`)
+          if (invRes.ok) {
+            const dbInvoices: KiyavaInvoice[] = await invRes.json()
+            if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
+              setInvoices(dbInvoices)
+              localStorage.setItem('ksv_app_invoices', JSON.stringify(dbInvoices))
+            }
+          }
+
+          // 3. Fetch live parties from database
+          const partiesRes = await fetch(`${API_URL}/api/ksv/parties`)
+          if (partiesRes.ok) {
+            const dbParties = await partiesRes.json()
+            if (Array.isArray(dbParties) && dbParties.length > 0) {
+              setParties(dbParties)
+              localStorage.setItem('ksv_app_parties', JSON.stringify(dbParties))
+            }
+          }
+
+          // 4. Fetch live companies from database
+          const compRes = await fetch(`${API_URL}/api/ksv/companies`)
+          if (compRes.ok) {
+            const dbCompanies = await compRes.json()
+            if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
+              setCompanies(dbCompanies)
+              localStorage.setItem('ksv_app_companies_v2', JSON.stringify(dbCompanies))
+            }
+          }
+        } catch (dbErr) {
+          console.warn('Backend database fetch offline or network error, continuing with local storage:', dbErr)
+        }
+      }
+      fetchDatabaseData()
     } catch (e) {
       console.error('Failed to load KSV storage data:', e)
       setCompanies(DEFAULT_KSV_COMPANIES)
@@ -263,6 +333,23 @@ export default function KsvPage() {
       }
     }
 
+    // Persist to MongoDB database
+    try {
+      if (exists) {
+        fetch(`${API_URL}/api/ksv/invoices/${invoice.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        }).catch(() => {})
+      } else {
+        fetch(`${API_URL}/api/ksv/invoices`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        }).catch(() => {})
+      }
+    } catch (e) {}
+
     if (shouldPrint) {
       setSelectedInvoiceForPrint(invoice)
     } else {
@@ -275,6 +362,9 @@ export default function KsvPage() {
     if (confirm('Are you sure you want to delete this invoice from KSV ledger?')) {
       const updated = invoices.filter((inv) => inv.id !== id)
       saveInvoices(updated)
+      try {
+        fetch(`${API_URL}/api/ksv/invoices/${id}`, { method: 'DELETE' }).catch(() => {})
+      } catch (e) {}
     }
   }
 
@@ -302,11 +392,29 @@ export default function KsvPage() {
     saveCompanies(updated)
     setIsCompanyModalOpen(false)
     setEditingCompany(null)
+    try {
+      if (editingCompany) {
+        fetch(`${API_URL}/api/ksv/companies/${company.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(company)
+        }).catch(() => {})
+      } else {
+        fetch(`${API_URL}/api/ksv/companies`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(company)
+        }).catch(() => {})
+      }
+    } catch (e) {}
   }
 
   const handleDeleteCompany = (id: string) => {
     if (confirm('Delete this company profile?')) {
       saveCompanies(companies.filter((c) => c.id !== id))
+      try {
+        fetch(`${API_URL}/api/ksv/companies/${id}`, { method: 'DELETE' }).catch(() => {})
+      } catch (e) {}
     }
   }
 
@@ -321,30 +429,102 @@ export default function KsvPage() {
     saveParties(updated)
     setIsPartyModalOpen(false)
     setEditingParty(null)
+    try {
+      if (editingParty) {
+        fetch(`${API_URL}/api/ksv/parties/${party.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(party)
+        }).catch(() => {})
+      } else {
+        fetch(`${API_URL}/api/ksv/parties`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(party)
+        }).catch(() => {})
+      }
+    } catch (e) {}
   }
 
   const handleDeleteParty = (id: string) => {
     if (confirm('Delete this party / buyer profile?')) {
       saveParties(parties.filter((p) => p.id !== id))
+      try {
+        fetch(`${API_URL}/api/ksv/parties/${id}`, { method: 'DELETE' }).catch(() => {})
+      } catch (e) {}
     }
   }
 
-  // Catalog Handlers
-  const handleSaveCatalogItem = (item: CatalogItem) => {
+  // Catalog Handlers - Integrated with MongoDB Database
+  const handleSaveCatalogItem = async (item: CatalogItem) => {
+    const isEditing = Boolean(editingCatalogItem && editingCatalogItem.id)
+    const originalId = editingCatalogItem?.id || item.id
+
+    // 1. Optimistic Update in State & LocalStorage
     let updated: CatalogItem[]
-    if (editingCatalogItem) {
-      updated = catalog.map((cat) => (cat.id === item.id ? item : cat))
+    if (isEditing) {
+      updated = catalog.map((cat) => (cat.id === originalId ? item : cat))
     } else {
       updated = [...catalog, { ...item, id: item.id || `cat_${Date.now()}` }]
     }
     saveCatalog(updated)
     setIsCatalogModalOpen(false)
     setEditingCatalogItem(null)
+
+    // 2. Persist to MongoDB database via Prisma backend
+    try {
+      const payload = {
+        name: item.name,
+        hsnCode: item.hsnCode || '',
+        defaultUnit: item.defaultUnit || 'PCS',
+        defaultRate: Number(item.defaultRate) || 0,
+        defaultTaxRate: Number(item.defaultTaxRate) || 0,
+        description: item.description || '',
+        category: item.category || 'medicine',
+        quantity: Number(item.quantity) || 0
+      }
+
+      if (isEditing && originalId && !originalId.startsWith('cat_')) {
+        const res = await fetch(`${API_URL}/api/ksv/catalog/${originalId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        if (res.ok) {
+          const savedData = await res.json()
+          setCatalog((prev) =>
+            prev.map((c) => (c.id === originalId ? { ...c, ...savedData, id: savedData.id || originalId } : c))
+          )
+        }
+      } else {
+        const res = await fetch(`${API_URL}/api/ksv/catalog`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        if (res.ok) {
+          const savedData = await res.json()
+          if (savedData && savedData.id) {
+            const finalList = updated.map((c) =>
+              c.name === item.name && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
+            )
+            saveCatalog(finalList)
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Backend database sync offline, product saved locally:', err)
+    }
   }
 
-  const handleDeleteCatalogItem = (id: string) => {
+  const handleDeleteCatalogItem = async (id: string) => {
     if (confirm('Delete this catalog product item?')) {
       saveCatalog(catalog.filter((cat) => cat.id !== id))
+      try {
+        await fetch(`${API_URL}/api/ksv/catalog/${id}`, { method: 'DELETE' })
+      } catch (err) {
+        console.warn('Could not delete catalog product from database:', err)
+      }
     }
   }
 

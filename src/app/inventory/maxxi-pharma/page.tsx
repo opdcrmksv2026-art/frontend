@@ -197,7 +197,7 @@ export default function MaxxiPharmaPage() {
           const catRes = await fetch(`${API_URL}/api/maxxi/catalog`)
           if (catRes.ok) {
             const dbCatalog: CatalogItem[] = await catRes.json()
-            if (Array.isArray(dbCatalog)) {
+            if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
               // Strip any legacy dummy items if present in DB
               const cleanCatalog = dbCatalog.filter((item) => {
                 const id = item.id || ''
@@ -205,6 +205,26 @@ export default function MaxxiPharmaPage() {
               })
               setCatalog(cleanCatalog)
               localStorage.setItem('maxxi_app_catalog', JSON.stringify(cleanCatalog))
+            } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {
+              // Initial database sync: Seed current catalog into MongoDB
+              for (const it of parsedCatalog) {
+                try {
+                  await fetch(`${API_URL}/api/maxxi/catalog`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: it.name,
+                      hsnCode: it.hsnCode || '',
+                      defaultUnit: it.defaultUnit || 'NOS',
+                      defaultRate: Number(it.defaultRate) || 0,
+                      defaultTaxRate: Number(it.defaultTaxRate) || 0,
+                      description: it.description || '',
+                      category: it.category || 'medicine',
+                      quantity: Number(it.quantity) || 0
+                    })
+                  })
+                } catch (_) {}
+              }
             }
           }
 

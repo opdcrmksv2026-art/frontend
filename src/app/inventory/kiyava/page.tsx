@@ -44,6 +44,8 @@ import {
   FlaskConical
 } from 'lucide-react'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
 export default function KiyavaPage() {
   // State for data
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
@@ -125,6 +127,84 @@ export default function KiyavaPage() {
       setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_INVOICES)
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
+
+      // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) ---
+      const fetchDatabaseData = async () => {
+        try {
+          // 1. Fetch live product catalog from database
+          const catRes = await fetch(`${API_URL}/api/kiyava/catalog`)
+          if (catRes.ok) {
+            const dbCatalog: CatalogItem[] = await catRes.json()
+            if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
+              setCatalog(dbCatalog)
+              localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(dbCatalog))
+            } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {
+              // Initial database sync: Seed current catalog into MongoDB
+              for (const it of parsedCatalog) {
+                try {
+                  await fetch(`${API_URL}/api/kiyava/catalog`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: it.name,
+                      hsnCode: it.hsnCode || '',
+                      defaultUnit: it.defaultUnit || 'kg',
+                      defaultRate: Number(it.defaultRate) || 0,
+                      defaultTaxRate: Number(it.defaultTaxRate) || 0,
+                      description: it.description || '',
+                      category: it.category || 'herb',
+                      quantity: Number(it.quantity) || 0
+                    })
+                  })
+                } catch (_) {}
+              }
+            }
+          }
+
+          // 2. Fetch live invoices from database
+          const invRes = await fetch(`${API_URL}/api/kiyava/invoices`)
+          if (invRes.ok) {
+            const dbInvoices: KiyavaInvoice[] = await invRes.json()
+            if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
+              setInvoices(dbInvoices)
+              localStorage.setItem('ksv_kiyava_invoices', JSON.stringify(dbInvoices))
+            }
+          }
+
+          // 3. Fetch live parties from database
+          const partiesRes = await fetch(`${API_URL}/api/kiyava/parties`)
+          if (partiesRes.ok) {
+            const dbParties = await partiesRes.json()
+            if (Array.isArray(dbParties) && dbParties.length > 0) {
+              setParties(dbParties)
+              localStorage.setItem('ksv_kiyava_parties', JSON.stringify(dbParties))
+            }
+          }
+
+          // 4. Fetch live companies from database
+          const compRes = await fetch(`${API_URL}/api/kiyava/companies`)
+          if (compRes.ok) {
+            const dbCompanies = await compRes.json()
+            if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
+              setCompanies(dbCompanies)
+              localStorage.setItem('ksv_kiyava_companies', JSON.stringify(dbCompanies))
+            }
+          }
+
+          // 5. Fetch live manufacturing logs
+          const mfgRes = await fetch(`${API_URL}/api/kiyava/manufacturing`)
+          if (mfgRes.ok) {
+            const dbMfg = await mfgRes.json()
+            if (Array.isArray(dbMfg) && dbMfg.length > 0) {
+              setManufacturingLogs(dbMfg)
+              localStorage.setItem('ksv_kiyava_manufacturing', JSON.stringify(dbMfg))
+            }
+          }
+        } catch (dbErr) {
+          console.warn('Backend database fetch offline or network error, continuing with local storage:', dbErr)
+        }
+      }
+      fetchDatabaseData()
     } catch (e) {
       console.error('Failed to load Kiyava storage data:', e)
       setCompanies(DEFAULT_COMPANIES)
@@ -194,10 +274,15 @@ export default function KiyavaPage() {
     }
   }
 
-  const handleDeleteManufacturingLog = (id: string) => {
+  const handleDeleteManufacturingLog = async (id: string) => {
     if (confirm('Delete this manufacturing entry? Stock will be updated accordingly.')) {
       const updated = manufacturingLogs.filter((l) => l.id !== id)
       saveManufacturingLogs(updated)
+      try {
+        await fetch(`${API_URL}/api/kiyava/manufacturing/${id}`, { method: 'DELETE' })
+      } catch (err) {
+        console.warn('Could not delete manufacturing log from database:', err)
+      }
     }
   }
 
@@ -212,6 +297,23 @@ export default function KiyavaPage() {
     }
     saveInvoices(updated)
     setEditingInvoice(null)
+
+    // Sync to MongoDB database
+    try {
+      if (exists) {
+        fetch(`${API_URL}/api/kiyava/invoices/${invoice.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        }).catch(() => {})
+      } else {
+        fetch(`${API_URL}/api/kiyava/invoices`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        }).catch(() => {})
+      }
+    } catch (e) {}
 
     // Auto-sync to KSV as PURCHASE if Kiyava is selling to KSV
     const buyerNameStr = invoice.buyer.name.toLowerCase()
@@ -272,6 +374,9 @@ export default function KiyavaPage() {
     if (confirm('Are you sure you want to delete this invoice from Kiyava ledger?')) {
       const updated = invoices.filter((inv) => inv.id !== id)
       saveInvoices(updated)
+      try {
+        fetch(`${API_URL}/api/kiyava/invoices/${id}`, { method: 'DELETE' }).catch(() => {})
+      } catch (e) {}
     }
   }
 
@@ -296,6 +401,21 @@ export default function KiyavaPage() {
       ? companies.map((c) => (c.id === company.id ? company : c))
       : [...companies, company]
     saveCompanies(updated)
+    try {
+      if (exists) {
+        fetch(`${API_URL}/api/kiyava/companies/${company.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(company)
+        }).catch(() => {})
+      } else {
+        fetch(`${API_URL}/api/kiyava/companies`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(company)
+        }).catch(() => {})
+      }
+    } catch (e) {}
   }
 
   const handleDeleteCompany = (id: string) => {
@@ -306,6 +426,9 @@ export default function KiyavaPage() {
     if (confirm('Delete this company profile?')) {
       const updated = companies.filter((c) => c.id !== id)
       saveCompanies(updated)
+      try {
+        fetch(`${API_URL}/api/kiyava/companies/${id}`, { method: 'DELETE' }).catch(() => {})
+      } catch (e) {}
     }
   }
 
@@ -316,22 +439,90 @@ export default function KiyavaPage() {
       ? parties.map((p) => (p.id === party.id ? party : p))
       : [...parties, party]
     saveParties(updated)
+    try {
+      if (exists) {
+        fetch(`${API_URL}/api/kiyava/parties/${party.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(party)
+        }).catch(() => {})
+      } else {
+        fetch(`${API_URL}/api/kiyava/parties`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(party)
+        }).catch(() => {})
+      }
+    } catch (e) {}
   }
 
   const handleDeleteParty = (id: string) => {
     if (confirm('Delete this buyer / party?')) {
       const updated = parties.filter((p) => p.id !== id)
       saveParties(updated)
+      try {
+        fetch(`${API_URL}/api/kiyava/parties/${id}`, { method: 'DELETE' }).catch(() => {})
+      } catch (e) {}
     }
   }
 
-  // Catalog Item Handlers
-  const handleSaveCatalogItem = (item: CatalogItem) => {
+  // Catalog Item Handlers - Integrated with MongoDB Database
+  const handleSaveCatalogItem = async (item: CatalogItem) => {
     const exists = catalog.some((c) => c.id === item.id)
+    const originalId = item.id
+
+    // 1. Optimistic Update in State & LocalStorage
     const updated = exists
       ? catalog.map((c) => (c.id === item.id ? item : c))
       : [...catalog, item]
     saveCatalog(updated)
+    setIsCatalogModalOpen(false)
+    setEditingCatalogItem(null)
+
+    // 2. Persist to MongoDB database via Prisma backend
+    try {
+      const payload = {
+        name: item.name,
+        hsnCode: item.hsnCode || '',
+        defaultUnit: item.defaultUnit || 'kg',
+        defaultRate: Number(item.defaultRate) || 0,
+        defaultTaxRate: Number(item.defaultTaxRate) || 0,
+        description: item.description || '',
+        category: item.category || 'herb',
+        quantity: Number(item.quantity) || 0
+      }
+
+      if (exists && originalId && !originalId.startsWith('cat_')) {
+        const res = await fetch(`${API_URL}/api/kiyava/catalog/${originalId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        if (res.ok) {
+          const savedData = await res.json()
+          setCatalog((prev) =>
+            prev.map((c) => (c.id === originalId ? { ...c, ...savedData, id: savedData.id || originalId } : c))
+          )
+        }
+      } else {
+        const res = await fetch(`${API_URL}/api/kiyava/catalog`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        if (res.ok) {
+          const savedData = await res.json()
+          if (savedData && savedData.id) {
+            const finalList = updated.map((c) =>
+              c.name === item.name && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
+            )
+            saveCatalog(finalList)
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Backend database sync offline, product saved locally:', err)
+    }
 
     // Automatically sync with Opening Stock
     const existingStock = openingStock.find((s) => s.itemId === item.id)
@@ -355,10 +546,15 @@ export default function KiyavaPage() {
     }
   }
 
-  const handleDeleteCatalogItem = (id: string) => {
+  const handleDeleteCatalogItem = async (id: string) => {
     if (confirm('Delete this item from catalog?')) {
       const updated = catalog.filter((c) => c.id !== id)
       saveCatalog(updated)
+      try {
+        await fetch(`${API_URL}/api/kiyava/catalog/${id}`, { method: 'DELETE' })
+      } catch (err) {
+        console.warn('Could not delete catalog item from database:', err)
+      }
     }
   }
 
