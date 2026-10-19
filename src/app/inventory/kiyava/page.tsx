@@ -44,7 +44,7 @@ import {
   FlaskConical
 } from 'lucide-react'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+import { API_URL } from '@/lib/apiConfig'
 
 export default function KiyavaPage() {
   // State for data

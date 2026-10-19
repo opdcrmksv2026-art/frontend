@@ -27,6 +27,7 @@ import {
 
 import { calculateGSTInvoice, getStateCode, STATE_GST_CODES } from "@/utils/gstCalculator"
 import { numberToIndianWords } from "@/lib/tallyNumberToWords"
+import { API_URL } from "@/lib/apiConfig"
 
 interface PaymentRecord {
   id: string
@@ -92,7 +93,6 @@ const formatFollowUpDate = (dateVal?: any) => {
 }
 
 export default function PaymentsPage() {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
   const [records, setRecords] = useState<PaymentRecord[]>([])
   const [trashRecords, setTrashRecords] = useState<PaymentRecord[]>([])

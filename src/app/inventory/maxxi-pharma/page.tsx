@@ -43,7 +43,7 @@ import {
   TrendingUp
 } from 'lucide-react'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+import { API_URL } from '@/lib/apiConfig'
 
 export default function MaxxiPharmaPage() {
   // State for data
@@ -91,7 +91,8 @@ export default function MaxxiPharmaPage() {
             (t.products || []).map((p: any, idx: number) => ({
               id: `${invNo}_item_${idx}`,
               description: p.name,
-              hsnCode: p.hsnCode || '',
+              hsnSac: p.hsnSac || p.hsnCode || '',
+              hsnCode: p.hsnCode || p.hsnSac || '',
               quantity: parseFloat(p.quantity || '1') || 1,
               unit: 'NOS',
               rate: Number(p.rate) || 0,

@@ -30,6 +30,7 @@ import {
 
 import { calculateGSTInvoice, findDiscountForTargetPayable, getStateCode, STATE_GST_CODES } from "@/utils/gstCalculator"
 import { numberToIndianWords } from "@/lib/tallyNumberToWords"
+import { API_URL } from "@/lib/apiConfig"
 
 interface TreatmentProduct {
   name: string
@@ -123,7 +124,6 @@ const formatFollowUpDate = (dateVal?: any) => {
 
 export default function CreateInvoicePage() {
   const router = useRouter()
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
   // Master lists
   const [patients, setPatients] = useState<Patient[]>([])

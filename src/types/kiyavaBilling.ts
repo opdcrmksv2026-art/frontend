@@ -54,6 +54,7 @@ export interface InvoiceItemRow {
   id: string
   description: string
   hsnSac: string
+  hsnCode?: string // Flexible alias across OPD and B2B invoices
   quantity: number
   unit: string
   rate: number // Tax exclusive rate

@@ -18,6 +18,7 @@ import {
   UserCheck,
   ClipboardList
 } from "lucide-react"
+import { API_URL } from "@/lib/apiConfig"
 
 interface Visit {
   id: string;
@@ -110,7 +111,6 @@ export default function PatientHistoryPage() {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 1500)
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
         let list: Patient[] = []
         try {
           const res = await fetch(`${API_URL}/api/patients`, { signal: controller.signal })
@@ -165,7 +165,6 @@ export default function PatientHistoryPage() {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 1500)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       let foundPatient: any = null
       let ordersList: any[] = []
 
@@ -256,7 +255,6 @@ export default function PatientHistoryPage() {
     setModalError("")
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       const res = await fetch(`${API_URL}/api/patients/${selectedPatient.uniqueId}/history`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

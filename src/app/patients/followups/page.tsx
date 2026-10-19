@@ -17,6 +17,7 @@ import {
   RefreshCw,
   SearchCode
 } from "lucide-react"
+import { API_URL } from "@/lib/apiConfig"
 
 interface Patient {
   id: string;
@@ -92,7 +93,6 @@ export default function FollowUpsPage() {
     const timer = setTimeout(() => controller.abort(), 1500)
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       let list: Patient[] = []
       try {
         const res = await fetch(`${API_URL}/api/patients`, { signal: controller.signal })
@@ -159,7 +159,6 @@ export default function FollowUpsPage() {
     setModalLoading(true)
     setModalError("")
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       const res = await fetch(`${API_URL}/api/patients/${selectedPatient.uniqueId}/followup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -197,7 +196,6 @@ export default function FollowUpsPage() {
     setModalLoading(true)
     setModalError("")
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       const res = await fetch(`${API_URL}/api/patients/${activePatient.uniqueId}/followup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,7 +226,6 @@ export default function FollowUpsPage() {
     setModalLoading(true)
     setModalError("")
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       const res = await fetch(`${API_URL}/api/patients/${activePatient.uniqueId}/followup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

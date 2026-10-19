@@ -20,6 +20,7 @@ import {
   CheckCircle2
 } from "lucide-react"
 import { getStateCode } from "@/utils/gstCalculator"
+import { API_URL } from "@/lib/apiConfig"
 
 const INDIAN_STATES = [
   "Himachal Pradesh",
@@ -87,19 +88,24 @@ export default function NewPatientPage() {
     setError("")
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       const payload = {
         ...formData,
         age: formData.age ? parseInt(formData.age) : null,
       }
 
-      await fetch(`${API_URL}/api/patients/register`, {
+      const res = await fetch(`${API_URL}/api/patients/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }).catch((err) => {
         console.warn("Backend register API unavailable, saving locally:", err)
+        return null
       })
+
+      if (res && !res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || "Failed to register patient")
+      }
 
       // Also save to offline patients list for local lookup
       try {

@@ -93,7 +93,7 @@ export function numberToIndianWords(amount: number, prefix: string = "INR", suff
   if (prefix === "Rupees") {
     if (decimalPart > 0) {
       const paiseWords = convertGroup(decimalPart)
-      const wholePart = words ? `${words} and ` : ""
+      const wholePart = words ? `${words} Rupees and ` : ""
       return `${wholePart}${paiseWords} Paise ${suffix}`.replace(/\s+/g, " ").trim()
     }
     return `${words} Rupees ${suffix}`.replace(/\s+/g, " ").trim()
@@ -103,7 +103,7 @@ export function numberToIndianWords(amount: number, prefix: string = "INR", suff
 
   if (decimalPart > 0) {
     const paiseWords = convertGroup(decimalPart)
-    result += ` and ${paiseWords} paise`
+    result += words ? ` and ${paiseWords} Paise` : ` ${paiseWords} Paise`
   }
 
   if (suffix) {

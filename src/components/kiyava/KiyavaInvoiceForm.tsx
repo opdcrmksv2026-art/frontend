@@ -10,6 +10,7 @@ import {
   KiyavaInvoice
 } from '@/types/kiyavaBilling'
 import { numberToIndianWords } from '@/lib/tallyNumberToWords'
+import { API_URL } from '@/lib/apiConfig'
 import {
   Plus,
   Trash2,
@@ -73,7 +74,6 @@ export default function KiyavaInvoiceForm({
         return
       }
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
         const res = await fetch(`${API_URL}/api/patients`)
         if (res.ok) {
           const data = await res.json()

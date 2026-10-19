@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react"
+import { API_URL } from "@/lib/apiConfig"
 
 interface Patient {
   id: string;
@@ -93,7 +94,6 @@ export default function PatientsListPage() {
     const timer = setTimeout(() => controller.abort(), 1500)
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       let patientList: Patient[] = []
 
       try {
