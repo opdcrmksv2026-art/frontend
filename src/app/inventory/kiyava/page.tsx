@@ -13,6 +13,7 @@ import {
   DEFAULT_COMPANIES,
   DEFAULT_PARTIES,
   DEFAULT_CATALOG,
+  DUMMY_CATALOG_NAMES,
   SEEDED_INVOICES
 } from '@/lib/kiyavaDefaults'
 import { DEFAULT_KSV_CATALOG } from '@/lib/ksvDefaults'
@@ -98,8 +99,13 @@ export default function KiyavaPage() {
       setCompanies(parsedCompanies)
       setParties(storedParties ? JSON.parse(storedParties) : DEFAULT_PARTIES)
       
-      // Migration: Ensure all finished goods from manufacturing logs are in the catalog
-      let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : DEFAULT_CATALOG
+      // Only show user-added catalog items (clean by default)
+      let parsedCatalog: CatalogItem[] = storedCatalog ? JSON.parse(storedCatalog) : []
+      const dummySet = new Set((DUMMY_CATALOG_NAMES || []).map((n: string) => n.toLowerCase()))
+      parsedCatalog = parsedCatalog.filter(
+        (c: any) => c.name && !dummySet.has(c.name.trim().toLowerCase()) && !c.id?.startsWith('cat_')
+      )
+
       if (storedMfgLogs) {
         const parsedLogs = JSON.parse(storedMfgLogs)
         let catalogChanged = false
@@ -123,6 +129,7 @@ export default function KiyavaPage() {
         }
       }
       setCatalog(parsedCatalog)
+      localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(parsedCatalog))
 
       setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_INVOICES)
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
@@ -131,33 +138,20 @@ export default function KiyavaPage() {
       // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) ---
       const fetchDatabaseData = async () => {
         try {
+          // Purge default dummy items from database if any exist
+          fetch(`${API_URL}/api/kiyava/catalog/purge-defaults`, { method: 'POST' }).catch(() => {})
+
           // 1. Fetch live product catalog from database
           const catRes = await fetch(`${API_URL}/api/kiyava/catalog`)
           if (catRes.ok) {
             const dbCatalog: CatalogItem[] = await catRes.json()
-            if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
-              setCatalog(dbCatalog)
-              localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(dbCatalog))
-            } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {
-              // Initial database sync: Seed current catalog into MongoDB
-              for (const it of parsedCatalog) {
-                try {
-                  await fetch(`${API_URL}/api/kiyava/catalog`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      name: it.name,
-                      hsnCode: it.hsnCode || '',
-                      defaultUnit: it.defaultUnit || 'kg',
-                      defaultRate: Number(it.defaultRate) || 0,
-                      defaultTaxRate: Number(it.defaultTaxRate) || 0,
-                      description: it.description || '',
-                      category: it.category || 'herb',
-                      quantity: Number(it.quantity) || 0
-                    })
-                  })
-                } catch (_) {}
-              }
+            if (Array.isArray(dbCatalog)) {
+              // Filter out any lingering default dummy items
+              const cleanDbCatalog = dbCatalog.filter(
+                (c: any) => c.name && !dummySet.has(c.name.trim().toLowerCase()) && !c.id?.startsWith('cat_')
+              )
+              setCatalog(cleanDbCatalog)
+              localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(cleanDbCatalog))
             }
           }
 
@@ -209,7 +203,7 @@ export default function KiyavaPage() {
       console.error('Failed to load Kiyava storage data:', e)
       setCompanies(DEFAULT_COMPANIES)
       setParties(DEFAULT_PARTIES)
-      setCatalog(DEFAULT_CATALOG)
+      setCatalog([])
       setInvoices(SEEDED_INVOICES)
       setOpeningStock([])
       setManufacturingLogs([])
@@ -489,7 +483,8 @@ export default function KiyavaPage() {
         defaultTaxRate: Number(item.defaultTaxRate) || 0,
         description: item.description || '',
         category: item.category || 'herb',
-        quantity: Number(item.quantity) || 0
+        quantity: Number(item.quantity) || 0,
+        packing: item.packing || ''
       }
 
       if (exists && originalId && !originalId.startsWith('cat_')) {
@@ -546,14 +541,28 @@ export default function KiyavaPage() {
     }
   }
 
-  const handleDeleteCatalogItem = async (id: string) => {
-    if (confirm('Delete this item from catalog?')) {
-      const updated = catalog.filter((c) => c.id !== id)
+  const handleDeleteCatalogItem = async (id: string, name?: string) => {
+    if (confirm(`Delete "${name || 'this item'}" from catalog?`)) {
+      const updated = catalog.filter((c) => c.id !== id && (!name || c.name !== name))
       saveCatalog(updated)
       try {
         await fetch(`${API_URL}/api/kiyava/catalog/${id}`, { method: 'DELETE' })
+        if (name) {
+          await fetch(`${API_URL}/api/kiyava/catalog/${encodeURIComponent(name)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (err) {
         console.warn('Could not delete catalog item from database:', err)
+      }
+    }
+  }
+
+  const handleClearCatalog = async () => {
+    if (confirm('Are you sure you want to delete all products from the catalog? Only products you add will appear.')) {
+      saveCatalog([])
+      try {
+        await fetch(`${API_URL}/api/kiyava/catalog/all`, { method: 'DELETE' })
+      } catch (err) {
+        console.warn('Could not clear catalog in database:', err)
       }
     }
   }
@@ -585,7 +594,7 @@ export default function KiyavaPage() {
       
       setCompanies(DEFAULT_COMPANIES)
       setParties(DEFAULT_PARTIES)
-      setCatalog(DEFAULT_CATALOG)
+      setCatalog([])
       setInvoices(SEEDED_INVOICES)
       setOpeningStock([])
       setManufacturingLogs([])
@@ -1123,6 +1132,15 @@ export default function KiyavaPage() {
               <p className="text-xs text-slate-400 font-medium">Manage HSN codes, default rates &amp; GST tax percentages</p>
             </div>
             <div className="flex items-center gap-3">
+              {catalog.length > 0 && (
+                <button
+                  onClick={handleClearCatalog}
+                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                  title="Clear all products"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Clear All
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('opening-stock')}
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-purple-600/20"
@@ -1149,6 +1167,7 @@ export default function KiyavaPage() {
                     <th className="p-3 pl-5">Item / Herb Name</th>
                     <th className="p-3 text-center">HSN/SAC</th>
                     <th className="p-3 text-center">Unit</th>
+                    <th className="p-3 text-center">Packing</th>
                     <th className="p-3 text-right">Quantity</th>
                     <th className="p-3 text-right">Default Rate (₹)</th>
                     <th className="p-3 text-center">GST Rate</th>
@@ -1156,7 +1175,18 @@ export default function KiyavaPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
-                  {catalog.map((item) => {
+                  {catalog.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-12 text-center text-slate-400">
+                        <Package className="w-10 h-10 mx-auto mb-2 text-slate-300 stroke-[1.5]" />
+                        <p className="font-bold text-sm text-slate-700">No products in catalog</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Click &quot;+ Add Item&quot; above to add your products.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    catalog.map((item) => {
                     const openingEntry = openingStock.find((s) => s.itemId === item.id)
                     const openingQty = openingEntry?.quantity || Number(item.quantity) || 0
                     
@@ -1191,6 +1221,15 @@ export default function KiyavaPage() {
                       <td className="p-3 pl-5 font-bold text-slate-900">{item.name}</td>
                       <td className="p-3 text-center font-mono font-bold text-slate-700">{item.hsnCode}</td>
                       <td className="p-3 text-center font-medium text-slate-700">{item.defaultUnit}</td>
+                      <td className="p-3 text-center font-medium text-slate-600">
+                        {item.packing ? (
+                          <span className="inline-block px-2 py-0.5 bg-slate-100 rounded-md font-medium text-[11px] text-slate-700 border border-slate-200">
+                            {item.packing}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
                       <td className="p-3 text-right">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded font-black font-mono text-xs ${currentStock <= 0 ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
                           {currentStock}
@@ -1214,15 +1253,16 @@ export default function KiyavaPage() {
                             <Edit className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDeleteCatalogItem(item.id)}
+                            onClick={() => handleDeleteCatalogItem(item.id, item.name)}
                             className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                            title="Delete item"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
                     </tr>
-                  )})}
+                  )}))}
                 </tbody>
               </table>
             </div>

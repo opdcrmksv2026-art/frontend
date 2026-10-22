@@ -26,7 +26,8 @@ export default function CatalogModal({
     defaultTaxRate: 5,
     category: 'herb',
     description: '',
-    quantity: 0
+    quantity: 0,
+    packing: ''
   })
 
   useEffect(() => {
@@ -42,7 +43,8 @@ export default function CatalogModal({
         defaultTaxRate: 5,
         category: 'herb',
         description: '',
-        quantity: 0
+        quantity: 0,
+        packing: ''
       })
     }
   }, [initialData, isOpen])
@@ -157,6 +159,21 @@ export default function CatalogModal({
 
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Packing
+              </label>
+              <input
+                type="text"
+                value={formData.packing || ''}
+                onChange={(e) => setFormData({ ...formData, packing: e.target.value })}
+                placeholder="e.g. 50 kg Bag, 100 pcs Box"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
                 Default Rate (₹) *
               </label>
               <input
@@ -170,9 +187,7 @@ export default function CatalogModal({
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-800 outline-none focus:border-amber-500 text-right"
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
                 GST Rate (%)
@@ -189,7 +204,9 @@ export default function CatalogModal({
                 <option value={28}>28% (Luxury)</option>
               </select>
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
                 Quantity
@@ -204,19 +221,19 @@ export default function CatalogModal({
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-800 outline-none focus:border-amber-500 text-right"
               />
             </div>
-          </div>
 
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-              Description / Notes
-            </label>
-            <input
-              type="text"
-              value={formData.description || ''}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="e.g. Dry Bael Giri Herb A-grade"
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:border-amber-500"
-            />
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Description / Notes
+              </label>
+              <input
+                type="text"
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="e.g. Dry Bael Giri Herb A-grade"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:border-amber-500"
+              />
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">

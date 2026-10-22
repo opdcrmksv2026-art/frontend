@@ -48,6 +48,7 @@ export interface CatalogItem {
   description?: string
   category?: 'raw_material' | 'packaging' | 'herb' | 'medicine' | 'general'
   quantity?: number
+  packing?: string
 }
 
 export interface InvoiceItemRow {

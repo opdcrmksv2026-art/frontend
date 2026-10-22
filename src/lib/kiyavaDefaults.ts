@@ -82,87 +82,18 @@ export const DEFAULT_PARTIES: PartyProfile[] = [
   }
 ]
 
-export const DEFAULT_CATALOG: CatalogItem[] = [
-  {
-    id: 'cat_1',
-    name: 'JADI BUTTI BAIL GIRI',
-    hsnCode: '12119011',
-    defaultUnit: 'kg',
-    defaultRate: 180.0,
-    defaultTaxRate: 5,
-    category: 'herb',
-    description: 'Dry Bael Giri Herb'
-  },
-  {
-    id: 'cat_2',
-    name: 'Giloy',
-    hsnCode: '12119011',
-    defaultUnit: 'kg',
-    defaultRate: 120.0,
-    defaultTaxRate: 5,
-    category: 'herb',
-    description: 'Pure Giloy Stem'
-  },
-  {
-    id: 'cat_3',
-    name: 'CHOTI ELAICHI',
-    hsnCode: '09083130',
-    defaultUnit: 'kg',
-    defaultRate: 4800.0,
-    defaultTaxRate: 5,
-    category: 'herb',
-    description: 'Green Cardamom'
-  },
-  {
-    id: 'cat_4',
-    name: 'DHANIA',
-    hsnCode: '09092190',
-    defaultUnit: 'kg',
-    defaultRate: 232.5,
-    defaultTaxRate: 5,
-    category: 'herb',
-    description: 'Coriander Seeds'
-  },
-  {
-    id: 'cat_5',
-    name: 'SAT PUDINA',
-    hsnCode: '12119011',
-    defaultUnit: 'kg',
-    defaultRate: 2220.0,
-    defaultTaxRate: 5,
-    category: 'herb',
-    description: 'Menthol Crystals'
-  },
-  {
-    id: 'cat_6',
-    name: 'Katira Gond',
-    hsnCode: '13019019',
-    defaultUnit: 'kg',
-    defaultRate: 405.0,
-    defaultTaxRate: 5,
-    category: 'herb',
-    description: 'Tragacanth Gum'
-  },
-  {
-    id: 'cat_7',
-    name: '460 CC HDPE JAR WHITE',
-    hsnCode: '39233090',
-    defaultUnit: 'PCS',
-    defaultRate: 10.45,
-    defaultTaxRate: 18,
-    category: 'packaging',
-    description: 'HDPE Jar Container'
-  },
-  {
-    id: 'cat_8',
-    name: 'Injection Vial',
-    hsnCode: '701090',
-    defaultUnit: 'PCS',
-    defaultRate: 1.6,
-    defaultTaxRate: 18,
-    category: 'packaging',
-    description: 'Glass Injection Vial'
-  }
+// Clean default catalog - starts empty so only admin-added products are shown
+export const DEFAULT_CATALOG: CatalogItem[] = []
+
+export const DUMMY_CATALOG_NAMES = [
+  'JADI BUTTI BAIL GIRI',
+  'Giloy',
+  'CHOTI ELAICHI',
+  'DHANIA',
+  'SAT PUDINA',
+  'Katira Gond',
+  '460 CC HDPE JAR WHITE',
+  'Injection Vial'
 ]
 
 // NO DUMMY INVOICES - Users start clean with empty ledger

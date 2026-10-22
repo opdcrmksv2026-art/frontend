@@ -195,7 +195,10 @@ export default function StockRegisterTab({
                 <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                   <td className="p-3">
                     <div className="font-bold text-slate-900">{item.name}</div>
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">HSN: {item.hsnCode || 'N/A'} • {item.category?.replace('_', ' ').toUpperCase() || 'GENERAL'}</div>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      HSN: {item.hsnCode || 'N/A'}
+                      {item.packing ? ` • Pack: ${item.packing}` : ''} • {item.category?.replace('_', ' ').toUpperCase() || 'GENERAL'}
+                    </div>
                   </td>
                   <td className="p-3 text-right font-medium text-slate-600">
                     {item.openingQty} {item.defaultUnit}
