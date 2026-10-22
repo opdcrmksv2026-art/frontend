@@ -1132,15 +1132,6 @@ export default function KiyavaPage() {
               <p className="text-xs text-slate-400 font-medium">Manage HSN codes, default rates &amp; GST tax percentages</p>
             </div>
             <div className="flex items-center gap-3">
-              {catalog.length > 0 && (
-                <button
-                  onClick={handleClearCatalog}
-                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
-                  title="Clear all products"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Clear All
-                </button>
-              )}
               <button
                 onClick={() => setActiveTab('opening-stock')}
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-purple-600/20"
