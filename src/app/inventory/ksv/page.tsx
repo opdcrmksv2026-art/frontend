@@ -7,7 +7,8 @@ import {
   CatalogItem,
   KiyavaInvoice,
   OpeningStockEntry,
-  ManufacturingLog
+  ManufacturingLog,
+  StockTransferLog
 } from '@/types/kiyavaBilling'
 import {
   DEFAULT_KSV_COMPANIES,
@@ -43,8 +44,12 @@ import {
   ShoppingCart,
   ArrowDownLeft,
   ArrowUpRight,
+  ArrowLeftRight,
   CheckCircle2,
-  FlaskConical
+  FlaskConical,
+  Factory,
+  X,
+  Save
 } from 'lucide-react'
 
 import { API_URL } from '@/lib/apiConfig'
@@ -57,6 +62,7 @@ export default function KsvPage() {
   const [invoices, setInvoices] = useState<KiyavaInvoice[]>([])
   const [openingStock, setOpeningStock] = useState<OpeningStockEntry[]>([])
   const [manufacturingLogs, setManufacturingLogs] = useState<ManufacturingLog[]>([])
+  const [stockTransfers, setStockTransfers] = useState<StockTransferLog[]>([])
 
   // Active Tab: 'invoices' | 'create-purchase' | 'create-sell' | 'companies' | 'parties' | 'catalog' | 'opening-stock' | 'manufacturing'
   const [activeTab, setActiveTab] = useState<string>('invoices')
@@ -79,8 +85,34 @@ export default function KsvPage() {
 
   const [isManufacturingModalOpen, setIsManufacturingModalOpen] = useState(false)
   const [selectedMfgLogForPrint, setSelectedMfgLogForPrint] = useState<ManufacturingLog | null>(null)
+
+  // Stock Transfer Modal (KSV Store <-> KSV Factory)
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
+  const [transferForm, setTransferForm] = useState<{
+    batchId: string
+    batchNo: string
+    itemId: string
+    itemName: string
+    quantity: number
+    unit: string
+    direction: 'STORE_TO_FACTORY' | 'FACTORY_TO_STORE'
+    date: string
+    notes: string
+  }>({
+    batchId: '',
+    batchNo: '',
+    itemId: '',
+    itemName: '',
+    quantity: 1,
+    unit: 'PCS',
+    direction: 'STORE_TO_FACTORY',
+    date: new Date().toISOString().split('T')[0],
+    notes: ''
+  })
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState('')
+  const [factorySearchQuery, setFactorySearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
   const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE' | 'ALL'>('SALE')
 
@@ -93,6 +125,7 @@ export default function KsvPage() {
       const storedInvoices = localStorage.getItem('ksv_app_invoices')
       const storedOpeningStock = localStorage.getItem('ksv_app_opening_stock')
       const storedMfgLogs = localStorage.getItem('ksv_app_manufacturing')
+      const storedTransfers = localStorage.getItem('ksv_app_stock_transfers')
 
       setCompanies(storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_KSV_COMPANIES)
 
@@ -149,6 +182,7 @@ export default function KsvPage() {
 
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
+      setStockTransfers(storedTransfers ? JSON.parse(storedTransfers) : [])
 
       // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) ---
       const fetchDatabaseData = async () => {
@@ -254,6 +288,11 @@ export default function KsvPage() {
     localStorage.setItem('ksv_app_invoices', JSON.stringify(newInvoices))
   }
 
+  const saveStockTransfers = (newTransfers: StockTransferLog[]) => {
+    setStockTransfers(newTransfers)
+    localStorage.setItem('ksv_app_stock_transfers', JSON.stringify(newTransfers))
+  }
+
   const handleResetData = () => {
     if (confirm('Are you sure you want to reset all data for KSV? This will restore initial seeded records.')) {
       localStorage.removeItem('ksv_app_companies_v2')
@@ -262,6 +301,7 @@ export default function KsvPage() {
       localStorage.removeItem('ksv_app_invoices')
       localStorage.removeItem('ksv_app_opening_stock')
       localStorage.removeItem('ksv_app_manufacturing')
+      localStorage.removeItem('ksv_app_stock_transfers')
 
       setCompanies(DEFAULT_KSV_COMPANIES)
       setParties(DEFAULT_KSV_PARTIES)
@@ -269,6 +309,7 @@ export default function KsvPage() {
       setInvoices(SEEDED_KSV_INVOICES)
       setOpeningStock([])
       setManufacturingLogs([])
+      setStockTransfers([])
       setInvoiceSummaryType('SALE')
     }
   }
@@ -552,6 +593,79 @@ export default function KsvPage() {
     localStorage.setItem('ksv_app_manufacturing', JSON.stringify(newLogs))
   }
 
+  // Helper to compute KSV Store vs KSV Factory stock for any item
+  const getItemStockBreakdown = (itemId: string, itemName: string, defaultUnit: string = 'PCS', defaultQty: number = 0) => {
+    const nameLower = (itemName || '').toLowerCase()
+    const openingEntry = openingStock.find(
+      (s) => s.itemId === itemId || (s.itemName && s.itemName.toLowerCase() === nameLower)
+    )
+    const openingQty = openingEntry?.quantity || Number(defaultQty) || 0
+    const unit = openingEntry?.unit ?? defaultUnit
+
+    // Purchased Qty (goes into KSV Store)
+    const purchasedQty = invoices
+      .filter((inv) => inv.type === 'PURCHASE')
+      .reduce((sum, inv) => {
+        const rows = inv.items.filter((it) => it.description.toLowerCase() === nameLower)
+        return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+      }, 0)
+
+    // Sold Qty (split by KSV Store vs KSV Factory)
+    let soldFromStoreQty = 0
+    let soldFromFactoryQty = 0
+    invoices
+      .filter((inv) => (inv.type || 'SALE') === 'SALE')
+      .forEach((inv) => {
+        const rows = inv.items.filter((it) => it.description.toLowerCase() === nameLower)
+        const qty = rows.reduce((s, r) => s + (r.quantity || 0), 0)
+        if (inv.matCenter === 'KSV Factory') {
+          soldFromFactoryQty += qty
+        } else {
+          soldFromStoreQty += qty
+        }
+      })
+    const soldQty = soldFromStoreQty + soldFromFactoryQty
+
+    // Manufactured Qty (Produced in KSV Store)
+    const manufacturedQty = manufacturingLogs
+      .filter((log) => log.finishedGoodItemId === itemId || log.finishedGoodName.toLowerCase() === nameLower)
+      .reduce((sum, log) => sum + (log.producedQuantity || 0), 0)
+
+    // Consumed Qty in Manufacturing (Raw Materials from KSV Store)
+    const consumedQty = manufacturingLogs.reduce((sum, log) => {
+      const consumed = log.rawMaterialsConsumed.filter(
+        (rm) => rm.itemId === itemId || rm.itemName.toLowerCase() === nameLower
+      )
+      return sum + consumed.reduce((s, rm) => s + (rm.quantity || 0), 0)
+    }, 0)
+
+    // Net Transferred from KSV Store to KSV Factory
+    const transferredToFactoryQty = stockTransfers
+      .filter((tr) => tr.itemId === itemId || tr.itemName.toLowerCase() === nameLower)
+      .reduce((sum, tr) => {
+        return sum + (tr.direction === 'STORE_TO_FACTORY' ? tr.quantity : -tr.quantity)
+      }, 0)
+
+    const storeClosingQty = openingQty + purchasedQty + manufacturedQty - consumedQty - transferredToFactoryQty - soldFromStoreQty
+    const factoryClosingQty = transferredToFactoryQty - soldFromFactoryQty
+    const closingQty = storeClosingQty + factoryClosingQty
+
+    return {
+      openingQty,
+      purchasedQty,
+      soldQty,
+      soldFromStoreQty,
+      soldFromFactoryQty,
+      manufacturedQty,
+      consumedQty,
+      transferredToFactoryQty,
+      storeClosingQty,
+      factoryClosingQty,
+      closingQty,
+      unit
+    }
+  }
+
   // Manufacturing Handlers
   const handleSaveManufacturingLog = (log: ManufacturingLog) => {
     const exists = manufacturingLogs.some((l) => l.id === log.id)
@@ -559,6 +673,24 @@ export default function KsvPage() {
       ? manufacturingLogs.map((l) => (l.id === log.id ? log : l))
       : [...manufacturingLogs, log]
     saveManufacturingLogs(updated)
+
+    // If user specified an initial transfer to KSV Factory inside the Manufacturing Modal, record it
+    if (!exists && log.transferredToFactoryQty && log.transferredToFactoryQty > 0) {
+      const newTransfer: StockTransferLog = {
+        id: `tr_${Date.now()}`,
+        date: log.date,
+        batchId: log.id,
+        batchNo: log.batchNo || '',
+        itemId: log.finishedGoodItemId,
+        itemName: log.finishedGoodName,
+        quantity: Number(log.transferredToFactoryQty),
+        unit: log.unit || 'PCS',
+        direction: 'STORE_TO_FACTORY',
+        notes: `Transferred from Batch ${log.batchNo || 'N/A'} during production`,
+        createdAt: new Date().toISOString()
+      }
+      saveStockTransfers([newTransfer, ...stockTransfers])
+    }
 
     // Ensure the finished product is added to the Catalog so it appears in the Sales Dropdown
     if (log.finishedGoodName) {
@@ -568,7 +700,7 @@ export default function KsvPage() {
           id: log.finishedGoodItemId || `cat_mfg_${Date.now()}`,
           name: log.finishedGoodName,
           hsnCode: '', // Can be edited later
-          defaultUnit: 'PCS',
+          defaultUnit: log.unit || 'PCS',
           defaultRate: log.effectiveRatePerUnit || 0,
           defaultTaxRate: 12,
           category: 'medicine',
@@ -583,6 +715,96 @@ export default function KsvPage() {
     if (confirm('Delete this manufacturing entry? Stock will be updated accordingly.')) {
       const updated = manufacturingLogs.filter((l) => l.id !== id)
       saveManufacturingLogs(updated)
+      // Also clean up any stock transfers linked to this batch
+      const updatedTransfers = stockTransfers.filter((tr) => tr.batchId !== id)
+      if (updatedTransfers.length !== stockTransfers.length) {
+        saveStockTransfers(updatedTransfers)
+      }
+    }
+  }
+
+  // Open Stock Transfer Modal for a specific Production Batch
+  const openTransferModalForBatch = (log: ManufacturingLog) => {
+    const batchTransferred = stockTransfers
+      .filter((tr) => tr.batchId === log.id)
+      .reduce((sum, tr) => sum + (tr.direction === 'STORE_TO_FACTORY' ? tr.quantity : -tr.quantity), 0)
+    const remainingInBatchStore = Math.max(0, (log.producedQuantity || 0) - batchTransferred)
+
+    setTransferForm({
+      batchId: log.id,
+      batchNo: log.batchNo || '',
+      itemId: log.finishedGoodItemId,
+      itemName: log.finishedGoodName,
+      quantity: remainingInBatchStore > 0 ? remainingInBatchStore : 1,
+      unit: log.unit || 'PCS',
+      direction: remainingInBatchStore > 0 ? 'STORE_TO_FACTORY' : 'FACTORY_TO_STORE',
+      date: new Date().toISOString().split('T')[0],
+      notes: log.batchNo ? `Batch ${log.batchNo} transfer` : ''
+    })
+    setIsTransferModalOpen(true)
+  }
+
+  // Open Stock Transfer Modal for a Catalog Item (or blank)
+  const openTransferModalForItem = (item?: CatalogItem) => {
+    if (item) {
+      const breakdown = getItemStockBreakdown(item.id, item.name, item.defaultUnit, item.quantity)
+      setTransferForm({
+        batchId: '',
+        batchNo: '',
+        itemId: item.id,
+        itemName: item.name,
+        quantity: breakdown.storeClosingQty > 0 ? breakdown.storeClosingQty : 1,
+        unit: item.defaultUnit || 'PCS',
+        direction: 'STORE_TO_FACTORY',
+        date: new Date().toISOString().split('T')[0],
+        notes: ''
+      })
+    } else {
+      const firstMfg = manufacturingLogs[0]
+      const firstItem = catalog[0]
+      setTransferForm({
+        batchId: firstMfg?.id || '',
+        batchNo: firstMfg?.batchNo || '',
+        itemId: firstMfg?.finishedGoodItemId || firstItem?.id || '',
+        itemName: firstMfg?.finishedGoodName || firstItem?.name || '',
+        quantity: 1,
+        unit: firstMfg?.unit || firstItem?.defaultUnit || 'PCS',
+        direction: 'STORE_TO_FACTORY',
+        date: new Date().toISOString().split('T')[0],
+        notes: ''
+      })
+    }
+    setIsTransferModalOpen(true)
+  }
+
+  const handleSaveStockTransfer = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!transferForm.itemName.trim() || transferForm.quantity <= 0) {
+      alert('Please select a valid product and transfer quantity (> 0).')
+      return
+    }
+
+    const newTransfer: StockTransferLog = {
+      id: `tr_${Date.now()}`,
+      date: transferForm.date || new Date().toISOString().split('T')[0],
+      batchId: transferForm.batchId || undefined,
+      batchNo: transferForm.batchNo || undefined,
+      itemId: transferForm.itemId || `item_${Date.now()}`,
+      itemName: transferForm.itemName.trim(),
+      quantity: Number(transferForm.quantity) || 0,
+      unit: transferForm.unit || 'PCS',
+      direction: transferForm.direction,
+      notes: transferForm.notes,
+      createdAt: new Date().toISOString()
+    }
+
+    saveStockTransfers([newTransfer, ...stockTransfers])
+    setIsTransferModalOpen(false)
+  }
+
+  const handleDeleteStockTransfer = (id: string) => {
+    if (confirm('Reverse / delete this stock transfer entry?')) {
+      saveStockTransfers(stockTransfers.filter((tr) => tr.id !== id))
     }
   }
 
@@ -758,6 +980,24 @@ export default function KsvPage() {
           Production of Finished Goods ({manufacturingLogs.length})
         </button>
 
+        <button
+          onClick={() => setActiveTab('ksv-factory')}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'ksv-factory'
+            ? 'bg-indigo-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+        >
+          <Factory className="w-3.5 h-3.5" />
+          KSV Factory ({
+            Array.from(
+              new Set([
+                ...manufacturingLogs.map((m) => m.finishedGoodName.toLowerCase()),
+                ...stockTransfers.map((t) => t.itemName.toLowerCase())
+              ])
+            ).filter(Boolean).length
+          })
+        </button>
+
         <div className="flex-1" />
       </div>
 
@@ -877,15 +1117,24 @@ export default function KsvPage() {
                     {filteredInvoices.map((inv) => (
                       <tr key={inv.id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="p-3">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             {inv.type === 'PURCHASE' ? (
                               <span className="px-2 py-0.5 bg-orange-50 text-orange-700 font-black text-[9px] uppercase tracking-wider rounded-md border border-orange-200/60">
                                 Purchase
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-black text-[9px] uppercase tracking-wider rounded-md border border-blue-200/60">
-                                Sale
-                              </span>
+                              <>
+                                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-black text-[9px] uppercase tracking-wider rounded-md border border-blue-200/60">
+                                  Sale
+                                </span>
+                                <span className={`px-1.5 py-0.5 font-extrabold text-[8px] uppercase tracking-wider rounded border ${
+                                  inv.matCenter === 'KSV Factory'
+                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                    : 'bg-teal-50 text-teal-700 border-teal-200'
+                                }`}>
+                                  {inv.matCenter === 'KSV Factory' ? '🏭 Factory' : '🏪 Store'}
+                                </span>
+                              </>
                             )}
                             <span className="text-[11px] text-slate-500">{inv.invoiceDate}</span>
                           </div>
@@ -1166,131 +1415,131 @@ export default function KsvPage() {
       )}
 
       {/* 4. TAB CONTENT: 5. PRODUCT CATALOG */}
-      {activeTab === 'catalog' && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div>
-              <h2 className="text-sm font-black text-slate-800">KSV Medicine Catalog & Raw Herbs</h2>
-              <p className="text-[11px] text-slate-400">
-                Ayurvedic kits, classical formulations, and raw herbs procured from Kiyava.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setEditingCatalogItem(null)
-                setIsCatalogModalOpen(true)
-              }}
-              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add Catalog Product
-            </button>
-          </div>
+      {activeTab === 'catalog' && (() => {
+        const filteredCatalog = catalog.filter((item) => {
+          if (!catalogSearchQuery.trim()) return true
+          const q = catalogSearchQuery.toLowerCase()
+          return (
+            item.name?.toLowerCase().includes(q) ||
+            item.description?.toLowerCase().includes(q) ||
+            item.category?.toLowerCase().includes(q) ||
+            item.hsnCode?.toLowerCase().includes(q) ||
+            item.defaultUnit?.toLowerCase().includes(q)
+          )
+        })
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
-                    <th className="p-3">Product Name</th>
-                    <th className="p-3">Category</th>
-                    <th className="p-3">HSN Code</th>
-                    <th className="p-3 text-right">Default Unit</th>
-                    <th className="p-3 text-right">Default Rate (₹)</th>
-                    <th className="p-3 text-right">Tax Rate (%)</th>
-                    <th className="p-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {catalog.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="p-3">
-                        <div className="font-bold text-slate-900">{item.name}</div>
-                        {item.description && <div className="text-[10px] text-slate-400">{item.description}</div>}
-                      </td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-md uppercase">
-                          {item.category || 'General'}
-                        </span>
-                      </td>
-                      <td className="p-3 font-mono text-slate-600">{item.hsnCode}</td>
-                      <td className="p-3 text-right font-semibold uppercase">{item.defaultUnit}</td>
-                      <td className="p-3 text-right font-mono font-bold text-slate-900">
-                        ₹{item.defaultRate.toLocaleString('en-IN')}
-                      </td>
-                      <td className="p-3 text-right font-mono text-slate-600">{item.defaultTaxRate}%</td>
-                      <td className="p-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => {
-                              setEditingCatalogItem(item)
-                              setIsCatalogModalOpen(true)
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCatalogItem(item.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div>
+                <h2 className="text-sm font-black text-slate-800">KSV Medicine Catalog & Raw Herbs</h2>
+                <p className="text-[11px] text-slate-400">
+                  Ayurvedic kits, classical formulations, and raw herbs procured from Kiyava.
+                </p>
+              </div>
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={catalogSearchQuery}
+                  onChange={(e) => setCatalogSearchQuery(e.target.value)}
+                  placeholder="Search item name, category, HSN..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  setEditingCatalogItem(null)
+                  setIsCatalogModalOpen(true)
+                }}
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Catalog Product
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
+                      <th className="p-3">Product Name</th>
+                      <th className="p-3">Category</th>
+                      <th className="p-3">HSN Code</th>
+                      <th className="p-3 text-right">Default Unit</th>
+                      <th className="p-3 text-right">Default Rate (₹)</th>
+                      <th className="p-3 text-right">Tax Rate (%)</th>
+                      <th className="p-3 text-center">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {filteredCatalog.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-400">
+                          No matching items found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredCatalog.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="p-3">
+                            <div className="font-bold text-slate-900">{item.name}</div>
+                            {item.description && <div className="text-[10px] text-slate-400">{item.description}</div>}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-md uppercase">
+                              {item.category || 'General'}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-slate-600">{item.hsnCode}</td>
+                          <td className="p-3 text-right font-semibold uppercase">{item.defaultUnit}</td>
+                          <td className="p-3 text-right font-mono font-bold text-slate-900">
+                            ₹{item.defaultRate.toLocaleString('en-IN')}
+                          </td>
+                          <td className="p-3 text-right font-mono text-slate-600">{item.defaultTaxRate}%</td>
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => {
+                                  setEditingCatalogItem(item)
+                                  setIsCatalogModalOpen(true)
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCatalogItem(item.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* 4. TAB CONTENT: 6. STOCK REGISTER & AUTOMATIC INVENTORY ADJUSTMENT */}
       {activeTab === 'opening-stock' && (() => {
-        // Build full stock register with auto manufacturing adjustments
+        // Build full stock register with auto manufacturing and Store/Factory transfer adjustments
         const stockRegister = catalog.map((item) => {
-          const openingEntry = openingStock.find((s) => s.itemId === item.id || s.itemName.toLowerCase() === item.name.toLowerCase())
-          const openingQty = openingEntry?.quantity || Number(item.quantity) || 0
-          const unit = openingEntry?.unit ?? item.defaultUnit
-
-          // Purchased Qty from PURCHASE invoices
-          const purchasedQty = invoices
-            .filter((inv) => inv.type === 'PURCHASE')
-            .reduce((sum, inv) => {
-              const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
-              return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
-            }, 0)
-
-          // Sold Qty from SALE invoices
-          const soldQty = invoices
-            .filter((inv) => (inv.type || 'SALE') === 'SALE')
-            .reduce((sum, inv) => {
-              const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
-              return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
-            }, 0)
-
-          // Manufactured Qty (Produced)
-          const manufacturedQty = manufacturingLogs
-            .filter((log) => log.finishedGoodItemId === item.id || log.finishedGoodName.toLowerCase() === item.name.toLowerCase())
-            .reduce((sum, log) => sum + (log.producedQuantity || 0), 0)
-
-          // Consumed Qty in Manufacturing (Raw Materials)
-          const consumedQty = manufacturingLogs.reduce((sum, log) => {
-            const consumed = log.rawMaterialsConsumed.filter(
-              (rm) => rm.itemId === item.id || rm.itemName.toLowerCase() === item.name.toLowerCase()
-            )
-            return sum + consumed.reduce((s, rm) => s + (rm.quantity || 0), 0)
-          }, 0)
-
-          const closingQty = openingQty + purchasedQty + manufacturedQty - soldQty - consumedQty
-
-          return { item, openingQty, purchasedQty, soldQty, manufacturedQty, consumedQty, closingQty, unit }
-        }).filter((row) => row.openingQty > 0 || row.purchasedQty > 0 || row.soldQty > 0 || row.manufacturedQty > 0 || row.consumedQty > 0)
+          const breakdown = getItemStockBreakdown(item.id, item.name, item.defaultUnit, item.quantity)
+          return { item, ...breakdown }
+        }).filter((row) => row.openingQty > 0 || row.purchasedQty > 0 || row.soldQty > 0 || row.manufacturedQty > 0 || row.consumedQty > 0 || row.transferredToFactoryQty !== 0)
 
         const totalOpeningQty = stockRegister.reduce((s, r) => s + r.openingQty, 0)
         const totalPurchasedQty = stockRegister.reduce((s, r) => s + r.purchasedQty, 0)
         const totalSoldQty = stockRegister.reduce((s, r) => s + r.soldQty, 0)
+        const totalStoreQty = stockRegister.reduce((s, r) => s + r.storeClosingQty, 0)
+        const totalFactoryQty = stockRegister.reduce((s, r) => s + r.factoryClosingQty, 0)
         const totalClosingQty = stockRegister.reduce((s, r) => s + r.closingQty, 0)
 
         return (
@@ -1298,22 +1547,30 @@ export default function KsvPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-sm gap-3">
               <div>
-                <h2 className="text-sm font-black text-slate-800">📦 KSV Stock Register &amp; Ledger</h2>
-                <p className="text-xs text-slate-400 font-medium">Opening Stock + Purchases + Manufactured In − Sales − Consumed In Mfg = Closing Balance</p>
+                <h2 className="text-sm font-black text-slate-800">📦 KSV Stock Register &amp; Ledger (Store &amp; Factory)</h2>
+                <p className="text-xs text-slate-400 font-medium">Opening Stock + Purchases + Manufactured In − Sales − Consumed In Mfg = Closing Balance (Split by KSV Store &amp; KSV Factory)</p>
               </div>
-              <button
-                onClick={() => {
-                  setEditingOpeningStockEntry(null)
-                  setIsOpeningStockModalOpen(true)
-                }}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Opening Stock
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openTransferModalForItem()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" /> Transfer Store ↔ Factory
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingOpeningStockEntry(null)
+                    setIsOpeningStockModalOpen(true)
+                  }}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Opening Stock
+                </button>
+              </div>
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
               <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 shadow-sm">
                 <p className="text-[10px] font-black uppercase tracking-wider text-purple-500 mb-1">Opening Stock</p>
                 <h3 className="text-xl font-black text-purple-700 font-mono">{totalOpeningQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
@@ -1329,10 +1586,20 @@ export default function KsvPage() {
                 <h3 className="text-xl font-black text-rose-700 font-mono">−{totalSoldQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
                 <p className="text-[10px] text-rose-400 font-medium mt-0.5">From sale invoices</p>
               </div>
+              <div className="bg-teal-50 border border-teal-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-teal-600 mb-1">🏪 KSV Store</p>
+                <h3 className="text-xl font-black text-teal-700 font-mono">{totalStoreQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className="text-[10px] text-teal-500 font-medium mt-0.5">Available in Store</p>
+              </div>
+              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 mb-1">🏭 KSV Factory</p>
+                <h3 className="text-xl font-black text-indigo-700 font-mono">{totalFactoryQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
+                <p className="text-[10px] text-indigo-500 font-medium mt-0.5">Available in Factory</p>
+              </div>
               <div className={`border rounded-2xl p-4 shadow-sm ${totalClosingQty > 0 ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${totalClosingQty > 0 ? 'text-blue-500' : 'text-amber-500'}`}>Closing Balance</p>
+                <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${totalClosingQty > 0 ? 'text-blue-500' : 'text-amber-500'}`}>Total Closing</p>
                 <h3 className={`text-xl font-black font-mono ${totalClosingQty > 0 ? 'text-blue-700' : 'text-amber-700'}`}>{totalClosingQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h3>
-                <p className={`text-[10px] font-medium mt-0.5 ${totalClosingQty > 0 ? 'text-blue-400' : 'text-amber-400'}`}>Current net stock</p>
+                <p className={`text-[10px] font-medium mt-0.5 ${totalClosingQty > 0 ? 'text-blue-400' : 'text-amber-400'}`}>Store + Factory</p>
               </div>
             </div>
 
@@ -1345,16 +1612,18 @@ export default function KsvPage() {
                       <tr>
                         <th className="p-3 pl-5">Product / Herb Name</th>
                         <th className="p-3 text-center">Unit</th>
-                        <th className="p-3 text-right text-purple-300">Opening Stock</th>
-                        <th className="p-3 text-right text-emerald-300">Purchased In (+)</th>
-                        <th className="p-3 text-right text-cyan-300">Produced In Mfg (+)</th>
-                        <th className="p-3 text-right text-rose-300">Sold Out (−)</th>
-                        <th className="p-3 text-right text-amber-300">Consumed In Mfg (−)</th>
-                        <th className="p-3 text-right text-blue-300 pr-5">Closing Stock</th>
+                        <th className="p-3 text-right text-purple-300">Opening</th>
+                        <th className="p-3 text-right text-emerald-300">Purchased (+)</th>
+                        <th className="p-3 text-right text-cyan-300">Produced (+)</th>
+                        <th className="p-3 text-right text-rose-300">Sold (−)</th>
+                        <th className="p-3 text-right text-amber-300">Consumed (−)</th>
+                        <th className="p-3 text-right text-teal-300">🏪 KSV Store</th>
+                        <th className="p-3 text-right text-indigo-300">🏭 KSV Factory</th>
+                        <th className="p-3 text-right text-blue-300 pr-5">Total Closing</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-sans">
-                      {stockRegister.map(({ item, openingQty, purchasedQty, soldQty, manufacturedQty, consumedQty, closingQty, unit }) => (
+                      {stockRegister.map(({ item, openingQty, purchasedQty, soldQty, manufacturedQty, consumedQty, storeClosingQty, factoryClosingQty, closingQty, unit }) => (
                         <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${closingQty <= 0 ? 'bg-rose-50/30' : ''}`}>
                           <td className="p-3 pl-5">
                             <div className="font-bold text-slate-900">{item.name}</div>
@@ -1366,6 +1635,12 @@ export default function KsvPage() {
                           <td className="p-3 text-right font-mono font-bold text-cyan-600">{manufacturedQty > 0 ? `+${manufacturedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}</td>
                           <td className="p-3 text-right font-mono font-bold text-rose-600">{soldQty > 0 ? `−${soldQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}</td>
                           <td className="p-3 text-right font-mono font-bold text-amber-600">{consumedQty > 0 ? `−${consumedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}` : '—'}</td>
+                          <td className="p-3 text-right font-mono font-black text-teal-700 bg-teal-50/30">
+                            {storeClosingQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
+                          </td>
+                          <td className="p-3 text-right font-mono font-black text-indigo-700 bg-indigo-50/30">
+                            {factoryClosingQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
+                          </td>
                           <td className="p-3 text-right pr-5">
                             <span className={`inline-flex items-center px-3 py-1 rounded-full font-black font-mono text-xs ${closingQty <= 0
                               ? 'bg-rose-100 text-rose-700'
@@ -1393,102 +1668,469 @@ export default function KsvPage() {
         )
       })()}
 
-      {/* 4. TAB CONTENT: 7. MANUFACTURING (MANUFACTURE OF MATERIALS) */}
-      {activeTab === 'manufacturing' && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="flex justify-end items-center">
-            {/* Manufacturing Button Removed as per request */}
-          </div>
+      {/* 4. TAB CONTENT: 7. MANUFACTURING (MANUFACTURE OF MATERIALS & STORE/FACTORY TRANSFER) */}
+      {activeTab === 'manufacturing' && (() => {
+        // Compute aggregate finished goods stats across all manufactured products
+        const totalProducedQty = manufacturingLogs.reduce((sum, l) => sum + (l.producedQuantity || 0), 0)
+        const uniqueFinishedGoods = Array.from(
+          new Set(manufacturingLogs.map((l) => l.finishedGoodName.toLowerCase()))
+        ).map((nameLower) => {
+          const log = manufacturingLogs.find((l) => l.finishedGoodName.toLowerCase() === nameLower)!
+          const catItem = catalog.find((c) => c.name.toLowerCase() === nameLower)
+          return getItemStockBreakdown(
+            catItem?.id || log.finishedGoodItemId,
+            log.finishedGoodName,
+            catItem?.defaultUnit || log.unit,
+            catItem?.quantity || 0
+          )
+        })
+        const totalFinishedInStore = uniqueFinishedGoods.reduce((s, b) => s + b.storeClosingQty, 0)
+        const totalFinishedInFactory = uniqueFinishedGoods.reduce((s, b) => s + b.factoryClosingQty, 0)
 
-          {manufacturingLogs.length > 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-              <div className="overflow-x-auto custom-scrollbar">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-900 text-white font-extrabold uppercase text-[10px]">
-                    <tr>
-                      <th className="p-3 pl-5">Date</th>
-                      <th className="p-3">Batch Name</th>
-                      <th className="p-3">Manufactured Product (Output)</th>
-                      <th className="p-3 text-right">Qty Produced</th>
-                      <th className="p-3 text-right">Effective Rate (₹)</th>
-                      <th className="p-3 text-right">Effective Cost (₹)</th>
-                      <th className="p-3">Components Consumed (Input)</th>
-                      <th className="p-3 text-right pr-5">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-sans">
-                    {manufacturingLogs.map((log) => {
-                      const totalCost = log.effectiveCost ?? log.rawMaterialsConsumed.reduce((s, rm) => s + (rm.amount ?? (rm.quantity * (rm.rate || 0))), 0)
-                      const effectiveRate = log.effectiveRatePerUnit ?? (log.producedQuantity > 0 ? totalCost / log.producedQuantity : 0)
-
-                      return (
-                        <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3 pl-5 font-mono text-slate-600">{log.date}</td>
-                          <td className="p-3 font-mono font-bold text-slate-800 uppercase">{log.batchNo || 'N/A'}</td>
-                          <td className="p-3 font-black text-cyan-800 uppercase">{log.finishedGoodName}</td>
-                          <td className="p-3 text-right font-mono font-black text-emerald-600">
-                            +{log.producedQuantity} <span className="text-[10px] text-emerald-500 font-bold uppercase">{log.unit}</span>
-                          </td>
-                          <td className="p-3 text-right font-mono font-bold text-slate-700">
-                            ₹{effectiveRate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-3 text-right font-mono font-black text-slate-900">
-                            ₹{totalCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-3">
-                            <div className="space-y-1">
-                              {log.rawMaterialsConsumed.map((rm, idx) => (
-                                <div key={idx} className="flex justify-between items-center text-[10px]">
-                                  <span className="font-bold text-slate-700">{rm.itemName}</span>
-                                  <span className="font-mono text-rose-600 font-bold ml-3">
-                                    −{rm.quantity} {rm.unit} {rm.rate ? `(@ ₹${rm.rate})` : ''}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="p-3 text-right pr-5">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => setSelectedMfgLogForPrint(log)}
-                                className="px-2.5 py-1 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-cyan-200"
-                                title="Print Tally Voucher"
-                              >
-                                <Printer className="w-3.5 h-3.5" /> Voucher
-                              </button>
-                              <button
-                                onClick={() => handleDeleteManufacturingLog(log.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            {/* Top Header Bar */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div>
+                <h2 className="text-sm font-black text-slate-800">Production of Finished Goods &amp; KSV Factory Transfer</h2>
+                <p className="text-[11px] text-slate-400">
+                  Finished goods are manufactured in <strong>KSV Store</strong> and can be transferred to <strong>KSV Factory</strong>.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => openTransferModalForItem()}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" /> Transfer Store ↔ Factory
+                </button>
+                <button
+                  onClick={() => setIsManufacturingModalOpen(true)}
+                  className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" /> + New Production Batch
+                </button>
               </div>
             </div>
-          ) : (
-            <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 shadow-sm space-y-3">
-              <div className="text-4xl">⚗️</div>
-              <h3 className="text-sm font-black text-slate-800">No Manufacturing Logs Recorded</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Log production batches with finished goods and consumed components to automatically adjust stock balances.
-              </p>
+
+            {/* Store vs Factory Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 mb-1">⚗️ Total Produced (All Batches)</p>
+                <h3 className="text-xl font-black text-cyan-800 font-mono">
+                  +{totalProducedQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-cyan-600/80 font-medium mt-0.5">{manufacturingLogs.length} production batch(es)</p>
+              </div>
+              <div className="bg-teal-50 border border-teal-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-teal-600 mb-1">🏪 Available in KSV Store</p>
+                <h3 className="text-xl font-black text-teal-800 font-mono">
+                  {totalFinishedInStore.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-teal-600/80 font-medium mt-0.5">Remaining in KSV Store after transfers &amp; store sales</p>
+              </div>
+              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 mb-1">🏭 Available in KSV Factory</p>
+                <h3 className="text-xl font-black text-indigo-800 font-mono">
+                  {totalFinishedInFactory.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-indigo-600/80 font-medium mt-0.5">Transferred to KSV Factory minus factory sales</p>
+              </div>
+            </div>
+
+            {manufacturingLogs.length > 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-900 text-white font-extrabold uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3 pl-5">Date</th>
+                        <th className="p-3">Batch Name</th>
+                        <th className="p-3">Manufactured Product (Output)</th>
+                        <th className="p-3 text-right">Qty Produced</th>
+                        <th className="p-3 text-right text-teal-300">🏪 KSV Store Qty</th>
+                        <th className="p-3 text-right text-indigo-300">🏭 KSV Factory Qty</th>
+                        <th className="p-3 text-right">Effective Rate (₹)</th>
+                        <th className="p-3 text-right">Effective Cost (₹)</th>
+                        <th className="p-3">Components Consumed (Input)</th>
+                        <th className="p-3 text-right pr-5">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {manufacturingLogs.map((log) => {
+                        const totalCost = log.effectiveCost ?? log.rawMaterialsConsumed.reduce((s, rm) => s + (rm.amount ?? (rm.quantity * (rm.rate || 0))), 0)
+                        const effectiveRate = log.effectiveRatePerUnit ?? (log.producedQuantity > 0 ? totalCost / log.producedQuantity : 0)
+
+                        // Live Store & Factory stock for this product
+                        const catItem = catalog.find((c) => c.name.toLowerCase() === log.finishedGoodName.toLowerCase())
+                        const itemStock = getItemStockBreakdown(
+                          catItem?.id || log.finishedGoodItemId,
+                          log.finishedGoodName,
+                          catItem?.defaultUnit || log.unit,
+                          catItem?.quantity || 0
+                        )
+
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3 pl-5 font-mono text-slate-600">{log.date}</td>
+                            <td className="p-3 font-mono font-bold text-slate-800 uppercase">{log.batchNo || 'N/A'}</td>
+                            <td className="p-3 font-black text-cyan-800 uppercase">{log.finishedGoodName}</td>
+                            <td className="p-3 text-right font-mono font-black text-emerald-600">
+                              +{log.producedQuantity} <span className="text-[10px] text-emerald-500 font-bold uppercase">{log.unit}</span>
+                            </td>
+                            <td className="p-3 text-right bg-teal-50/30">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg font-mono font-black text-xs ${
+                                itemStock.storeClosingQty > 0 ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {itemStock.storeClosingQty} <span className="text-[9px] font-bold ml-1 uppercase">{log.unit}</span>
+                              </span>
+                            </td>
+                            <td className="p-3 text-right bg-indigo-50/30">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg font-mono font-black text-xs ${
+                                itemStock.factoryClosingQty > 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {itemStock.factoryClosingQty} <span className="text-[9px] font-bold ml-1 uppercase">{log.unit}</span>
+                              </span>
+                            </td>
+                            <td className="p-3 text-right font-mono font-bold text-slate-700">
+                              ₹{effectiveRate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-3 text-right font-mono font-black text-slate-900">
+                              ₹{totalCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-3">
+                              <div className="space-y-1">
+                                {log.rawMaterialsConsumed.map((rm, idx) => (
+                                  <div key={idx} className="flex justify-between items-center text-[10px]">
+                                    <span className="font-bold text-slate-700">{rm.itemName}</span>
+                                    <span className="font-mono text-rose-600 font-bold ml-3">
+                                      −{rm.quantity} {rm.unit} {rm.rate ? `(@ ₹${rm.rate})` : ''}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="p-3 text-right pr-5">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => openTransferModalForBatch(log)}
+                                  className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-indigo-200 cursor-pointer"
+                                  title="Transfer between KSV Store and KSV Factory"
+                                >
+                                  <ArrowLeftRight className="w-3.5 h-3.5" /> Transfer
+                                </button>
+                                <button
+                                  onClick={() => setSelectedMfgLogForPrint(log)}
+                                  className="px-2.5 py-1 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-cyan-200 cursor-pointer"
+                                  title="Print Tally Voucher"
+                                >
+                                  <Printer className="w-3.5 h-3.5" /> Voucher
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteManufacturingLog(log.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 shadow-sm space-y-3">
+                <div className="text-4xl">⚗️</div>
+                <h3 className="text-sm font-black text-slate-800">No Manufacturing Logs Recorded</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Log production batches with finished goods and consumed components to automatically adjust stock balances.
+                </p>
+                <button
+                  onClick={() => setIsManufacturingModalOpen(true)}
+                  className="mt-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs rounded-xl inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-md uppercase tracking-wider"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Log First Batch
+                </button>
+              </div>
+            )}
+
+            {/* Stock Transfer History Log (KSV Store <-> KSV Factory) */}
+            {stockTransfers.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+                  <div>
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-600" />
+                      Stock Transfer Ledger (KSV Store ↔ KSV Factory)
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-medium">History of finished goods transferred between KSV Store and KSV Factory</p>
+                  </div>
+                  <span className="text-[10px] font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+                    {stockTransfers.length} Transfer(s)
+                  </span>
+                </div>
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] border-b border-slate-200">
+                      <tr>
+                        <th className="p-3 pl-5">Date</th>
+                        <th className="p-3">Batch #</th>
+                        <th className="p-3">Product Name</th>
+                        <th className="p-3">Transfer Direction</th>
+                        <th className="p-3 text-right">Quantity Transferred</th>
+                        <th className="p-3">Notes</th>
+                        <th className="p-3 text-right pr-5">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {stockTransfers.map((tr) => (
+                        <tr key={tr.id} className="hover:bg-slate-50">
+                          <td className="p-3 pl-5 font-mono text-slate-600">{tr.date}</td>
+                          <td className="p-3 font-mono font-bold text-slate-700 uppercase">{tr.batchNo || '—'}</td>
+                          <td className="p-3 font-bold text-slate-900 uppercase">{tr.itemName}</td>
+                          <td className="p-3">
+                            {tr.direction === 'STORE_TO_FACTORY' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold text-[10px]">
+                                🏪 KSV Store → 🏭 KSV Factory
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200 font-extrabold text-[10px]">
+                                🏭 KSV Factory → 🏪 KSV Store
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right font-mono font-black text-indigo-700">
+                            {tr.quantity} <span className="text-[10px] uppercase">{tr.unit}</span>
+                          </td>
+                          <td className="p-3 text-slate-500 text-[11px]">{tr.notes || '—'}</td>
+                          <td className="p-3 text-right pr-5">
+                            <button
+                              onClick={() => handleDeleteStockTransfer(tr.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Undo / Delete Transfer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* TAB CONTENT: 8. KSV FACTORY STOCK & TRANSFER LEDGER */}
+      {activeTab === 'ksv-factory' && (() => {
+        // Build unified list of all products that have either been manufactured, transferred, or are in catalog
+        const allCandidateNames = Array.from(
+          new Set([
+            ...manufacturingLogs.map((l) => l.finishedGoodName),
+            ...stockTransfers.map((t) => t.itemName),
+            ...catalog.map((c) => c.name)
+          ])
+        ).filter(Boolean)
+
+        const factoryProductRows = allCandidateNames
+          .map((prodName) => {
+            const nameLower = prodName.toLowerCase()
+            const catItem = catalog.find((c) => c.name.toLowerCase() === nameLower)
+            const mfgLog = manufacturingLogs.find((l) => l.finishedGoodName.toLowerCase() === nameLower)
+            const trLog = stockTransfers.find((t) => t.itemName.toLowerCase() === nameLower)
+
+            const itemId = catItem?.id || mfgLog?.finishedGoodItemId || trLog?.itemId || `fg_${nameLower}`
+            const unit = catItem?.defaultUnit || mfgLog?.unit || trLog?.unit || 'PCS'
+            const hsnCode = catItem?.hsnCode || ''
+            const breakdown = getItemStockBreakdown(itemId, prodName, unit, catItem?.quantity || 0)
+
+            const isFinishedOrTransferred = Boolean(mfgLog || trLog || breakdown.transferredToFactoryQty !== 0 || breakdown.soldFromFactoryQty > 0)
+
+            return {
+              itemId,
+              name: prodName,
+              hsnCode,
+              unit,
+              isFinishedOrTransferred,
+              ...breakdown
+            }
+          })
+          .filter((row) => {
+            const matchesQuery =
+              !factorySearchQuery.trim() ||
+              row.name.toLowerCase().includes(factorySearchQuery.toLowerCase()) ||
+              row.hsnCode.toLowerCase().includes(factorySearchQuery.toLowerCase())
+            // Show all manufactured / transferred items by default, or any catalog item when searching
+            const hasActivity =
+              row.isFinishedOrTransferred ||
+              row.factoryClosingQty !== 0 ||
+              row.manufacturedQty > 0 ||
+              Boolean(factorySearchQuery.trim())
+            return matchesQuery && hasActivity
+          })
+
+        const totalFactoryAvailable = factoryProductRows.reduce((s, r) => s + r.factoryClosingQty, 0)
+        const totalStoreRemaining = factoryProductRows.reduce((s, r) => s + r.storeClosingQty, 0)
+        const totalNetTransferred = factoryProductRows.reduce((s, r) => s + r.transferredToFactoryQty, 0)
+        const totalSoldFromFactory = factoryProductRows.reduce((s, r) => s + r.soldFromFactoryQty, 0)
+
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            {/* Top Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div>
+                <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <Factory className="w-4 h-4 text-indigo-600" />
+                  KSV Factory Stock &amp; Store Comparison
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Check live finished goods quantity available in <strong>KSV Factory</strong> vs remaining in <strong>KSV Store</strong>.
+                </p>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={factorySearchQuery}
+                  onChange={(e) => setFactorySearchQuery(e.target.value)}
+                  placeholder="Search item in KSV Factory..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
               <button
-                onClick={() => setIsManufacturingModalOpen(true)}
-                className="mt-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs rounded-xl inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-md uppercase tracking-wider"
+                onClick={() => openTransferModalForItem()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-md shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> Log First Batch
+                <ArrowLeftRight className="w-3.5 h-3.5" /> + Transfer Stock (Store ↔ Factory)
               </button>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* 4 Summary Metrics Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 mb-1">🏭 KSV Factory Stock</p>
+                <h3 className="text-2xl font-black text-indigo-800 font-mono">
+                  {totalFactoryAvailable.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-indigo-600/80 font-medium mt-0.5">Available now in KSV Factory</p>
+              </div>
+
+              <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-teal-600 mb-1">🏪 KSV Store Stock</p>
+                <h3 className="text-2xl font-black text-teal-800 font-mono">
+                  {totalStoreRemaining.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-teal-600/80 font-medium mt-0.5">Remaining in KSV Store</p>
+              </div>
+
+              <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 mb-1">🔄 Net Transferred to Factory</p>
+                <h3 className="text-2xl font-black text-cyan-800 font-mono">
+                  +{totalNetTransferred.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-cyan-600/80 font-medium mt-0.5">Moved from KSV Store → Factory</p>
+              </div>
+
+              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-rose-600 mb-1">📤 Sold from KSV Factory</p>
+                <h3 className="text-2xl font-black text-rose-700 font-mono">
+                  −{totalSoldFromFactory.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-rose-500 font-medium mt-0.5">Dispatched via Factory Sale Invoices</p>
+              </div>
+            </div>
+
+            {/* Transfer History Table inside KSV Factory Tab */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+                <div>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-600" />
+                    KSV Factory Transfer History (Store ↔ Factory)
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-medium">Complete log of all stock transfers between KSV Store and KSV Factory</p>
+                </div>
+                <span className="text-[10px] font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+                  {stockTransfers.length} Transfer(s)
+                </span>
+              </div>
+
+              {stockTransfers.filter((tr) =>
+                !factorySearchQuery.trim() ||
+                tr.itemName.toLowerCase().includes(factorySearchQuery.toLowerCase()) ||
+                (tr.batchNo && tr.batchNo.toLowerCase().includes(factorySearchQuery.toLowerCase()))
+              ).length > 0 ? (
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] border-b border-slate-200">
+                      <tr>
+                        <th className="p-3 pl-5">Date</th>
+                        <th className="p-3">Batch #</th>
+                        <th className="p-3">Product Name</th>
+                        <th className="p-3">Transfer Direction</th>
+                        <th className="p-3 text-right">Quantity Transferred</th>
+                        <th className="p-3">Notes</th>
+                        <th className="p-3 text-right pr-5">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {stockTransfers
+                        .filter((tr) =>
+                          !factorySearchQuery.trim() ||
+                          tr.itemName.toLowerCase().includes(factorySearchQuery.toLowerCase()) ||
+                          (tr.batchNo && tr.batchNo.toLowerCase().includes(factorySearchQuery.toLowerCase()))
+                        )
+                        .map((tr) => (
+                        <tr key={tr.id} className="hover:bg-slate-50">
+                          <td className="p-3 pl-5 font-mono text-slate-600">{tr.date}</td>
+                          <td className="p-3 font-mono font-bold text-slate-700 uppercase">{tr.batchNo || '—'}</td>
+                          <td className="p-3 font-bold text-slate-900 uppercase">{tr.itemName}</td>
+                          <td className="p-3">
+                            {tr.direction === 'STORE_TO_FACTORY' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold text-[10px]">
+                                🏪 KSV Store → 🏭 KSV Factory
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200 font-extrabold text-[10px]">
+                                🏭 KSV Factory → 🏪 KSV Store
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right font-mono font-black text-indigo-700">
+                            {tr.quantity} <span className="text-[10px] uppercase">{tr.unit}</span>
+                          </td>
+                          <td className="p-3 text-slate-500 text-[11px]">{tr.notes || '—'}</td>
+                          <td className="p-3 text-right pr-5">
+                            <button
+                              onClick={() => handleDeleteStockTransfer(tr.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Undo / Delete Transfer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-6 text-center text-xs text-slate-400 font-medium">
+                  No transfers recorded yet. Click &quot;+ Transfer Stock (Store ↔ Factory)&quot; above to move finished goods to KSV Factory.
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* TAB CONTENT: STOCK REGISTER */}
       {activeTab === 'stock-register' && (
@@ -1497,9 +2139,227 @@ export default function KsvPage() {
           openingStock={openingStock}
           invoices={invoices}
           manufacturingLogs={manufacturingLogs}
+          stockTransfers={stockTransfers}
+          showLocationSplit={true}
           onOpenOpeningStock={() => setActiveTab('opening-stock')}
+          onOpenTransferModal={openTransferModalForItem}
         />
       )}
+
+      {/* STOCK TRANSFER MODAL (KSV STORE <-> KSV FACTORY) */}
+      {isTransferModalOpen && (() => {
+        const selectedStock = transferForm.itemName
+          ? getItemStockBreakdown(transferForm.itemId, transferForm.itemName, transferForm.unit)
+          : null
+        const maxAvailable =
+          transferForm.direction === 'STORE_TO_FACTORY'
+            ? Math.max(0, selectedStock?.storeClosingQty || 0)
+            : Math.max(0, selectedStock?.factoryClosingQty || 0)
+
+        return (
+          <div className="fixed inset-0 z-[100] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center">
+                    <ArrowLeftRight className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-slate-800 uppercase tracking-wide">
+                      Transfer Stock (Store ↔ Factory)
+                    </h2>
+                    <p className="text-[11px] text-slate-400 font-medium">
+                      Move finished goods between KSV Store and KSV Factory
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTransferModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveStockTransfer} className="space-y-4">
+                {/* Direction Selector */}
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    Transfer Direction *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTransferForm({ ...transferForm, direction: 'STORE_TO_FACTORY' })}
+                      className={`py-2.5 px-3 rounded-xl font-extrabold text-xs border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        transferForm.direction === 'STORE_TO_FACTORY'
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      🏪 Store → 🏭 Factory
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTransferForm({ ...transferForm, direction: 'FACTORY_TO_STORE' })}
+                      className={`py-2.5 px-3 rounded-xl font-extrabold text-xs border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        transferForm.direction === 'FACTORY_TO_STORE'
+                          ? 'bg-teal-600 text-white border-teal-600 shadow-md'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      🏭 Factory → 🏪 Store
+                    </button>
+                  </div>
+                </div>
+
+                {/* Product Selection */}
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
+                    Finished Good / Product *
+                  </label>
+                  <select
+                    required
+                    value={transferForm.itemName}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      const catMatch = catalog.find((c) => c.name.toLowerCase() === val.toLowerCase())
+                      const mfgMatch = manufacturingLogs.find((m) => m.finishedGoodName.toLowerCase() === val.toLowerCase())
+                      setTransferForm({
+                        ...transferForm,
+                        itemName: val,
+                        itemId: catMatch?.id || mfgMatch?.finishedGoodItemId || '',
+                        unit: catMatch?.defaultUnit || mfgMatch?.unit || 'PCS',
+                        batchId: mfgMatch?.id || '',
+                        batchNo: mfgMatch?.batchNo || ''
+                      })
+                    }}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
+                  >
+                    <option value="">-- Select Product --</option>
+                    {Array.from(
+                      new Set([
+                        ...manufacturingLogs.map((m) => m.finishedGoodName),
+                        ...catalog.map((c) => c.name)
+                      ])
+                    )
+                      .filter(Boolean)
+                      .map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Live Stock Balance Preview */}
+                {selectedStock && (
+                  <div className="grid grid-cols-2 gap-2.5 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                    <div className="bg-teal-50 border border-teal-200 rounded-xl p-2.5 flex justify-between items-center">
+                      <span className="text-[10px] font-extrabold text-teal-700 uppercase">🏪 KSV Store:</span>
+                      <span className="font-mono font-black text-sm text-teal-800">
+                        {selectedStock.storeClosingQty} {selectedStock.unit}
+                      </span>
+                    </div>
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 flex justify-between items-center">
+                      <span className="text-[10px] font-extrabold text-indigo-700 uppercase">🏭 KSV Factory:</span>
+                      <span className="font-mono font-black text-sm text-indigo-800">
+                        {selectedStock.factoryClosingQty} {selectedStock.unit}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quantity & Date */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
+                        Transfer Qty ({transferForm.unit}) *
+                      </label>
+                      {maxAvailable > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setTransferForm({ ...transferForm, quantity: maxAvailable })}
+                          className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                        >
+                          Max ({maxAvailable})
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.001"
+                      required
+                      value={transferForm.quantity}
+                      onChange={(e) => setTransferForm({ ...transferForm, quantity: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-black text-slate-900 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
+                      Transfer Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={transferForm.date}
+                      onChange={(e) => setTransferForm({ ...transferForm, date: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Batch No & Notes */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
+                      Batch No.
+                    </label>
+                    <input
+                      type="text"
+                      value={transferForm.batchNo}
+                      onChange={(e) => setTransferForm({ ...transferForm, batchNo: e.target.value })}
+                      placeholder="e.g. D"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 uppercase outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
+                      Notes / Remarks
+                    </label>
+                    <input
+                      type="text"
+                      value={transferForm.notes}
+                      onChange={(e) => setTransferForm({ ...transferForm, notes: e.target.value })}
+                      placeholder="e.g. Dispatched to KSV Factory"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsTransferModalOpen(false)}
+                    className="px-4 py-2 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Save Transfer
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* MODALS */}
       {selectedInvoiceForPrint && (

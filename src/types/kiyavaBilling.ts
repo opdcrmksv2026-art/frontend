@@ -168,6 +168,7 @@ export interface ManufacturingLog {
   finishedGoodItemId: string
   finishedGoodName: string
   producedQuantity: number
+  transferredToFactoryQty?: number
   unit: string
   costAllocationPercent?: number
   rawMaterialsConsumed: RawMaterialConsumed[]
@@ -177,4 +178,19 @@ export interface ManufacturingLog {
   effectiveRatePerUnit?: number
   notes?: string
 }
+
+export interface StockTransferLog {
+  id: string
+  date: string
+  batchId?: string
+  batchNo?: string
+  itemId: string
+  itemName: string
+  quantity: number
+  unit: string
+  direction: 'STORE_TO_FACTORY' | 'FACTORY_TO_STORE'
+  notes?: string
+  createdAt: string
+}
+
 

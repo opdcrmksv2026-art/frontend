@@ -74,12 +74,14 @@ export default function MaxxiPharmaPage() {
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
   const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE'>('SALE')
 
   // Real-time synchronization of Maxxi B2B invoices and all Clinic OPD patient bills
   const allInvoices = useMemo(() => {
     let combined = [...invoices];
+    if (typeof window === 'undefined') return combined;
     try {
       const offlineBills = JSON.parse(localStorage.getItem('ksv_offline_bills') || '[]');
       offlineBills.forEach((bill: any) => {
@@ -1090,97 +1092,123 @@ export default function MaxxiPharmaPage() {
       )}
 
       {/* 4. TAB CONTENT: 5. PRODUCT CATALOG */}
-      {activeTab === 'catalog' && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div>
-              <h2 className="text-sm font-black text-slate-800">Maxxi Pharma Product Catalog</h2>
-              <p className="text-[11px] text-slate-400">
-                Pharma formulations, tablets, softgel capsules, syrups, ointments &amp; API ingredients.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setEditingCatalogItem(null)
-                setIsCatalogModalOpen(true)
-              }}
-              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add Catalog Product
-            </button>
-          </div>
+      {activeTab === 'catalog' && (() => {
+        const filteredCatalog = catalog.filter((item) => {
+          if (!catalogSearchQuery.trim()) return true
+          const q = catalogSearchQuery.toLowerCase()
+          return (
+            item.name?.toLowerCase().includes(q) ||
+            item.description?.toLowerCase().includes(q) ||
+            item.category?.toLowerCase().includes(q) ||
+            item.hsnCode?.toLowerCase().includes(q) ||
+            item.defaultUnit?.toLowerCase().includes(q)
+          )
+        })
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
-                    <th className="p-3">Product Name</th>
-                    <th className="p-3">Category</th>
-                    <th className="p-3">HSN Code</th>
-                    <th className="p-3 text-right">Stock Qty</th>
-                    <th className="p-3 text-right">Default Unit</th>
-                    <th className="p-3 text-right">Default Rate (₹)</th>
-                    <th className="p-3 text-right">Tax Rate (%)</th>
-                    <th className="p-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {catalog.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-400">
-                        No catalog products found. Click &quot;Add Catalog Product&quot; to add your own product.
-                      </td>
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div>
+                <h2 className="text-sm font-black text-slate-800">Maxxi Pharma Product Catalog</h2>
+                <p className="text-[11px] text-slate-400">
+                  Pharma formulations, tablets, softgel capsules, syrups, ointments &amp; API ingredients.
+                </p>
+              </div>
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={catalogSearchQuery}
+                  onChange={(e) => setCatalogSearchQuery(e.target.value)}
+                  placeholder="Search item name, category, HSN..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  setEditingCatalogItem(null)
+                  setIsCatalogModalOpen(true)
+                }}
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Catalog Product
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
+                      <th className="p-3">Product Name</th>
+                      <th className="p-3">Category</th>
+                      <th className="p-3">HSN Code</th>
+                      <th className="p-3 text-right">Stock Qty</th>
+                      <th className="p-3 text-right">Default Unit</th>
+                      <th className="p-3 text-right">Default Rate (₹)</th>
+                      <th className="p-3 text-right">Tax Rate (%)</th>
+                      <th className="p-3 text-center">Actions</th>
                     </tr>
-                  ) : (
-                    catalog.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="p-3">
-                          <div className="font-bold text-slate-900">{item.name}</div>
-                          {item.description && <div className="text-[10px] text-slate-400">{item.description}</div>}
-                        </td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-[10px] font-bold rounded-md uppercase border border-cyan-200/60">
-                            {item.category || 'Pharma'}
-                          </span>
-                        </td>
-                        <td className="p-3 font-mono text-slate-600">{item.hsnCode}</td>
-                        <td className="p-3 text-right font-extrabold text-blue-600">
-                          {item.quantity || 0}
-                        </td>
-                        <td className="p-3 text-right font-semibold uppercase">{item.defaultUnit}</td>
-                        <td className="p-3 text-right font-mono font-bold text-slate-900">
-                          ₹{item.defaultRate?.toLocaleString('en-IN')}
-                        </td>
-                        <td className="p-3 text-right font-mono text-slate-600">{item.defaultTaxRate}%</td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => {
-                                setEditingCatalogItem(item)
-                                setIsCatalogModalOpen(true)
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCatalogItem(item.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {filteredCatalog.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center text-slate-400">
+                          {catalogSearchQuery.trim()
+                            ? 'No matching items found.'
+                            : 'No catalog products found. Click "Add Catalog Product" to add your own product.'}
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      filteredCatalog.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="p-3">
+                            <div className="font-bold text-slate-900">{item.name}</div>
+                            {item.description && <div className="text-[10px] text-slate-400">{item.description}</div>}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-[10px] font-bold rounded-md uppercase border border-cyan-200/60">
+                              {item.category || 'Pharma'}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-slate-600">{item.hsnCode}</td>
+                          <td className="p-3 text-right font-extrabold text-blue-600">
+                            {item.quantity || 0}
+                          </td>
+                          <td className="p-3 text-right font-semibold uppercase">{item.defaultUnit}</td>
+                          <td className="p-3 text-right font-mono font-bold text-slate-900">
+                            ₹{item.defaultRate?.toLocaleString('en-IN')}
+                          </td>
+                          <td className="p-3 text-right font-mono text-slate-600">{item.defaultTaxRate}%</td>
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => {
+                                  setEditingCatalogItem(item)
+                                  setIsCatalogModalOpen(true)
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCatalogItem(item.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* 4. TAB CONTENT: 6. OPENING STOCK */}
       {activeTab === 'opening-stock' && (

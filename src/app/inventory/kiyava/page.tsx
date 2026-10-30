@@ -79,6 +79,7 @@ export default function KiyavaPage() {
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
   const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE'>('SALE')
 
@@ -1124,142 +1125,170 @@ export default function KiyavaPage() {
       )}
 
       {/* 4. TAB CONTENT: 5. CATALOG MASTER */}
-      {activeTab === 'catalog' && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div>
-              <h2 className="text-sm font-black text-slate-800">Catalog Master (Herbs &amp; Materials)</h2>
-              <p className="text-xs text-slate-400 font-medium">Manage HSN codes, default rates &amp; GST tax percentages</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setActiveTab('opening-stock')}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-purple-600/20"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5" /> Opening Stock
-              </button>
-              <button
-                onClick={() => {
-                  setEditingCatalogItem(null)
-                  setIsCatalogModalOpen(true)
-                }}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-amber-600/20"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Item
-              </button>
-            </div>
-          </div>
+      {activeTab === 'catalog' && (() => {
+        const filteredCatalog = catalog.filter((item) => {
+          if (!catalogSearchQuery.trim()) return true
+          const q = catalogSearchQuery.toLowerCase()
+          return (
+            item.name?.toLowerCase().includes(q) ||
+            item.description?.toLowerCase().includes(q) ||
+            item.hsnCode?.toLowerCase().includes(q) ||
+            item.defaultUnit?.toLowerCase().includes(q) ||
+            item.packing?.toLowerCase().includes(q)
+          )
+        })
 
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px] border-b border-slate-200">
-                  <tr>
-                    <th className="p-3 pl-5">Item / Herb Name</th>
-                    <th className="p-3 text-center">HSN/SAC</th>
-                    <th className="p-3 text-center">Unit</th>
-                    <th className="p-3 text-center">Packing</th>
-                    <th className="p-3 text-right">Quantity</th>
-                    <th className="p-3 text-right">Default Rate (₹)</th>
-                    <th className="p-3 text-center">GST Rate</th>
-                    <th className="p-3 text-right pr-5">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-sans">
-                  {catalog.length === 0 ? (
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div>
+                <h2 className="text-sm font-black text-slate-800">Catalog Master (Herbs &amp; Materials)</h2>
+                <p className="text-xs text-slate-400 font-medium">Manage HSN codes, default rates &amp; GST tax percentages</p>
+              </div>
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={catalogSearchQuery}
+                  onChange={(e) => setCatalogSearchQuery(e.target.value)}
+                  placeholder="Search item name, HSN, packing..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => setActiveTab('opening-stock')}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-purple-600/20"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> Opening Stock
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingCatalogItem(null)
+                    setIsCatalogModalOpen(true)
+                  }}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-amber-600/20"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Item
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px] border-b border-slate-200">
                     <tr>
-                      <td colSpan={8} className="p-12 text-center text-slate-400">
-                        <Package className="w-10 h-10 mx-auto mb-2 text-slate-300 stroke-[1.5]" />
-                        <p className="font-bold text-sm text-slate-700">No products in catalog</p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Click &quot;+ Add Item&quot; above to add your products.
-                        </p>
-                      </td>
+                      <th className="p-3 pl-5">Item / Herb Name</th>
+                      <th className="p-3 text-center">HSN/SAC</th>
+                      <th className="p-3 text-center">Unit</th>
+                      <th className="p-3 text-center">Packing</th>
+                      <th className="p-3 text-right">Quantity</th>
+                      <th className="p-3 text-right">Default Rate (₹)</th>
+                      <th className="p-3 text-center">GST Rate</th>
+                      <th className="p-3 text-right pr-5">Action</th>
                     </tr>
-                  ) : (
-                    catalog.map((item) => {
-                    const openingEntry = openingStock.find((s) => s.itemId === item.id)
-                    const openingQty = openingEntry?.quantity || Number(item.quantity) || 0
-                    
-                    const purchasedQty = invoices
-                      .filter((inv) => inv.type === 'PURCHASE')
-                      .reduce((sum, inv) => {
-                        const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
-                        return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
-                      }, 0)
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-sans">
+                    {filteredCatalog.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-12 text-center text-slate-400">
+                          <Package className="w-10 h-10 mx-auto mb-2 text-slate-300 stroke-[1.5]" />
+                          <p className="font-bold text-sm text-slate-700">
+                            {catalogSearchQuery.trim() ? 'No matching items found' : 'No products in catalog'}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {catalogSearchQuery.trim()
+                              ? 'Try searching with a different keyword.'
+                              : 'Click "+ Add Item" above to add your products.'}
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredCatalog.map((item) => {
+                      const openingEntry = openingStock.find((s) => s.itemId === item.id)
+                      const openingQty = openingEntry?.quantity || Number(item.quantity) || 0
                       
-                    const soldQty = invoices
-                      .filter((inv) => (inv.type || 'SALE') === 'SALE')
-                      .reduce((sum, inv) => {
-                        const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
-                        return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
-                      }, 0)
-                      
-                    const manufacturedQty = manufacturingLogs
-                      .filter(log => log.finishedGoodItemId === item.id)
-                      .reduce((sum, log) => sum + log.producedQuantity, 0)
-                      
-                    const consumedQty = manufacturingLogs
-                      .reduce((sum, log) => {
-                        const consumed = log.rawMaterialsConsumed.filter(rm => rm.itemId === item.id)
-                        return sum + consumed.reduce((s, rm) => s + rm.quantity, 0)
-                      }, 0)
-                      
-                    const currentStock = openingQty + purchasedQty + manufacturedQty - soldQty - consumedQty
+                      const purchasedQty = invoices
+                        .filter((inv) => inv.type === 'PURCHASE')
+                        .reduce((sum, inv) => {
+                          const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
+                          return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+                        }, 0)
+                        
+                      const soldQty = invoices
+                        .filter((inv) => (inv.type || 'SALE') === 'SALE')
+                        .reduce((sum, inv) => {
+                          const rows = inv.items.filter((it) => it.description.toLowerCase() === item.name.toLowerCase())
+                          return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+                        }, 0)
+                        
+                      const manufacturedQty = manufacturingLogs
+                        .filter(log => log.finishedGoodItemId === item.id)
+                        .reduce((sum, log) => sum + log.producedQuantity, 0)
+                        
+                      const consumedQty = manufacturingLogs
+                        .reduce((sum, log) => {
+                          const consumed = log.rawMaterialsConsumed.filter(rm => rm.itemId === item.id)
+                          return sum + consumed.reduce((s, rm) => s + rm.quantity, 0)
+                        }, 0)
+                        
+                      const currentStock = openingQty + purchasedQty + manufacturedQty - soldQty - consumedQty
 
-                    return (
-                    <tr key={item.id} className="hover:bg-slate-50">
-                      <td className="p-3 pl-5 font-bold text-slate-900">{item.name}</td>
-                      <td className="p-3 text-center font-mono font-bold text-slate-700">{item.hsnCode}</td>
-                      <td className="p-3 text-center font-medium text-slate-700">{item.defaultUnit}</td>
-                      <td className="p-3 text-center font-medium text-slate-600">
-                        {item.packing ? (
-                          <span className="inline-block px-2 py-0.5 bg-slate-100 rounded-md font-medium text-[11px] text-slate-700 border border-slate-200">
-                            {item.packing}
+                      return (
+                      <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="p-3 pl-5 font-bold text-slate-900">{item.name}</td>
+                        <td className="p-3 text-center font-mono font-bold text-slate-700">{item.hsnCode}</td>
+                        <td className="p-3 text-center font-medium text-slate-700">{item.defaultUnit}</td>
+                        <td className="p-3 text-center font-medium text-slate-600">
+                          {item.packing ? (
+                            <span className="inline-block px-2 py-0.5 bg-slate-100 rounded-md font-medium text-[11px] text-slate-700 border border-slate-200">
+                              {item.packing}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">-</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded font-black font-mono text-xs ${currentStock <= 0 ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {currentStock}
                           </span>
-                        ) : (
-                          <span className="text-slate-300">-</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded font-black font-mono text-xs ${currentStock <= 0 ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {currentStock}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right font-mono font-bold text-slate-900">
-                        ₹{item.defaultRate.toFixed(2)}
-                      </td>
-                      <td className="p-3 text-center font-mono font-bold text-emerald-600">
-                        {item.defaultTaxRate}%
-                      </td>
-                      <td className="p-3 text-right pr-5">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => {
-                              setEditingCatalogItem(item)
-                              setIsCatalogModalOpen(true)
-                            }}
-                            className="p-1 text-slate-400 hover:text-amber-600 rounded"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCatalogItem(item.id, item.name)}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded"
-                            title="Delete item"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )}))}
-                </tbody>
-              </table>
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-slate-900">
+                          ₹{item.defaultRate.toFixed(2)}
+                        </td>
+                        <td className="p-3 text-center font-mono font-bold text-emerald-600">
+                          {item.defaultTaxRate}%
+                        </td>
+                        <td className="p-3 text-right pr-5">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => {
+                                setEditingCatalogItem(item)
+                                setIsCatalogModalOpen(true)
+                              }}
+                              className="p-1 text-slate-400 hover:text-amber-600 rounded"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCatalogItem(item.id, item.name)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                              title="Delete item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* 4. TAB CONTENT: 6. OPENING STOCK */}
       {activeTab === 'opening-stock' && (() => {

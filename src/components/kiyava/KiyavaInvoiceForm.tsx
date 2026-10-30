@@ -116,6 +116,7 @@ export default function KiyavaInvoiceForm({
   const [station, setStation] = useState<string>(initialInvoice?.station || '')
   const [paymentTerms, setPaymentTerms] = useState<string>(initialInvoice?.paymentTerms || 'Bank Transfer / Cash')
   const [totalBags, setTotalBags] = useState<string>(initialInvoice?.totalBags || '')
+  const [matCenter, setMatCenter] = useState<string>(initialInvoice?.matCenter || 'KSV Store')
   const [reverseCharge, setReverseCharge] = useState<'N' | 'Y'>(initialInvoice?.reverseCharge || 'N')
   const [invoiceType, setInvoiceType] = useState<'SALE' | 'PURCHASE'>(initialInvoice?.type || defaultInvoiceType || 'SALE')
 
@@ -368,6 +369,7 @@ export default function KiyavaInvoiceForm({
       eWayBillNo,
       paymentTerms,
       totalBags,
+      matCenter,
       company: currentCompany,
       buyer: currentBuyer,
       shippedToSameAsBilled: true,
@@ -402,8 +404,36 @@ export default function KiyavaInvoiceForm({
     <form onSubmit={(e) => handleFormSubmit(e, false)} className="space-y-5 animate-in fade-in duration-300">
       {/* Tally Voucher Top Header Bar */}
       <div className="bg-[#0f172a] text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border border-slate-800 shadow-xl">
-        <div className="flex items-center gap-3">
-          {/* Empty left side */}
+        <div className="flex flex-wrap items-center gap-3">
+          {(currentCompany?.name?.toUpperCase().includes('KSV') || currentCompany?.name?.toUpperCase().includes('KARAN')) && invoiceType === 'SALE' && (
+            <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-xl p-1">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider pl-2.5 pr-1">
+                Deduct Stock From:
+              </span>
+              <button
+                type="button"
+                onClick={() => setMatCenter('KSV Store')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                  matCenter !== 'KSV Factory'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-700'
+                }`}
+              >
+                🏪 KSV Store
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatCenter('KSV Factory')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                  matCenter === 'KSV Factory'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-700'
+                }`}
+              >
+                🏭 KSV Factory
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">

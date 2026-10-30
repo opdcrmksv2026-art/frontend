@@ -307,6 +307,42 @@ export default function ManufacturingModal({
                 </div>
               </div>
             </div>
+
+            {/* Store vs Factory Allocation Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-cyan-100/80">
+              <div>
+                <label className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider mb-1 block">
+                  🏭 Transfer to KSV Factory Qty (Optional)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  max={formData.producedQuantity || undefined}
+                  value={formData.transferredToFactoryQty || 0}
+                  onChange={(e) => {
+                    const val = Math.max(0, parseFloat(e.target.value) || 0)
+                    setFormData({ ...formData, transferredToFactoryQty: val })
+                  }}
+                  placeholder="0"
+                  className="w-full px-3 py-2 bg-white border border-indigo-200 rounded-xl text-xs font-mono font-bold text-indigo-800 outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="sm:col-span-2 flex items-center gap-3 pt-4">
+                <div className="flex-1 bg-teal-50 border border-teal-200 rounded-xl px-3 py-2 flex justify-between items-center">
+                  <span className="text-[10px] font-extrabold text-teal-700 uppercase">🏪 Remaining in KSV Store:</span>
+                  <span className="font-mono font-black text-xs text-teal-800">
+                    {Math.max(0, (Number(formData.producedQuantity) || 0) - (Number(formData.transferredToFactoryQty) || 0))} {formData.unit}
+                  </span>
+                </div>
+                <div className="flex-1 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 flex justify-between items-center">
+                  <span className="text-[10px] font-extrabold text-indigo-700 uppercase">🏭 In KSV Factory:</span>
+                  <span className="font-mono font-black text-xs text-indigo-800">
+                    {Number(formData.transferredToFactoryQty) || 0} {formData.unit}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Section 2: Components (Consumption) Table */}
