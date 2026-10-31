@@ -90,6 +90,7 @@ export default function KsvPage() {
   // Stock Transfer Modal (KSV Store <-> KSV Factory)
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
   const [editingTransferId, setEditingTransferId] = useState<string | null>(null)
+  const [selectedTransfersForPrint, setSelectedTransfersForPrint] = useState<StockTransferLog[] | null>(null)
   const [transferForm, setTransferForm] = useState<{
     batchId: string
     batchNo: string
@@ -1973,9 +1974,18 @@ export default function KsvPage() {
                     </h3>
                     <p className="text-[10px] text-slate-400 font-medium">History of finished goods transferred between KSV Store and KSV Factory</p>
                   </div>
-                  <span className="text-[10px] font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
-                    {stockTransfers.length} Transfer(s)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedTransfersForPrint(stockTransfers)}
+                      className="px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-cyan-200 cursor-pointer"
+                      title="Print Full Stock Transfer Ledger"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Print Ledger
+                    </button>
+                    <span className="text-[10px] font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+                      {stockTransfers.length} Transfer(s)
+                    </span>
+                  </div>
                 </div>
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="w-full text-left text-xs border-collapse">
@@ -2013,6 +2023,13 @@ export default function KsvPage() {
                           <td className="p-3 text-slate-500 text-[11px]">{tr.notes || '—'}</td>
                           <td className="p-3 text-right pr-5">
                             <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => setSelectedTransfersForPrint([tr])}
+                                className="px-2.5 py-1 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-cyan-200 cursor-pointer"
+                                title="Print Transfer Voucher / Challan"
+                              >
+                                <Printer className="w-3.5 h-3.5" /> Print
+                              </button>
                               <button
                                 onClick={() => openEditTransferModal(tr)}
                                 className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
@@ -2170,9 +2187,20 @@ export default function KsvPage() {
                   </h3>
                   <p className="text-[10px] text-slate-400 font-medium">Complete log of all stock transfers between KSV Store and KSV Factory</p>
                 </div>
-                <span className="text-[10px] font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
-                  {stockTransfers.length} Transfer(s)
-                </span>
+                <div className="flex items-center gap-2">
+                  {stockTransfers.length > 0 && (
+                    <button
+                      onClick={() => setSelectedTransfersForPrint(stockTransfers)}
+                      className="px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-cyan-200 cursor-pointer"
+                      title="Print Full Stock Transfer Ledger"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Print Ledger
+                    </button>
+                  )}
+                  <span className="text-[10px] font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+                    {stockTransfers.length} Transfer(s)
+                  </span>
+                </div>
               </div>
 
               {stockTransfers.filter((tr) =>
@@ -2222,6 +2250,13 @@ export default function KsvPage() {
                           <td className="p-3 text-slate-500 text-[11px]">{tr.notes || '—'}</td>
                           <td className="p-3 text-right pr-5">
                             <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => setSelectedTransfersForPrint([tr])}
+                                className="px-2.5 py-1 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-cyan-200 cursor-pointer"
+                                title="Print Transfer Voucher / Challan"
+                              >
+                                <Printer className="w-3.5 h-3.5" /> Print
+                              </button>
                               <button
                                 onClick={() => openEditTransferModal(tr)}
                                 className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
@@ -2542,6 +2577,138 @@ export default function KsvPage() {
           onClose={() => setSelectedMfgLogForPrint(null)}
         />
       )}
+
+      {/* PRINTABLE STOCK TRANSFER VOUCHER / CHALLAN MODAL */}
+      {selectedTransfersForPrint && selectedTransfersForPrint.length > 0 && (() => {
+        const isSingle = selectedTransfersForPrint.length === 1
+        const singleTr = selectedTransfersForPrint[0]
+        const primaryCompany = companies[0]
+        const totalTransferredQty = selectedTransfersForPrint.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0)
+
+        return (
+          <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center lg:justify-end p-4 lg:pr-8 lg:pl-64 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
+            {/* Floating Action Bar (Hidden during print) */}
+            <div className="fixed top-4 right-4 z-50 flex items-center gap-2 print:hidden">
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition-all"
+              >
+                <Printer className="w-4 h-4" /> Print {isSingle ? 'Transfer Voucher' : 'Transfer Ledger'}
+              </button>
+              <button
+                onClick={() => setSelectedTransfersForPrint(null)}
+                className="p-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl shadow-lg border border-slate-200 cursor-pointer transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Printable Voucher Paper */}
+            <div className="bg-white w-full max-w-4xl p-8 border border-slate-300 shadow-2xl rounded-xl print:shadow-none print:border-none print:p-4 text-black font-sans text-xs">
+              {/* Title Header */}
+              <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-4">
+                <div>
+                  <h1 className="text-lg font-black uppercase tracking-wide text-slate-900">
+                    {primaryCompany?.name || 'Karan Singh Vaidh (KSV)'}
+                  </h1>
+                  <p className="text-[11px] font-semibold text-slate-600">
+                    {primaryCompany?.address || 'Solan, Himachal Pradesh'}
+                  </p>
+                  {primaryCompany?.gstin && (
+                    <p className="text-[10px] font-mono font-bold text-slate-500">
+                      GSTIN: {primaryCompany.gstin} | State: {primaryCompany.state} ({primaryCompany.stateCode})
+                    </p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="font-black uppercase text-sm tracking-wide text-indigo-900">
+                    {isSingle ? 'Stock Transfer Challan / Voucher' : 'Stock Transfer Ledger (Store ↔ Factory)'}
+                  </div>
+                  <div className="text-[11px] font-mono font-bold text-slate-600 mt-1">
+                    Date: {isSingle ? singleTr.date : new Date().toISOString().split('T')[0]}
+                  </div>
+                  {isSingle && singleTr.batchNo && (
+                    <div className="text-[11px] font-mono font-bold text-slate-700">
+                      Batch No: {singleTr.batchNo}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Source & Destination Summary for Single Voucher */}
+              {isSingle && (
+                <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 block">Source Location (From)</span>
+                    <strong className="text-sm font-black text-slate-900">
+                      {singleTr.direction === 'STORE_TO_FACTORY' ? '🏪 KSV Store' : '🏭 KSV Factory'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 block">Destination Location (To)</span>
+                    <strong className="text-sm font-black text-indigo-800">
+                      {singleTr.direction === 'STORE_TO_FACTORY' ? '🏭 KSV Factory' : '🏪 KSV Store'}
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {/* Main Table */}
+              <table className="w-full border-collapse border border-slate-400 text-xs mb-6">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-slate-400 text-[10px] uppercase font-extrabold text-slate-800">
+                    <th className="border-r border-slate-400 p-2 text-center w-10">#</th>
+                    <th className="border-r border-slate-400 p-2 text-left">Date</th>
+                    <th className="border-r border-slate-400 p-2 text-left">Batch #</th>
+                    <th className="border-r border-slate-400 p-2 text-left">Product / Finished Good Name</th>
+                    <th className="border-r border-slate-400 p-2 text-left">Transfer Direction</th>
+                    <th className="border-r border-slate-400 p-2 text-right">Qty Transferred</th>
+                    <th className="p-2 text-left">Remarks / Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-300">
+                  {selectedTransfersForPrint.map((tr, idx) => (
+                    <tr key={tr.id}>
+                      <td className="p-2 border-r border-slate-300 text-center font-mono font-bold">{idx + 1}</td>
+                      <td className="p-2 border-r border-slate-300 font-mono">{tr.date}</td>
+                      <td className="p-2 border-r border-slate-300 font-mono font-bold uppercase">{tr.batchNo || '—'}</td>
+                      <td className="p-2 border-r border-slate-300 font-black uppercase text-slate-900">{tr.itemName}</td>
+                      <td className="p-2 border-r border-slate-300 font-bold">
+                        {tr.direction === 'STORE_TO_FACTORY'
+                          ? 'KSV Store → KSV Factory'
+                          : 'KSV Factory → KSV Store'}
+                      </td>
+                      <td className="p-2 border-r border-slate-300 text-right font-mono font-black text-slate-900">
+                        {tr.quantity} <span className="text-[10px] uppercase">{tr.unit}</span>
+                      </td>
+                      <td className="p-2 text-slate-700">{tr.notes || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-100 border-t-2 border-slate-400 font-extrabold text-xs">
+                    <td className="p-2 border-r border-slate-400 text-right uppercase" colSpan={5}>
+                      Total Quantity Transferred:
+                    </td>
+                    <td className="p-2 border-r border-slate-400 text-right font-mono text-sm font-black text-slate-900">
+                      {totalTransferredQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}{' '}
+                      {isSingle ? singleTr.unit : ''}
+                    </td>
+                    <td className="p-2"></td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              {/* Signatures */}
+              <div className="mt-12 flex justify-between items-end pt-8 border-t border-slate-300 text-[11px] font-bold text-slate-700">
+                <div>Dispatched By (KSV Store): _______________</div>
+                <div>Received By (KSV Factory): _______________</div>
+                <div>Authorized Signatory</div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
