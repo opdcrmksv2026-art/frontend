@@ -796,7 +796,8 @@ export default function CreateInvoicePage() {
                     className="px-3 py-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-extrabold text-blue-800 outline-none cursor-pointer shadow-sm"
                   >
                     <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
-                    <option value="COD & ONLINE SALE">COD &amp; ONLINE SALE</option>
+                    <option value="COD SALE">COD SALE</option>
+                    <option value="ONLINE SALE">ONLINE SALE</option>
                   </select>
                 </div>
               </div>
@@ -982,7 +983,8 @@ export default function CreateInvoicePage() {
                   className="w-full px-4 py-2.5 bg-white border-2 border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-extrabold text-slate-800 transition-all cursor-pointer"
                 >
                   <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
-                  <option value="COD & ONLINE SALE">COD &amp; ONLINE SALE</option>
+                  <option value="COD SALE">COD SALE</option>
+                  <option value="ONLINE SALE">ONLINE SALE</option>
                 </select>
               </div>
 
@@ -1702,8 +1704,10 @@ export default function CreateInvoicePage() {
                   <div className="text-right space-y-1">
                     <div className="flex items-center gap-2 justify-end flex-wrap">
                       <div className={`text-[11px] font-black px-2.5 py-1 rounded-lg border ${
-                        generatedBill.opdSection === "COD & ONLINE SALE"
+                        generatedBill.opdSection === "COD SALE" || generatedBill.opdSection === "COD & ONLINE SALE"
                           ? "text-amber-700 bg-amber-50 border-amber-200"
+                          : generatedBill.opdSection === "ONLINE SALE"
+                          ? "text-indigo-700 bg-indigo-50 border-indigo-200"
                           : "text-emerald-700 bg-emerald-50 border-emerald-200"
                       }`}>
                         {generatedBill.opdSection || "SOLAN OPD SALE"}
