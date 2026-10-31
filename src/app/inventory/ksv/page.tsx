@@ -2612,7 +2612,7 @@ export default function KsvPage() {
                     {primaryCompany?.name || 'Karan Singh Vaidh (KSV)'}
                   </h1>
                   <p className="text-[11px] font-semibold text-slate-600">
-                    {primaryCompany?.address || 'Solan, Himachal Pradesh'}
+                    {primaryCompany ? `${primaryCompany.addressLine1}${primaryCompany.city ? `, ${primaryCompany.city}` : ''}` : 'Solan, Himachal Pradesh'}
                   </p>
                   {primaryCompany?.gstin && (
                     <p className="text-[10px] font-mono font-bold text-slate-500">
