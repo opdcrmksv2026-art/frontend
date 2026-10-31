@@ -168,6 +168,7 @@ export default function CreateInvoicePage() {
     stateCode: "02",
     pincode: "",
     tokenNo: "",
+    opdSection: "SOLAN OPD SALE",
 
     // Pricing & Payments
     consultancyCharges: "0",
@@ -316,7 +317,8 @@ export default function CreateInvoicePage() {
       state: patient.state || "Himachal Pradesh",
       stateCode: getStateCode(patient.state || "Himachal Pradesh"),
       pincode: patient.pincode || "",
-      tokenNo: (patient as any).tokenNo || (patient as any).agentToken || prev.tokenNo || `TK-${Math.floor(10 + Math.random() * 90)}`
+      tokenNo: (patient as any).tokenNo || (patient as any).agentToken || prev.tokenNo || `TK-${Math.floor(10 + Math.random() * 90)}`,
+      opdSection: (patient as any).opdSection || prev.opdSection || "SOLAN OPD SALE"
     }))
   }
 
@@ -339,7 +341,8 @@ export default function CreateInvoicePage() {
       state: "Himachal Pradesh",
       stateCode: "02",
       pincode: "",
-      tokenNo: `TK-${Math.floor(10 + Math.random() * 90)}`
+      tokenNo: `TK-${Math.floor(10 + Math.random() * 90)}`,
+      opdSection: prev.opdSection || "SOLAN OPD SALE"
     }))
   }
 
@@ -485,6 +488,7 @@ export default function CreateInvoicePage() {
     const billData = {
       invoiceNo,
       tokenNo: effectiveTokenNo,
+      opdSection: formData.opdSection || "SOLAN OPD SALE",
       patientName: formData.name,
       patientId: formData.uniqueId,
       age: formData.age,
@@ -548,6 +552,7 @@ export default function CreateInvoicePage() {
           amountCash: cashVal,
           amountOnline: onlineVal,
           billingType: formData.billingType,
+          opdSection: formData.opdSection || "SOLAN OPD SALE",
           status: "COMPLETED",
           symptoms: formData.symptoms,
           notes: formData.notes,
@@ -781,6 +786,19 @@ export default function CreateInvoicePage() {
                     className="px-3 py-1.5 bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs font-black text-purple-700 outline-none w-28 font-mono shadow-sm"
                   />
                 </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">OPD Section:</label>
+                  <select
+                    name="opdSection"
+                    value={formData.opdSection || "SOLAN OPD SALE"}
+                    onChange={handleInputChange}
+                    className="px-3 py-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-extrabold text-blue-800 outline-none cursor-pointer shadow-sm"
+                  >
+                    <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
+                    <option value="COD & ONLINE SALE">COD &amp; ONLINE SALE</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -950,6 +968,22 @@ export default function CreateInvoicePage() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl outline-none text-sm font-bold text-purple-900"
                 />
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>OPD Section *</span>
+                  <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">Bill Source</span>
+                </label>
+                <select
+                  name="opdSection"
+                  value={formData.opdSection || "SOLAN OPD SALE"}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2.5 bg-white border-2 border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-extrabold text-slate-800 transition-all cursor-pointer"
+                >
+                  <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
+                  <option value="COD & ONLINE SALE">COD &amp; ONLINE SALE</option>
+                </select>
               </div>
 
               <div className="flex flex-col md:col-span-2">
@@ -1666,7 +1700,14 @@ export default function CreateInvoicePage() {
                     <p className="text-[11px] text-slate-400 font-semibold mt-1">GSTIN/UIN: 02AASCM1970C1ZN | State: Himachal Pradesh, Code: 02</p>
                   </div>
                   <div className="text-right space-y-1">
-                    <div className="flex items-center gap-2 justify-end">
+                    <div className="flex items-center gap-2 justify-end flex-wrap">
+                      <div className={`text-[11px] font-black px-2.5 py-1 rounded-lg border ${
+                        generatedBill.opdSection === "COD & ONLINE SALE"
+                          ? "text-amber-700 bg-amber-50 border-amber-200"
+                          : "text-emerald-700 bg-emerald-50 border-emerald-200"
+                      }`}>
+                        {generatedBill.opdSection || "SOLAN OPD SALE"}
+                      </div>
                       <div className="text-xs font-black text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg">
                         TOKEN NO: {generatedBill.tokenNo || "TK-01"}
                       </div>

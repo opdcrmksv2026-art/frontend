@@ -33,6 +33,7 @@ interface PaymentRecord {
   id: string
   invoiceNo: string
   tokenNo?: string
+  opdSection?: string
   date: string
   patientName: string
   patientId: string
@@ -202,6 +203,7 @@ export default function PaymentsPage() {
                   symptoms: o.symptoms || "",
                   notes: o.notes || "",
                   billingType: o.billingType || "Non-GST",
+                  opdSection: o.opdSection || "SOLAN OPD SALE",
                   priceVal: totalDue,
                   discountVal: 0,
                   gstVal: o.billingType?.includes("+18%") ? Math.round(totalDue * 0.18) : 0,
@@ -279,12 +281,15 @@ export default function PaymentsPage() {
       r.patientName.toLowerCase().includes(query) ||
       r.patientId.toLowerCase().includes(query) ||
       r.invoiceNo.toLowerCase().includes(query) ||
-      r.combinedKitName.toLowerCase().includes(query)
+      r.combinedKitName.toLowerCase().includes(query) ||
+      (r.opdSection || "SOLAN OPD SALE").toLowerCase().includes(query)
 
     if (!matchesSearch) return false
 
     if (paymentFilter === "CASH") return r.cashVal > 0 && r.onlineVal === 0
     if (paymentFilter === "SPLIT") return r.cashVal > 0 && r.onlineVal > 0
+    if (paymentFilter === "SOLAN") return (r.opdSection || "SOLAN OPD SALE") === "SOLAN OPD SALE"
+    if (paymentFilter === "COD") return r.opdSection === "COD & ONLINE SALE"
 
     return true
   })
@@ -605,13 +610,27 @@ export default function PaymentsPage() {
 
         {/* Conditional Toolbar Controls based on activeTab */}
         {activeTab === "ACTIVE" ? (
-          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-2xl border border-slate-200/60 text-xs w-full sm:w-auto justify-center">
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 p-1 rounded-2xl border border-slate-200/60 text-xs w-full sm:w-auto justify-center">
             <button
               onClick={() => setPaymentFilter("ALL")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "ALL" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
                 }`}
             >
-              <LayoutGrid className="w-3.5 h-3.5" /> All Modes
+              <LayoutGrid className="w-3.5 h-3.5" /> All Bills
+            </button>
+            <button
+              onClick={() => setPaymentFilter("SOLAN")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "SOLAN" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+            >
+              Solan OPD Sale
+            </button>
+            <button
+              onClick={() => setPaymentFilter("COD")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "COD" ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+            >
+              COD &amp; Online Sale
             </button>
             <button
               onClick={() => setPaymentFilter("CASH")}
@@ -721,9 +740,18 @@ export default function PaymentsPage() {
                         <div className="font-bold text-slate-800 truncate" title={r.combinedKitName}>
                           {r.combinedKitName}
                         </div>
-                        <span className="text-[10px] text-indigo-600 font-extrabold bg-indigo-50 px-2 py-0.5 rounded-md mt-1 inline-block">
-                          {r.billingType}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border ${
+                            r.opdSection === "COD & ONLINE SALE"
+                              ? "text-amber-700 bg-amber-50 border-amber-200"
+                              : "text-emerald-700 bg-emerald-50 border-emerald-200"
+                          }`}>
+                            {r.opdSection || "SOLAN OPD SALE"}
+                          </span>
+                          <span className="text-[10px] text-indigo-600 font-extrabold bg-indigo-50 px-2 py-0.5 rounded-md">
+                            {r.billingType}
+                          </span>
+                        </div>
                       </td>
 
                       {/* Price & Subtotal */}
@@ -974,7 +1002,14 @@ export default function PaymentsPage() {
                     </p>
                   </div>
                   <div className="text-right space-y-1">
-                    <div className="flex items-center gap-2 justify-end">
+                    <div className="flex items-center gap-2 justify-end flex-wrap">
+                      <div className={`text-[11px] font-black px-2.5 py-1 rounded-lg border ${
+                        selectedBill.opdSection === "COD & ONLINE SALE"
+                          ? "text-amber-700 bg-amber-50 border-amber-200"
+                          : "text-emerald-700 bg-emerald-50 border-emerald-200"
+                      }`}>
+                        {selectedBill.opdSection || "SOLAN OPD SALE"}
+                      </div>
                       <div className="text-xs font-black text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg">
                         TOKEN NO: {selectedBill.tokenNo || (selectedBill as any).agentToken || "TK-01"}
                       </div>
@@ -1372,7 +1407,7 @@ export default function PaymentsPage() {
               className="space-y-4 text-xs font-semibold"
             >
               {/* Patient Basic Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Patient Full Name</label>
                   <input
@@ -1392,6 +1427,18 @@ export default function PaymentsPage() {
                     onChange={(e) => setEditingBill({ ...editingBill, patientId: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-bold outline-none focus:border-blue-500"
                   />
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">OPD Section (Bill Source)</label>
+                  <select
+                    value={editingBill.opdSection || "SOLAN OPD SALE"}
+                    onChange={(e) => setEditingBill({ ...editingBill, opdSection: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-bold outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
+                    <option value="COD & ONLINE SALE">COD &amp; ONLINE SALE</option>
+                  </select>
                 </div>
               </div>
 
