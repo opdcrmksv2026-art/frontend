@@ -22,7 +22,10 @@ import {
   Trash2,
   RotateCcw,
   Edit,
-  AlertTriangle
+  AlertTriangle,
+  Download,
+  FileSpreadsheet,
+  Calendar
 } from "lucide-react"
 
 import { calculateGSTInvoice, getStateCode, STATE_GST_CODES } from "@/utils/gstCalculator"
@@ -105,7 +108,9 @@ export default function PaymentsPage() {
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("")
-  const [paymentFilter, setPaymentFilter] = useState("ALL") // ALL, CASH, SPLIT
+  const [paymentFilter, setPaymentFilter] = useState("ALL") // ALL, SOLAN, COD, CASH, SPLIT
+  const [selectedMonth, setSelectedMonth] = useState<string>("ALL") // "ALL" or "YYYY-MM"
+  const [showProductSummary, setShowProductSummary] = useState(false)
 
   // Printable Receipt Modal State
   const [selectedBill, setSelectedBill] = useState<PaymentRecord | null>(null)
@@ -268,14 +273,147 @@ export default function PaymentsPage() {
     fetchRecords()
   }, [])
 
-  // Calculated Stats
-  const totalRevenue = records.reduce((sum, r) => sum + (r.totalPaidVal || 0), 0)
-  const cashRevenue = records.reduce((sum, r) => sum + (r.cashVal || 0), 0)
-  const onlineRevenue = records.reduce((sum, r) => sum + (r.onlineVal || 0), 0)
-  const totalInvoices = records.length
+  // Helper to extract YYYY-MM from a record's date
+  const getRecordYearMonth = (dateVal?: string) => {
+    if (!dateVal) return ""
+    const clean = String(dateVal).split("T")[0]
+    if (/^\d{4}-\d{2}/.test(clean)) return clean.slice(0, 7)
+    const d = new Date(dateVal)
+    if (!isNaN(d.getTime())) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+    }
+    return ""
+  }
+
+  // Records filtered by selectedMonth
+  const monthFilteredRecords = records.filter(r => {
+    if (selectedMonth === "ALL" || !selectedMonth) return true
+    return getRecordYearMonth(r.date) === selectedMonth
+  })
+
+  // Calculated Stats (respecting selectedMonth)
+  const totalRevenue = monthFilteredRecords.reduce((sum, r) => sum + (r.totalPaidVal || 0), 0)
+  const cashRevenue = monthFilteredRecords.reduce((sum, r) => sum + (r.cashVal || 0), 0)
+  const onlineRevenue = monthFilteredRecords.reduce((sum, r) => sum + (r.onlineVal || 0), 0)
+  const totalInvoices = monthFilteredRecords.length
+
+  // Section-wise Breakdown (SOLAN OPD SALE vs COD & ONLINE SALE) for selectedMonth
+  const solanRecords = monthFilteredRecords.filter(r => (r.opdSection || "SOLAN OPD SALE") === "SOLAN OPD SALE")
+  const codRecords = monthFilteredRecords.filter(r => r.opdSection === "COD & ONLINE SALE")
+
+  const getUnitsSoldInRecord = (r: PaymentRecord) => {
+    if (r.treatments && Array.isArray(r.treatments)) {
+      const prodCount = r.treatments.reduce((sum, t) => {
+        if (t.products && Array.isArray(t.products) && t.products.length > 0) {
+          return sum + t.products.reduce((pSum: number, p: any) => pSum + (parseFloat(p.quantity || "1") || 1), 0)
+        }
+        return sum + 1
+      }, 0)
+      return prodCount
+    }
+    return 1
+  }
+
+  const solanStats = {
+    bills: solanRecords.length,
+    units: solanRecords.reduce((s, r) => s + getUnitsSoldInRecord(r), 0),
+    cash: solanRecords.reduce((s, r) => s + (r.cashVal || 0), 0),
+    online: solanRecords.reduce((s, r) => s + (r.onlineVal || 0), 0),
+    total: solanRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
+  }
+
+  const codStats = {
+    bills: codRecords.length,
+    units: codRecords.reduce((s, r) => s + getUnitsSoldInRecord(r), 0),
+    cash: codRecords.reduce((s, r) => s + (r.cashVal || 0), 0),
+    online: codRecords.reduce((s, r) => s + (r.onlineVal || 0), 0),
+    total: codRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
+  }
+
+  // Product-wise Quantity & Revenue Breakdown (Solan OPD vs COD & Online)
+  const productWiseBreakdown = (() => {
+    const map = new Map<string, {
+      name: string
+      hsnCode: string
+      solanQty: number
+      codQty: number
+      totalQty: number
+      solanAmount: number
+      codAmount: number
+      totalAmount: number
+    }>()
+
+    monthFilteredRecords.forEach(r => {
+      const isCod = r.opdSection === "COD & ONLINE SALE"
+      if (r.treatments && Array.isArray(r.treatments)) {
+        r.treatments.forEach((t: any) => {
+          if (t.products && Array.isArray(t.products) && t.products.length > 0) {
+            t.products.forEach((p: any) => {
+              const pName = (p.name || t.kitName || "Medicine").trim()
+              const key = pName.toLowerCase()
+              const qty = parseFloat(p.quantity || "1") || 1
+              const rate = parseFloat(p.rate || "0") || 0
+              const taxRate = parseFloat(p.taxRate || "0") || 0
+              const lineTotal = qty * rate * (1 + taxRate / 100)
+
+              const existing = map.get(key) || {
+                name: pName,
+                hsnCode: p.hsnCode || p.hsnSac || "",
+                solanQty: 0,
+                codQty: 0,
+                totalQty: 0,
+                solanAmount: 0,
+                codAmount: 0,
+                totalAmount: 0
+              }
+              if (isCod) {
+                existing.codQty += qty
+                existing.codAmount += lineTotal
+              } else {
+                existing.solanQty += qty
+                existing.solanAmount += lineTotal
+              }
+              existing.totalQty += qty
+              existing.totalAmount += lineTotal
+              if (!existing.hsnCode && (p.hsnCode || p.hsnSac)) {
+                existing.hsnCode = p.hsnCode || p.hsnSac
+              }
+              map.set(key, existing)
+            })
+          } else if (t.kitName || t.disease) {
+            const pName = (t.kitName || t.disease || "OPD Kit").trim()
+            const key = pName.toLowerCase()
+            const lineTotal = parseFloat(t.price || "0") || (r.totalPaidVal || 0)
+            const existing = map.get(key) || {
+              name: pName,
+              hsnCode: "",
+              solanQty: 0,
+              codQty: 0,
+              totalQty: 0,
+              solanAmount: 0,
+              codAmount: 0,
+              totalAmount: 0
+            }
+            if (isCod) {
+              existing.codQty += 1
+              existing.codAmount += lineTotal
+            } else {
+              existing.solanQty += 1
+              existing.solanAmount += lineTotal
+            }
+            existing.totalQty += 1
+            existing.totalAmount += lineTotal
+            map.set(key, existing)
+          }
+        })
+      }
+    })
+
+    return Array.from(map.values()).sort((a, b) => b.totalQty - a.totalQty)
+  })()
 
   // Filtered active records
-  const filteredRecords = records.filter(r => {
+  const filteredRecords = monthFilteredRecords.filter(r => {
     const query = searchQuery.toLowerCase()
     const matchesSearch =
       r.patientName.toLowerCase().includes(query) ||
@@ -293,6 +431,190 @@ export default function PaymentsPage() {
 
     return true
   })
+
+  // Export Month-End Report to Excel (.csv with UTF-8 BOM for Microsoft Excel)
+  const handleExportExcel = (scope: "ALL" | "SOLAN" | "COD" = "ALL") => {
+    const targetRecords =
+      scope === "SOLAN"
+        ? solanRecords
+        : scope === "COD"
+        ? codRecords
+        : filteredRecords
+
+    if (targetRecords.length === 0) {
+      alert("No invoice records found for the selected month / section to export.")
+      return
+    }
+
+    const esc = (val: any) => {
+      const str = String(val ?? "").replace(/"/g, '""')
+      return `"${str}"`
+    }
+
+    const periodLabel = selectedMonth === "ALL" ? "All-Months" : selectedMonth
+    const scopeLabel =
+      scope === "SOLAN"
+        ? "SOLAN-OPD-SALE"
+        : scope === "COD"
+        ? "COD-AND-ONLINE-SALE"
+        : "ALL-SECTIONS"
+
+    const rows: string[] = []
+
+    // 1. Report Title & Summary Section
+    rows.push([esc(`MAXXI PHARMA / KSV - MONTH-END OPD SALES REPORT (${periodLabel} | ${scopeLabel})`)].join(","))
+    rows.push([esc(`Generated On: ${new Date().toLocaleString("en-IN")}`)].join(","))
+    rows.push([])
+
+    rows.push([
+      esc("OPD SECTION (BILL SOURCE)"),
+      esc("TOTAL BILLS"),
+      esc("TOTAL UNITS / KITS SOLD"),
+      esc("CASH COLLECTED (Rs.)"),
+      esc("ONLINE / UPI PAID (Rs.)"),
+      esc("TOTAL SALES REVENUE (Rs.)")
+    ].join(","))
+
+    if (scope === "ALL" || scope === "SOLAN") {
+      rows.push([
+        esc("SOLAN OPD SALE"),
+        esc(solanStats.bills),
+        esc(solanStats.units),
+        esc(solanStats.cash.toFixed(2)),
+        esc(solanStats.online.toFixed(2)),
+        esc(solanStats.total.toFixed(2))
+      ].join(","))
+    }
+    if (scope === "ALL" || scope === "COD") {
+      rows.push([
+        esc("COD & ONLINE SALE"),
+        esc(codStats.bills),
+        esc(codStats.units),
+        esc(codStats.cash.toFixed(2)),
+        esc(codStats.online.toFixed(2)),
+        esc(codStats.total.toFixed(2))
+      ].join(","))
+    }
+    if (scope === "ALL") {
+      rows.push([
+        esc("GRAND TOTAL"),
+        esc(solanStats.bills + codStats.bills),
+        esc(solanStats.units + codStats.units),
+        esc((solanStats.cash + codStats.cash).toFixed(2)),
+        esc((solanStats.online + codStats.online).toFixed(2)),
+        esc((solanStats.total + codStats.total).toFixed(2))
+      ].join(","))
+    }
+
+    rows.push([])
+
+    // 2. Product-Wise Quantity Sold Breakdown
+    rows.push([esc("PRODUCT-WISE QUANTITY SOLD BREAKDOWN (SOLAN OPD vs COD & ONLINE)")].join(","))
+    rows.push([
+      esc("S.No"),
+      esc("PRODUCT / MEDICINE NAME"),
+      esc("HSN CODE"),
+      esc("SOLAN OPD QTY SOLD"),
+      esc("COD & ONLINE QTY SOLD"),
+      esc("TOTAL QTY SOLD"),
+      esc("SOLAN OPD AMOUNT (Rs.)"),
+      esc("COD & ONLINE AMOUNT (Rs.)"),
+      esc("TOTAL AMOUNT (Rs.)")
+    ].join(","))
+
+    productWiseBreakdown.forEach((prod, idx) => {
+      rows.push([
+        esc(idx + 1),
+        esc(prod.name),
+        esc(prod.hsnCode || "-"),
+        esc(prod.solanQty),
+        esc(prod.codQty),
+        esc(prod.totalQty),
+        esc(prod.solanAmount.toFixed(2)),
+        esc(prod.codAmount.toFixed(2)),
+        esc(prod.totalAmount.toFixed(2))
+      ].join(","))
+    })
+
+    rows.push([])
+
+    // 3. Detailed Invoice-Wise Sales Register
+    rows.push([esc("DETAILED INVOICE-WISE SALES REGISTER")].join(","))
+    rows.push([
+      esc("S.No"),
+      esc("Date"),
+      esc("Invoice No"),
+      esc("Token No"),
+      esc("OPD Section (Bill Source)"),
+      esc("Patient Name"),
+      esc("Patient Mobile / ID"),
+      esc("City"),
+      esc("State"),
+      esc("State Code"),
+      esc("Prescribed Products & Quantities"),
+      esc("Units Sold"),
+      esc("Taxable Value (Rs.)"),
+      esc("CGST (Rs.)"),
+      esc("SGST (Rs.)"),
+      esc("IGST (Rs.)"),
+      esc("Total GST (Rs.)"),
+      esc("Discount (Rs.)"),
+      esc("Grand Total (Rs.)"),
+      esc("Cash Paid (Rs.)"),
+      esc("Online Paid (Rs.)"),
+      esc("Total Paid (Rs.)")
+    ].join(","))
+
+    targetRecords.forEach((r, idx) => {
+      const patientState = r.state || (r.calcResult?.isInterState ? "Punjab" : "Himachal Pradesh")
+      const patientStateCode = getStateCode(patientState)
+      const calc = calculateGSTInvoice(
+        r.treatments || [],
+        r.discountVal || 0,
+        r.consultancyVal || 0,
+        "Himachal Pradesh",
+        patientState,
+        true,
+        patientStateCode
+      )
+
+      rows.push([
+        esc(idx + 1),
+        esc(r.date),
+        esc(r.invoiceNo),
+        esc(r.tokenNo || "-"),
+        esc(r.opdSection || "SOLAN OPD SALE"),
+        esc(r.patientName),
+        esc(r.patientId),
+        esc(r.city || "-"),
+        esc(patientState),
+        esc(patientStateCode || "02"),
+        esc(r.combinedKitName),
+        esc(getUnitsSoldInRecord(r)),
+        esc(calc.totalTaxableValue.toFixed(2)),
+        esc(calc.totalCgst.toFixed(2)),
+        esc(calc.totalSgst.toFixed(2)),
+        esc(calc.totalIgst.toFixed(2)),
+        esc(calc.totalTax.toFixed(2)),
+        esc((r.discountVal || 0).toFixed(2)),
+        esc(calc.grandTotal.toFixed(2)),
+        esc((r.cashVal || 0).toFixed(2)),
+        esc((r.onlineVal || 0).toFixed(2)),
+        esc((r.totalPaidVal || 0).toFixed(2))
+      ].join(","))
+    })
+
+    const csvContent = "\uFEFF" + rows.join("\r\n")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.setAttribute("download", `OPD_Sales_Report_${scopeLabel}_${periodLabel}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
 
   // Filtered trash records
   const filteredTrash = trashRecords.filter(r => {
@@ -526,6 +848,14 @@ export default function PaymentsPage() {
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
 
+          <button
+            onClick={() => handleExportExcel("ALL")}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+            title="Download Month-End Sales Report in Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Export Excel Report
+          </button>
+
           <Link
             href="/billing/new"
             className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
@@ -537,7 +867,7 @@ export default function PaymentsPage() {
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
 
         {/* Total Revenue */}
         <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex items-center gap-4">
@@ -583,6 +913,191 @@ export default function PaymentsPage() {
           </div>
         </div>
 
+      </div>
+
+      {/* MONTH-END OPD SECTION SALES REPORT & EXCEL EXPORT PANEL */}
+      <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm mb-6 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+          <div>
+            <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              Month-End Sales Report: Solan OPD Sale vs COD &amp; Online Sale
+            </h2>
+            <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+              Select a month to view section-wise sales, product quantities sold, and download Excel (.csv) reports
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Month Filter */}
+            <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
+              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              <span className="font-bold text-slate-500 text-[11px] uppercase">Month:</span>
+              <input
+                type="month"
+                value={selectedMonth === "ALL" ? "" : selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value || "ALL")}
+                className="bg-transparent font-extrabold text-slate-800 outline-none cursor-pointer text-xs"
+              />
+              {selectedMonth !== "ALL" && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedMonth("ALL")}
+                  className="text-[10px] font-black text-blue-600 hover:underline ml-1 cursor-pointer"
+                >
+                  All Months
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowProductSummary(prev => !prev)}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              {showProductSummary ? "Hide Product Breakdown" : `Product-Wise Sold (${productWiseBreakdown.length})`}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleExportExcel("ALL")}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" /> Download Full Excel Report
+            </button>
+          </div>
+        </div>
+
+        {/* Section-Wise Comparison Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Solan OPD Sale Card */}
+          <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  SOLAN OPD SALE
+                </span>
+                <h3 className="text-xl font-black text-emerald-900 mt-2 font-mono">
+                  ₹{solanStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleExportExcel("SOLAN")}
+                className="px-3 py-1.5 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" /> Solan OPD Excel
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-emerald-200/60 text-xs">
+              <div>
+                <span className="text-[10px] text-emerald-700/80 font-bold uppercase block">Total Bills</span>
+                <strong className="font-black text-slate-800 font-mono">{solanStats.bills}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-emerald-700/80 font-bold uppercase block">Units Sold</span>
+                <strong className="font-black text-slate-800 font-mono">{solanStats.units}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-emerald-700/80 font-bold uppercase block">Cash</span>
+                <strong className="font-black text-emerald-800 font-mono">₹{solanStats.cash.toLocaleString("en-IN")}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-emerald-700/80 font-bold uppercase block">Online</span>
+                <strong className="font-black text-indigo-700 font-mono">₹{solanStats.online.toLocaleString("en-IN")}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* COD & Online Sale Card */}
+          <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                  COD &amp; ONLINE SALE
+                </span>
+                <h3 className="text-xl font-black text-amber-900 mt-2 font-mono">
+                  ₹{codStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleExportExcel("COD")}
+                className="px-3 py-1.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" /> COD &amp; Online Excel
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-amber-200/60 text-xs">
+              <div>
+                <span className="text-[10px] text-amber-800/80 font-bold uppercase block">Total Bills</span>
+                <strong className="font-black text-slate-800 font-mono">{codStats.bills}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-amber-800/80 font-bold uppercase block">Units Sold</span>
+                <strong className="font-black text-slate-800 font-mono">{codStats.units}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-amber-800/80 font-bold uppercase block">Cash / COD</span>
+                <strong className="font-black text-emerald-800 font-mono">₹{codStats.cash.toLocaleString("en-IN")}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-amber-800/80 font-bold uppercase block">Online</span>
+                <strong className="font-black text-indigo-700 font-mono">₹{codStats.online.toLocaleString("en-IN")}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsible Product-Wise Sales Breakdown Table */}
+        {showProductSummary && (
+          <div className="border border-slate-200 rounded-2xl overflow-hidden mt-3">
+            <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                Product-Wise Quantity Sold (Solan OPD Sale vs COD &amp; Online Sale)
+              </span>
+              <span className="text-[10px] font-bold text-slate-500">
+                {productWiseBreakdown.length} Product(s)
+              </span>
+            </div>
+            {productWiseBreakdown.length > 0 ? (
+              <div className="overflow-x-auto max-h-72">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100/80 text-slate-600 uppercase font-extrabold text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-4">#</th>
+                      <th className="py-2.5 px-4">Product / Medicine Name</th>
+                      <th className="py-2.5 px-4">HSN</th>
+                      <th className="py-2.5 px-4 text-right text-emerald-700">Solan OPD Qty</th>
+                      <th className="py-2.5 px-4 text-right text-amber-700">COD &amp; Online Qty</th>
+                      <th className="py-2.5 px-4 text-right">Total Qty Sold</th>
+                      <th className="py-2.5 px-4 text-right">Total Sales (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-semibold">
+                    {productWiseBreakdown.map((prod, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono text-slate-400">{idx + 1}</td>
+                        <td className="py-2 px-4 font-bold text-slate-800 uppercase">{prod.name}</td>
+                        <td className="py-2 px-4 font-mono text-[10px] text-slate-500">{prod.hsnCode || "—"}</td>
+                        <td className="py-2 px-4 text-right font-mono font-bold text-emerald-700">{prod.solanQty}</td>
+                        <td className="py-2 px-4 text-right font-mono font-bold text-amber-700">{prod.codQty}</td>
+                        <td className="py-2 px-4 text-right font-mono font-black text-slate-900">{prod.totalQty}</td>
+                        <td className="py-2 px-4 text-right font-mono font-extrabold text-blue-700">
+                          ₹{prod.totalAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-xs text-slate-400 font-semibold">
+                No product sales recorded for the selected month.
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Search & Filter Toolbar */}
