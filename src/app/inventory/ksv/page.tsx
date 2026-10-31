@@ -84,10 +84,12 @@ export default function KsvPage() {
   const [editingOpeningStockEntry, setEditingOpeningStockEntry] = useState<OpeningStockEntry | null>(null)
 
   const [isManufacturingModalOpen, setIsManufacturingModalOpen] = useState(false)
+  const [editingManufacturingLog, setEditingManufacturingLog] = useState<ManufacturingLog | null>(null)
   const [selectedMfgLogForPrint, setSelectedMfgLogForPrint] = useState<ManufacturingLog | null>(null)
 
   // Stock Transfer Modal (KSV Store <-> KSV Factory)
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
+  const [editingTransferId, setEditingTransferId] = useState<string | null>(null)
   const [transferForm, setTransferForm] = useState<{
     batchId: string
     batchNo: string
@@ -673,8 +675,9 @@ export default function KsvPage() {
       ? manufacturingLogs.map((l) => (l.id === log.id ? log : l))
       : [...manufacturingLogs, log]
     saveManufacturingLogs(updated)
+    setEditingManufacturingLog(null)
 
-    // If user specified an initial transfer to KSV Factory inside the Manufacturing Modal, record it
+    // Sync transfer to KSV Factory inside the Manufacturing Modal
     if (!exists && log.transferredToFactoryQty && log.transferredToFactoryQty > 0) {
       const newTransfer: StockTransferLog = {
         id: `tr_${Date.now()}`,
@@ -690,6 +693,45 @@ export default function KsvPage() {
         createdAt: new Date().toISOString()
       }
       saveStockTransfers([newTransfer, ...stockTransfers])
+    } else if (exists && log.transferredToFactoryQty !== undefined) {
+      const batchTransfers = stockTransfers.filter((tr) => tr.batchId === log.id)
+      const targetQty = Number(log.transferredToFactoryQty) || 0
+      if (batchTransfers.length === 1) {
+        if (targetQty > 0) {
+          const updatedTransfers = stockTransfers.map((tr) =>
+            tr.id === batchTransfers[0].id
+              ? {
+                  ...tr,
+                  date: log.date,
+                  batchNo: log.batchNo || '',
+                  itemId: log.finishedGoodItemId,
+                  itemName: log.finishedGoodName,
+                  quantity: targetQty,
+                  unit: log.unit || 'PCS',
+                  direction: 'STORE_TO_FACTORY' as const
+                }
+              : tr
+          )
+          saveStockTransfers(updatedTransfers)
+        } else {
+          saveStockTransfers(stockTransfers.filter((tr) => tr.id !== batchTransfers[0].id))
+        }
+      } else if (batchTransfers.length === 0 && targetQty > 0) {
+        const newTransfer: StockTransferLog = {
+          id: `tr_${Date.now()}`,
+          date: log.date,
+          batchId: log.id,
+          batchNo: log.batchNo || '',
+          itemId: log.finishedGoodItemId,
+          itemName: log.finishedGoodName,
+          quantity: targetQty,
+          unit: log.unit || 'PCS',
+          direction: 'STORE_TO_FACTORY',
+          notes: `Transferred from Batch ${log.batchNo || 'N/A'} during production`,
+          createdAt: new Date().toISOString()
+        }
+        saveStockTransfers([newTransfer, ...stockTransfers])
+      }
     }
 
     // Ensure the finished product is added to the Catalog so it appears in the Sales Dropdown
@@ -730,6 +772,7 @@ export default function KsvPage() {
       .reduce((sum, tr) => sum + (tr.direction === 'STORE_TO_FACTORY' ? tr.quantity : -tr.quantity), 0)
     const remainingInBatchStore = Math.max(0, (log.producedQuantity || 0) - batchTransferred)
 
+    setEditingTransferId(null)
     setTransferForm({
       batchId: log.id,
       batchNo: log.batchNo || '',
@@ -744,8 +787,26 @@ export default function KsvPage() {
     setIsTransferModalOpen(true)
   }
 
+  // Open Stock Transfer Modal to Edit an existing Transfer
+  const openEditTransferModal = (tr: StockTransferLog) => {
+    setEditingTransferId(tr.id)
+    setTransferForm({
+      batchId: tr.batchId || '',
+      batchNo: tr.batchNo || '',
+      itemId: tr.itemId || '',
+      itemName: tr.itemName,
+      quantity: tr.quantity,
+      unit: tr.unit || 'PCS',
+      direction: tr.direction,
+      date: tr.date || new Date().toISOString().split('T')[0],
+      notes: tr.notes || ''
+    })
+    setIsTransferModalOpen(true)
+  }
+
   // Open Stock Transfer Modal for a Catalog Item (or blank)
   const openTransferModalForItem = (item?: CatalogItem) => {
+    setEditingTransferId(null)
     if (item) {
       const breakdown = getItemStockBreakdown(item.id, item.name, item.defaultUnit, item.quantity)
       setTransferForm({
@@ -784,21 +845,42 @@ export default function KsvPage() {
       return
     }
 
-    const newTransfer: StockTransferLog = {
-      id: `tr_${Date.now()}`,
-      date: transferForm.date || new Date().toISOString().split('T')[0],
-      batchId: transferForm.batchId || undefined,
-      batchNo: transferForm.batchNo || undefined,
-      itemId: transferForm.itemId || `item_${Date.now()}`,
-      itemName: transferForm.itemName.trim(),
-      quantity: Number(transferForm.quantity) || 0,
-      unit: transferForm.unit || 'PCS',
-      direction: transferForm.direction,
-      notes: transferForm.notes,
-      createdAt: new Date().toISOString()
+    if (editingTransferId) {
+      const updatedTransfers = stockTransfers.map((tr) =>
+        tr.id === editingTransferId
+          ? {
+              ...tr,
+              date: transferForm.date || new Date().toISOString().split('T')[0],
+              batchId: transferForm.batchId || undefined,
+              batchNo: transferForm.batchNo || undefined,
+              itemId: transferForm.itemId || tr.itemId || `item_${Date.now()}`,
+              itemName: transferForm.itemName.trim(),
+              quantity: Number(transferForm.quantity) || 0,
+              unit: transferForm.unit || 'PCS',
+              direction: transferForm.direction,
+              notes: transferForm.notes
+            }
+          : tr
+      )
+      saveStockTransfers(updatedTransfers)
+    } else {
+      const newTransfer: StockTransferLog = {
+        id: `tr_${Date.now()}`,
+        date: transferForm.date || new Date().toISOString().split('T')[0],
+        batchId: transferForm.batchId || undefined,
+        batchNo: transferForm.batchNo || undefined,
+        itemId: transferForm.itemId || `item_${Date.now()}`,
+        itemName: transferForm.itemName.trim(),
+        quantity: Number(transferForm.quantity) || 0,
+        unit: transferForm.unit || 'PCS',
+        direction: transferForm.direction,
+        notes: transferForm.notes,
+        createdAt: new Date().toISOString()
+      }
+      saveStockTransfers([newTransfer, ...stockTransfers])
     }
 
-    saveStockTransfers([newTransfer, ...stockTransfers])
+    setEditingTransferId(null)
     setIsTransferModalOpen(false)
   }
 
@@ -1705,7 +1787,10 @@ export default function KsvPage() {
                   <ArrowLeftRight className="w-3.5 h-3.5" /> Transfer Store ↔ Factory
                 </button>
                 <button
-                  onClick={() => setIsManufacturingModalOpen(true)}
+                  onClick={() => {
+                    setEditingManufacturingLog(null)
+                    setIsManufacturingModalOpen(true)
+                  }}
                   className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" /> + New Production Batch
@@ -1813,6 +1898,22 @@ export default function KsvPage() {
                             <td className="p-3 text-right pr-5">
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
+                                  onClick={() => {
+                                    const batchTransferred = stockTransfers
+                                      .filter((tr) => tr.batchId === log.id)
+                                      .reduce((sum, tr) => sum + (tr.direction === 'STORE_TO_FACTORY' ? tr.quantity : -tr.quantity), 0)
+                                    setEditingManufacturingLog({
+                                      ...log,
+                                      transferredToFactoryQty: Math.max(0, batchTransferred)
+                                    })
+                                    setIsManufacturingModalOpen(true)
+                                  }}
+                                  className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-amber-200 cursor-pointer"
+                                  title="Edit Production Batch"
+                                >
+                                  <Edit className="w-3.5 h-3.5" /> Edit
+                                </button>
+                                <button
                                   onClick={() => openTransferModalForBatch(log)}
                                   className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-indigo-200 cursor-pointer"
                                   title="Transfer between KSV Store and KSV Factory"
@@ -1850,7 +1951,10 @@ export default function KsvPage() {
                   Log production batches with finished goods and consumed components to automatically adjust stock balances.
                 </p>
                 <button
-                  onClick={() => setIsManufacturingModalOpen(true)}
+                  onClick={() => {
+                    setEditingManufacturingLog(null)
+                    setIsManufacturingModalOpen(true)
+                  }}
                   className="mt-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs rounded-xl inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-md uppercase tracking-wider"
                 >
                   <Plus className="w-3.5 h-3.5" /> Log First Batch
@@ -1908,13 +2012,22 @@ export default function KsvPage() {
                           </td>
                           <td className="p-3 text-slate-500 text-[11px]">{tr.notes || '—'}</td>
                           <td className="p-3 text-right pr-5">
-                            <button
-                              onClick={() => handleDeleteStockTransfer(tr.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                              title="Undo / Delete Transfer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => openEditTransferModal(tr)}
+                                className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
+                                title="Edit Transfer"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteStockTransfer(tr.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="Undo / Delete Transfer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2108,13 +2221,22 @@ export default function KsvPage() {
                           </td>
                           <td className="p-3 text-slate-500 text-[11px]">{tr.notes || '—'}</td>
                           <td className="p-3 text-right pr-5">
-                            <button
-                              onClick={() => handleDeleteStockTransfer(tr.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                              title="Undo / Delete Transfer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => openEditTransferModal(tr)}
+                                className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
+                                title="Edit Transfer"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteStockTransfer(tr.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="Undo / Delete Transfer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2165,7 +2287,7 @@ export default function KsvPage() {
                   </div>
                   <div>
                     <h2 className="text-base font-black text-slate-800 uppercase tracking-wide">
-                      Transfer Stock (Store ↔ Factory)
+                      {editingTransferId ? 'Edit Stock Transfer' : 'Transfer Stock (Store ↔ Factory)'}
                     </h2>
                     <p className="text-[11px] text-slate-400 font-medium">
                       Move finished goods between KSV Store and KSV Factory
@@ -2174,7 +2296,10 @@ export default function KsvPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsTransferModalOpen(false)}
+                  onClick={() => {
+                    setEditingTransferId(null)
+                    setIsTransferModalOpen(false)
+                  }}
                   className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -2342,7 +2467,10 @@ export default function KsvPage() {
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setIsTransferModalOpen(false)}
+                    onClick={() => {
+                      setEditingTransferId(null)
+                      setIsTransferModalOpen(false)
+                    }}
                     className="px-4 py-2 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
                   >
                     Cancel
@@ -2351,7 +2479,7 @@ export default function KsvPage() {
                     type="submit"
                     className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
                   >
-                    <Save className="w-3.5 h-3.5" /> Save Transfer
+                    <Save className="w-3.5 h-3.5" /> {editingTransferId ? 'Update Transfer' : 'Save Transfer'}
                   </button>
                 </div>
               </form>
@@ -2399,9 +2527,13 @@ export default function KsvPage() {
 
       <ManufacturingModal
         isOpen={isManufacturingModalOpen}
-        onClose={() => setIsManufacturingModalOpen(false)}
+        onClose={() => {
+          setEditingManufacturingLog(null)
+          setIsManufacturingModalOpen(false)
+        }}
         onSave={handleSaveManufacturingLog}
         catalog={catalog}
+        initialData={editingManufacturingLog}
       />
 
       {selectedMfgLogForPrint && (

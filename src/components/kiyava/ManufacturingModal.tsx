@@ -9,13 +9,15 @@ interface ManufacturingModalProps {
   onClose: () => void
   onSave: (log: ManufacturingLog) => void
   catalog: CatalogItem[]
+  initialData?: ManufacturingLog | null
 }
 
 export default function ManufacturingModal({
   isOpen,
   onClose,
   onSave,
-  catalog
+  catalog,
+  initialData
 }: ManufacturingModalProps) {
   const [formData, setFormData] = useState<ManufacturingLog>({
     id: '',
@@ -34,27 +36,35 @@ export default function ManufacturingModal({
     notes: ''
   })
 
-  // Whenever modal opens, reset form
+  // Whenever modal opens, reset or populate form
   useEffect(() => {
     if (isOpen) {
-      setFormData({
-        id: `mfg_${Date.now()}`,
-        date: new Date().toISOString().split('T')[0],
-        batchNo: '',
-        finishedGoodItemId: '',
-        finishedGoodName: '',
-        producedQuantity: 1,
-        unit: 'PCS',
-        costAllocationPercent: 100,
-        rawMaterialsConsumed: [],
-        additionalCost: 0,
-        totalComponentsCost: 0,
-        effectiveCost: 0,
-        effectiveRatePerUnit: 0,
-        notes: ''
-      })
+      if (initialData) {
+        setFormData({
+          ...initialData,
+          rawMaterialsConsumed: (initialData.rawMaterialsConsumed || []).map((rm) => ({ ...rm }))
+        })
+      } else {
+        setFormData({
+          id: `mfg_${Date.now()}`,
+          date: new Date().toISOString().split('T')[0],
+          batchNo: '',
+          finishedGoodItemId: '',
+          finishedGoodName: '',
+          producedQuantity: 1,
+          transferredToFactoryQty: 0,
+          unit: 'PCS',
+          costAllocationPercent: 100,
+          rawMaterialsConsumed: [],
+          additionalCost: 0,
+          totalComponentsCost: 0,
+          effectiveCost: 0,
+          effectiveRatePerUnit: 0,
+          notes: ''
+        })
+      }
     }
-  }, [isOpen])
+  }, [isOpen, initialData])
 
   if (!isOpen) return null
 
@@ -163,7 +173,7 @@ export default function ManufacturingModal({
             </div>
             <div>
               <h2 className="text-lg font-black text-slate-800 uppercase tracking-wide">
-                Manufacture of Materials (BOM Log)
+                {initialData ? 'Edit Production Batch (BOM Log)' : 'Manufacture of Materials (BOM Log)'}
               </h2>
               <p className="text-xs text-slate-400 font-medium">
                 Record manufactured product details &amp; raw material consumption (Tally Voucher format)
@@ -297,10 +307,13 @@ export default function ManufacturingModal({
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                     className="w-24 px-2 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-cyan-500 uppercase"
                   >
+                    <option value="NOS">NOS</option>
                     <option value="PCS">PCS</option>
+                    <option value="KIT">KIT</option>
                     <option value="Boxes">Boxes</option>
                     <option value="Bottles">Bottles</option>
                     <option value="Kgs">Kgs</option>
+                    <option value="kg">kg</option>
                     <option value="Gram">Gram</option>
                     <option value="Pkt">Pkt</option>
                   </select>
