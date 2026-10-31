@@ -193,15 +193,16 @@ export default function MaxxiPharmaPage() {
       setOpeningStock(parsedStock)
       localStorage.setItem('maxxi_app_opening_stock', JSON.stringify(parsedStock))
 
-      // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) ---
+      // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) IN PARALLEL ---
       const fetchDatabaseData = async () => {
         try {
-          // 1. Fetch live product catalog from database
-          const catRes = await fetch(`${API_URL}/api/maxxi/catalog`)
-          if (catRes.ok) {
-            const dbCatalog: CatalogItem[] = await catRes.json()
+          const applyData = async (
+            dbCatalog: CatalogItem[] | null,
+            dbInvoices: KiyavaInvoice[] | null,
+            dbParties: any[] | null,
+            dbCompanies: any[] | null
+          ) => {
             if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
-              // Strip any legacy dummy items if present in DB
               const cleanCatalog = dbCatalog.filter((item) => {
                 const id = item.id || ''
                 return !id.startsWith('cat_mx_') && !id.startsWith('cat_sync_')
@@ -209,10 +210,9 @@ export default function MaxxiPharmaPage() {
               setCatalog(cleanCatalog)
               localStorage.setItem('maxxi_app_catalog', JSON.stringify(cleanCatalog))
             } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {
-              // Initial database sync: Seed current catalog into MongoDB
-              for (const it of parsedCatalog) {
-                try {
-                  await fetch(`${API_URL}/api/maxxi/catalog`, {
+              await Promise.allSettled(
+                parsedCatalog.map((it: any) =>
+                  fetch(`${API_URL}/api/maxxi/catalog`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -226,15 +226,10 @@ export default function MaxxiPharmaPage() {
                       quantity: Number(it.quantity) || 0
                     })
                   })
-                } catch (_) {}
-              }
+                )
+              )
             }
-          }
 
-          // 2. Fetch live invoices from database
-          const invRes = await fetch(`${API_URL}/api/maxxi/invoices`)
-          if (invRes.ok) {
-            const dbInvoices: KiyavaInvoice[] = await invRes.json()
             if (Array.isArray(dbInvoices)) {
               const cleanInvoices = dbInvoices.filter((inv) => {
                 const id = inv.id || ''
@@ -244,27 +239,39 @@ export default function MaxxiPharmaPage() {
               setInvoices(cleanInvoices)
               localStorage.setItem('maxxi_app_invoices', JSON.stringify(cleanInvoices))
             }
-          }
 
-          // 3. Fetch live parties from database
-          const partiesRes = await fetch(`${API_URL}/api/maxxi/parties`)
-          if (partiesRes.ok) {
-            const dbParties = await partiesRes.json()
             if (Array.isArray(dbParties) && dbParties.length > 0) {
               setParties(dbParties)
               localStorage.setItem('maxxi_app_parties', JSON.stringify(dbParties))
             }
-          }
 
-          // 4. Fetch live companies from database
-          const compRes = await fetch(`${API_URL}/api/maxxi/companies`)
-          if (compRes.ok) {
-            const dbCompanies = await compRes.json()
             if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
               setCompanies(dbCompanies)
               localStorage.setItem('maxxi_app_companies', JSON.stringify(dbCompanies))
             }
           }
+
+          // Try fast single-request bootstrap first, fallback to parallel Promise.all
+          const bootRes = await fetch(`${API_URL}/api/maxxi/bootstrap`)
+          if (bootRes.ok) {
+            const { catalog: dbCatalog, invoices: dbInvoices, parties: dbParties, companies: dbCompanies } = await bootRes.json()
+            await applyData(dbCatalog, dbInvoices, dbParties, dbCompanies)
+            return
+          }
+
+          const [catRes, invRes, partiesRes, compRes] = await Promise.all([
+            fetch(`${API_URL}/api/maxxi/catalog`),
+            fetch(`${API_URL}/api/maxxi/invoices`),
+            fetch(`${API_URL}/api/maxxi/parties`),
+            fetch(`${API_URL}/api/maxxi/companies`)
+          ])
+          const [dbCatalog, dbInvoices, dbParties, dbCompanies] = await Promise.all([
+            catRes.ok ? catRes.json() : null,
+            invRes.ok ? invRes.json() : null,
+            partiesRes.ok ? partiesRes.json() : null,
+            compRes.ok ? compRes.json() : null
+          ])
+          await applyData(dbCatalog, dbInvoices, dbParties, dbCompanies)
         } catch (dbErr) {
           console.warn('Backend database fetch offline or network error, continuing with local storage:', dbErr)
         }

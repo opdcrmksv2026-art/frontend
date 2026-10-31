@@ -89,9 +89,9 @@ export default function PatientsListPage() {
     if (!silent && patients.length === 0) setLoading(true)
     setError("")
 
-    // Use fast timeout (1500ms) to ensure UI never freezes
+    // Use 4500ms timeout so MongoDB cold starts succeed while localStorage already rendered in 0ms
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 1500)
+    const timer = setTimeout(() => controller.abort(), 4500)
 
     try {
       let patientList: Patient[] = []

@@ -136,65 +136,67 @@ export default function KiyavaPage() {
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
 
-      // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) ---
+      // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) IN PARALLEL ---
       const fetchDatabaseData = async () => {
         try {
-          // Purge default dummy items from database if any exist
+          // Purge default dummy items from database if any exist (fire-and-forget)
           fetch(`${API_URL}/api/kiyava/catalog/purge-defaults`, { method: 'POST' }).catch(() => {})
 
-          // 1. Fetch live product catalog from database
-          const catRes = await fetch(`${API_URL}/api/kiyava/catalog`)
-          if (catRes.ok) {
-            const dbCatalog: CatalogItem[] = await catRes.json()
+          const applyData = (
+            dbCatalog: CatalogItem[] | null,
+            dbInvoices: KiyavaInvoice[] | null,
+            dbParties: any[] | null,
+            dbCompanies: any[] | null,
+            dbMfg: any[] | null
+          ) => {
             if (Array.isArray(dbCatalog)) {
-              // Filter out any lingering default dummy items
               const cleanDbCatalog = dbCatalog.filter(
                 (c: any) => c.name && !dummySet.has(c.name.trim().toLowerCase()) && !c.id?.startsWith('cat_')
               )
               setCatalog(cleanDbCatalog)
               localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(cleanDbCatalog))
             }
-          }
-
-          // 2. Fetch live invoices from database
-          const invRes = await fetch(`${API_URL}/api/kiyava/invoices`)
-          if (invRes.ok) {
-            const dbInvoices: KiyavaInvoice[] = await invRes.json()
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
               setInvoices(dbInvoices)
               localStorage.setItem('ksv_kiyava_invoices', JSON.stringify(dbInvoices))
             }
-          }
-
-          // 3. Fetch live parties from database
-          const partiesRes = await fetch(`${API_URL}/api/kiyava/parties`)
-          if (partiesRes.ok) {
-            const dbParties = await partiesRes.json()
             if (Array.isArray(dbParties) && dbParties.length > 0) {
               setParties(dbParties)
               localStorage.setItem('ksv_kiyava_parties', JSON.stringify(dbParties))
             }
-          }
-
-          // 4. Fetch live companies from database
-          const compRes = await fetch(`${API_URL}/api/kiyava/companies`)
-          if (compRes.ok) {
-            const dbCompanies = await compRes.json()
             if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
               setCompanies(dbCompanies)
               localStorage.setItem('ksv_kiyava_companies', JSON.stringify(dbCompanies))
             }
-          }
-
-          // 5. Fetch live manufacturing logs
-          const mfgRes = await fetch(`${API_URL}/api/kiyava/manufacturing`)
-          if (mfgRes.ok) {
-            const dbMfg = await mfgRes.json()
             if (Array.isArray(dbMfg) && dbMfg.length > 0) {
               setManufacturingLogs(dbMfg)
               localStorage.setItem('ksv_kiyava_manufacturing', JSON.stringify(dbMfg))
             }
           }
+
+          // Try fast single-request bootstrap first, fallback to parallel Promise.all
+          const bootRes = await fetch(`${API_URL}/api/kiyava/bootstrap`)
+          if (bootRes.ok) {
+            const { catalog: dbCatalog, invoices: dbInvoices, parties: dbParties, companies: dbCompanies, manufacturing: dbMfg } = await bootRes.json()
+            applyData(dbCatalog, dbInvoices, dbParties, dbCompanies, dbMfg)
+            return
+          }
+
+          const [catRes, invRes, partiesRes, compRes, mfgRes] = await Promise.all([
+            fetch(`${API_URL}/api/kiyava/catalog`),
+            fetch(`${API_URL}/api/kiyava/invoices`),
+            fetch(`${API_URL}/api/kiyava/parties`),
+            fetch(`${API_URL}/api/kiyava/companies`),
+            fetch(`${API_URL}/api/kiyava/manufacturing`)
+          ])
+          const [dbCatalog, dbInvoices, dbParties, dbCompanies, dbMfg] = await Promise.all([
+            catRes.ok ? catRes.json() : null,
+            invRes.ok ? invRes.json() : null,
+            partiesRes.ok ? partiesRes.json() : null,
+            compRes.ok ? compRes.json() : null,
+            mfgRes.ok ? mfgRes.json() : null
+          ])
+          applyData(dbCatalog, dbInvoices, dbParties, dbCompanies, dbMfg)
         } catch (dbErr) {
           console.warn('Backend database fetch offline or network error, continuing with local storage:', dbErr)
         }

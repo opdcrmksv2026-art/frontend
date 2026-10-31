@@ -213,10 +213,10 @@ export default function CreateInvoicePage() {
       }
     } catch (e) {}
 
-    // 2. Background revalidation with fast 1500ms timeout
+    // 2. Background revalidation with 4500ms timeout
     async function fetchPatients() {
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 1500)
+      const timer = setTimeout(() => controller.abort(), 4500)
       try {
         const res = await fetch(`${API_URL}/api/patients`, { signal: controller.signal })
         clearTimeout(timer)

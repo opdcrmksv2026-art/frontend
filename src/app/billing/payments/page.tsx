@@ -166,11 +166,11 @@ export default function PaymentsPage() {
         setLoading(false)
       }
 
-      // 2. Fetch from backend API with fast 1500ms timeout
+      // 2. Fetch from backend API with 4500ms timeout
       let apiBills: PaymentRecord[] = []
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 1500)
+        const timeoutId = setTimeout(() => controller.abort(), 4500)
 
         const res = await fetch(`${API_URL}/api/patients`, { signal: controller.signal })
         clearTimeout(timeoutId)

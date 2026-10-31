@@ -187,21 +187,23 @@ export default function KsvPage() {
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
       setStockTransfers(storedTransfers ? JSON.parse(storedTransfers) : [])
 
-      // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) ---
+      // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) IN PARALLEL ---
       const fetchDatabaseData = async () => {
         try {
-          // 1. Fetch live product catalog from database
-          const catRes = await fetch(`${API_URL}/api/ksv/catalog`)
-          if (catRes.ok) {
-            const dbCatalog: CatalogItem[] = await catRes.json()
+          const applyData = async (
+            dbCatalog: CatalogItem[] | null,
+            dbInvoices: KiyavaInvoice[] | null,
+            dbParties: any[] | null,
+            dbCompanies: any[] | null
+          ) => {
             if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
               setCatalog(dbCatalog)
               localStorage.setItem('ksv_app_catalog', JSON.stringify(dbCatalog))
             } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {
-              // Initial database sync: Seed current catalog into MongoDB
-              for (const it of parsedCatalog) {
-                try {
-                  await fetch(`${API_URL}/api/ksv/catalog`, {
+              // Parallel initial database sync
+              await Promise.allSettled(
+                parsedCatalog.map((it: any) =>
+                  fetch(`${API_URL}/api/ksv/catalog`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -215,40 +217,47 @@ export default function KsvPage() {
                       quantity: Number(it.quantity) || 0
                     })
                   })
-                } catch (_) {}
-              }
+                )
+              )
             }
-          }
 
-          // 2. Fetch live invoices from database
-          const invRes = await fetch(`${API_URL}/api/ksv/invoices`)
-          if (invRes.ok) {
-            const dbInvoices: KiyavaInvoice[] = await invRes.json()
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
               setInvoices(dbInvoices)
               localStorage.setItem('ksv_app_invoices', JSON.stringify(dbInvoices))
             }
-          }
 
-          // 3. Fetch live parties from database
-          const partiesRes = await fetch(`${API_URL}/api/ksv/parties`)
-          if (partiesRes.ok) {
-            const dbParties = await partiesRes.json()
             if (Array.isArray(dbParties) && dbParties.length > 0) {
               setParties(dbParties)
               localStorage.setItem('ksv_app_parties', JSON.stringify(dbParties))
             }
-          }
 
-          // 4. Fetch live companies from database
-          const compRes = await fetch(`${API_URL}/api/ksv/companies`)
-          if (compRes.ok) {
-            const dbCompanies = await compRes.json()
             if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
               setCompanies(dbCompanies)
               localStorage.setItem('ksv_app_companies_v2', JSON.stringify(dbCompanies))
             }
           }
+
+          // Try fast single-request bootstrap first, fallback to parallel Promise.all
+          const bootRes = await fetch(`${API_URL}/api/ksv/bootstrap`)
+          if (bootRes.ok) {
+            const { catalog: dbCatalog, invoices: dbInvoices, parties: dbParties, companies: dbCompanies } = await bootRes.json()
+            await applyData(dbCatalog, dbInvoices, dbParties, dbCompanies)
+            return
+          }
+
+          const [catRes, invRes, partiesRes, compRes] = await Promise.all([
+            fetch(`${API_URL}/api/ksv/catalog`),
+            fetch(`${API_URL}/api/ksv/invoices`),
+            fetch(`${API_URL}/api/ksv/parties`),
+            fetch(`${API_URL}/api/ksv/companies`)
+          ])
+          const [dbCatalog, dbInvoices, dbParties, dbCompanies] = await Promise.all([
+            catRes.ok ? catRes.json() : null,
+            invRes.ok ? invRes.json() : null,
+            partiesRes.ok ? partiesRes.json() : null,
+            compRes.ok ? compRes.json() : null
+          ])
+          await applyData(dbCatalog, dbInvoices, dbParties, dbCompanies)
         } catch (dbErr) {
           console.warn('Backend database fetch offline or network error, continuing with local storage:', dbErr)
         }
