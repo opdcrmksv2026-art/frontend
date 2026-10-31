@@ -109,7 +109,6 @@ export default function PaymentsPage() {
   // Printable Receipt Modal State
   const [selectedBill, setSelectedBill] = useState<PaymentRecord | null>(null)
   const [showReceiptModal, setShowReceiptModal] = useState(false)
-  const [receiptLetterhead, setReceiptLetterhead] = useState<"KSV" | "MAXXI">("KSV")
 
   // Edit Bill Modal State
   const [editingBill, setEditingBill] = useState<PaymentRecord | null>(null)
@@ -922,24 +921,6 @@ export default function PaymentsPage() {
                 <span className={`text-xs font-extrabold uppercase tracking-wider px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${isFullyPaid ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>
                   <CheckCircle2 className="w-3.5 h-3.5" /> {isFullyPaid ? "Paid Invoice Record" : "Partial / Due Record"}
                 </span>
-
-                {/* Letterhead Switcher */}
-                <div className="flex items-center bg-slate-200/80 p-1 rounded-xl text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setReceiptLetterhead("KSV")}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${receiptLetterhead === "KSV" ? "bg-white text-emerald-800 shadow-sm font-black" : "text-slate-600 hover:text-slate-900"}`}
-                  >
-                    KSV Clinic
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReceiptLetterhead("MAXXI")}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${receiptLetterhead === "MAXXI" ? "bg-white text-blue-800 shadow-sm font-black" : "text-slate-600 hover:text-slate-900"}`}
-                  >
-                    Maxxi Pharma
-                  </button>
-                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -978,37 +959,20 @@ export default function PaymentsPage() {
 
                 {/* Header Letterhead */}
                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4">
-                  {receiptLetterhead === "KSV" ? (
-                    <div>
-                      <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
-                        KARAN SINGH VAIDH (KSV)
-                      </h1>
-                      <p className="text-xs font-bold text-slate-500 mt-0.5">
-                        Ayurvedic Treatment &amp; Clinical Center &bull; Dr. Vikas Rajput (Chief Doctor)
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
-                        Vill- Radiyana, PO Subathu, Teh &amp; Distt Solan, Himachal Pradesh - 173206
-                      </p>
-                      <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
-                        GSTIN: 02DFBPS6121B2Z2 | Phone: +91 98160 12345 | State Code: 02
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
-                        Maxxi Pharma Private Limited
-                      </h1>
-                      <p className="text-xs font-bold text-slate-500 mt-0.5">
-                        Pharmaceutical Manufacturing &amp; Healthcare Formulations
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
-                        Plot No. 45, Industrial Area Phase 1, Near ESI Hospital, Solan, H.P. - 173212
-                      </p>
-                      <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
-                        GSTIN/UIN: 02AASCM1970C1ZN | State: Himachal Pradesh, Code: 02
-                      </p>
-                    </div>
-                  )}
+                  <div>
+                    <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
+                      Maxxi Pharma Private Limited
+                    </h1>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">
+                      Pharmaceutical Manufacturing &amp; Healthcare Formulations
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+                      Plot No. 45, Industrial Area Phase 1, Near ESI Hospital, Solan, H.P. - 173212
+                    </p>
+                    <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                      GSTIN/UIN: 02AASCM1970C1ZN | State: Himachal Pradesh, Code: 02
+                    </p>
+                  </div>
                   <div className="text-right space-y-1">
                     <div className="flex items-center gap-2 justify-end">
                       <div className="text-xs font-black text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg">
@@ -1320,7 +1284,7 @@ export default function PaymentsPage() {
                 {/* Follow-up Note & Signatures */}
                 <div className="border-t border-slate-200 pt-3 print:pt-1.5 flex justify-between items-end text-xs">
                   <div>
-                    <p className="text-[10px] text-slate-400 mt-2 font-semibold">Thank you for visiting KSV Healthcare! Wish you a healthy speedy recovery.</p>
+                    <p className="text-[10px] text-slate-400 mt-2 font-semibold">Thank you! Wish you a healthy speedy recovery.</p>
                   </div>
 
                   <div className="text-center pt-6">

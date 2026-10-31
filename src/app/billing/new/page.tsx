@@ -1973,7 +1973,7 @@ export default function CreateInvoicePage() {
                 {/* Follow-up Note & Signatures */}
                 <div className="border-t border-slate-200 pt-3 print:pt-1.5 flex justify-between items-end text-xs">
                   <div>
-                    <p className="text-[10px] text-slate-400 mt-2 font-semibold">Thank you for visiting KSV Healthcare! Wish you a healthy speedy recovery.</p>
+                    <p className="text-[10px] text-slate-400 mt-2 font-semibold">Thank you! Wish you a healthy speedy recovery.</p>
                   </div>
 
                   <div className="text-center pt-6">
