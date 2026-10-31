@@ -464,7 +464,7 @@ export default function PaymentsPage() {
     // 1. Report Title & Summary Section
     rows.push([esc(`MAXXI PHARMA / KSV - MONTH-END OPD SALES REPORT (${periodLabel} | ${scopeLabel})`)].join(","))
     rows.push([esc(`Generated On: ${new Date().toLocaleString("en-IN")}`)].join(","))
-    rows.push([])
+    rows.push("")
 
     rows.push([
       esc("OPD SECTION (BILL SOURCE)"),
@@ -506,7 +506,7 @@ export default function PaymentsPage() {
       ].join(","))
     }
 
-    rows.push([])
+    rows.push("")
 
     // 2. Product-Wise Quantity Sold Breakdown
     rows.push([esc("PRODUCT-WISE QUANTITY SOLD BREAKDOWN (SOLAN OPD vs COD & ONLINE)")].join(","))
@@ -536,7 +536,7 @@ export default function PaymentsPage() {
       ].join(","))
     })
 
-    rows.push([])
+    rows.push("")
 
     // 3. Detailed Invoice-Wise Sales Register
     rows.push([esc("DETAILED INVOICE-WISE SALES REGISTER")].join(","))
