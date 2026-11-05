@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   Download,
   FileSpreadsheet,
-  Calendar
+  Calendar,
+  Clock
 } from "lucide-react"
 
 import { calculateGSTInvoice, getStateCode, STATE_GST_CODES } from "@/utils/gstCalculator"
@@ -36,6 +37,7 @@ interface PaymentRecord {
   id: string
   invoiceNo: string
   tokenNo?: string
+  entity?: "MAXXI" | "KSV" | "KIYAVA"
   opdSection?: string
   date: string
   patientName: string
@@ -108,8 +110,11 @@ export default function PaymentsPage() {
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("")
-  const [paymentFilter, setPaymentFilter] = useState("ALL") // ALL, SOLAN, COD, CASH, SPLIT
-  const [selectedMonth, setSelectedMonth] = useState<string>("ALL") // "ALL" or "YYYY-MM"
+  const [paymentFilter, setPaymentFilter] = useState("ALL") // ALL, SOLAN, SABATHU, COD, ONLINE_SALE, KSV, KIYAVA, CASH, SPLIT
+  const [reportMode, setReportMode] = useState<"DAILY" | "MONTHLY">("DAILY") // DAILY or MONTHLY
+  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split("T")[0])
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7)) // "ALL" or "YYYY-MM"
+  const [selectedEntity, setSelectedEntity] = useState<"ALL" | "MAXXI" | "KSV" | "KIYAVA">("ALL")
   const [showProductSummary, setShowProductSummary] = useState(false)
 
   // Printable Receipt Modal State
@@ -258,6 +263,162 @@ export default function PaymentsPage() {
         }
       })
 
+      // 3. Load KSV Pharmacy Sales Invoices
+      try {
+        const ksvStored = localStorage.getItem("ksv_app_invoices")
+        if (ksvStored) {
+          const ksvList = JSON.parse(ksvStored)
+          if (Array.isArray(ksvList)) {
+            ksvList.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, idx: number) => {
+              const invNo = inv.invoiceNo || `KSV-${idx + 1}`
+              if (!mergedMap.has(invNo) && !trashNos.has(invNo) && !permanentlyDeleted.has(invNo)) {
+                mergedMap.set(invNo, {
+                  id: inv.id || `ksv_${invNo}`,
+                  invoiceNo: invNo,
+                  entity: "KSV",
+                  opdSection: "KSV PHARMACY",
+                  date: inv.invoiceDate || (inv.createdAt ? inv.createdAt.split("T")[0] : new Date().toISOString().split("T")[0]),
+                  patientName: inv.buyer?.name || "Direct Buyer",
+                  patientId: inv.buyer?.gstin || "KSV-BUYER",
+                  city: inv.buyer?.city || "Solan",
+                  state: inv.buyer?.state || "Himachal Pradesh",
+                  combinedKitName: (inv.items || []).map((it: any) => `${it.description || it.name} (${it.quantity} ${it.unit || 'NOS'})`).join(", ") || "Formulations",
+                  treatments: (inv.items || []).map((it: any, i: number) => ({
+                    id: String(i + 1),
+                    disease: "Formulation Sale",
+                    kitName: it.description || it.name,
+                    quantity: it.quantity,
+                    price: (it.amount || it.totalAmount || 0).toString(),
+                    products: [{
+                      name: it.description || it.name,
+                      hsnCode: it.hsnSac || it.hsnCode || "3004",
+                      quantity: String(it.quantity || "1"),
+                      rate: it.rate || 0,
+                      taxRate: it.taxRate || 0
+                    }]
+                  })),
+                  billingType: inv.isInterState ? "GST (IGST)" : "GST (CGST+SGST)",
+                  priceVal: inv.subtotal || inv.grandTotal || 0,
+                  discountVal: inv.extraDiscount || 0,
+                  gstVal: inv.totalTaxAmount || 0,
+                  totalDueVal: inv.grandTotal || 0,
+                  cashVal: inv.paymentMode === "Cash" ? (inv.grandTotal || 0) : 0,
+                  onlineVal: inv.paymentMode !== "Cash" ? (inv.grandTotal || 0) : 0,
+                  totalPaidVal: inv.grandTotal || 0,
+                  whatsappNumber: inv.buyer?.phone || ""
+                })
+              }
+            })
+          }
+        }
+      } catch (e) {
+        console.warn("Could not parse KSV invoices:", e)
+      }
+
+      // 4. Load Kiyava Subathu Sales Invoices
+      try {
+        const kiyavaStored = localStorage.getItem("ksv_kiyava_invoices")
+        if (kiyavaStored) {
+          const kiyavaList = JSON.parse(kiyavaStored)
+          if (Array.isArray(kiyavaList)) {
+            kiyavaList.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, idx: number) => {
+              const invNo = inv.invoiceNo || `KYV-${idx + 1}`
+              if (!mergedMap.has(invNo) && !trashNos.has(invNo) && !permanentlyDeleted.has(invNo)) {
+                mergedMap.set(invNo, {
+                  id: inv.id || `kyv_${invNo}`,
+                  invoiceNo: invNo,
+                  entity: "KIYAVA",
+                  opdSection: "KIYAVA SUBATHU",
+                  date: inv.invoiceDate || (inv.createdAt ? inv.createdAt.split("T")[0] : new Date().toISOString().split("T")[0]),
+                  patientName: inv.buyer?.name || "Herbal Buyer",
+                  patientId: inv.buyer?.gstin || "KYV-BUYER",
+                  city: inv.buyer?.city || "Subathu",
+                  state: inv.buyer?.state || "Himachal Pradesh",
+                  combinedKitName: (inv.items || []).map((it: any) => `${it.description || it.name} (${it.quantity} ${it.unit || 'kg'})`).join(", ") || "Herbs & Extracts",
+                  treatments: (inv.items || []).map((it: any, i: number) => ({
+                    id: String(i + 1),
+                    disease: "Herbal Procurement",
+                    kitName: it.description || it.name,
+                    quantity: it.quantity,
+                    price: (it.amount || it.totalAmount || 0).toString(),
+                    products: [{
+                      name: it.description || it.name,
+                      hsnCode: it.hsnSac || it.hsnCode || "1211",
+                      quantity: String(it.quantity || "1"),
+                      rate: it.rate || 0,
+                      taxRate: it.taxRate || 0
+                    }]
+                  })),
+                  billingType: inv.isInterState ? "GST (IGST)" : "GST (CGST+SGST)",
+                  priceVal: inv.subtotal || inv.grandTotal || 0,
+                  discountVal: inv.extraDiscount || 0,
+                  gstVal: inv.totalTaxAmount || 0,
+                  totalDueVal: inv.grandTotal || 0,
+                  cashVal: inv.paymentMode === "Cash" ? (inv.grandTotal || 0) : 0,
+                  onlineVal: inv.paymentMode !== "Cash" ? (inv.grandTotal || 0) : 0,
+                  totalPaidVal: inv.grandTotal || 0,
+                  whatsappNumber: inv.buyer?.phone || ""
+                })
+              }
+            })
+          }
+        }
+      } catch (e) {
+        console.warn("Could not parse Kiyava invoices:", e)
+      }
+
+      // 5. Load Maxxi Pharma B2B Invoices
+      try {
+        const maxxiStored = localStorage.getItem("maxxi_app_invoices")
+        if (maxxiStored) {
+          const maxxiList = JSON.parse(maxxiStored)
+          if (Array.isArray(maxxiList)) {
+            maxxiList.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, idx: number) => {
+              const invNo = inv.invoiceNo || `MXP-${idx + 1}`
+              if (!mergedMap.has(invNo) && !trashNos.has(invNo) && !permanentlyDeleted.has(invNo)) {
+                mergedMap.set(invNo, {
+                  id: inv.id || `mxp_${invNo}`,
+                  invoiceNo: invNo,
+                  entity: "MAXXI",
+                  opdSection: "MAXXI B2B SALE",
+                  date: inv.invoiceDate || (inv.createdAt ? inv.createdAt.split("T")[0] : new Date().toISOString().split("T")[0]),
+                  patientName: inv.buyer?.name || "Chemist / Distributor",
+                  patientId: inv.buyer?.gstin || "MX-BUYER",
+                  city: inv.buyer?.city || "Solan",
+                  state: inv.buyer?.state || "Himachal Pradesh",
+                  combinedKitName: (inv.items || []).map((it: any) => `${it.description || it.name} (${it.quantity})`).join(", ") || "Finished Medicines",
+                  treatments: (inv.items || []).map((it: any, i: number) => ({
+                    id: String(i + 1),
+                    disease: "Pharma Distribution",
+                    kitName: it.description || it.name,
+                    quantity: it.quantity,
+                    price: (it.amount || it.totalAmount || 0).toString(),
+                    products: [{
+                      name: it.description || it.name,
+                      hsnCode: it.hsnSac || it.hsnCode || "3004",
+                      quantity: String(it.quantity || "1"),
+                      rate: it.rate || 0,
+                      taxRate: it.taxRate || 0
+                    }]
+                  })),
+                  billingType: inv.isInterState ? "GST (IGST)" : "GST (CGST+SGST)",
+                  priceVal: inv.subtotal || inv.grandTotal || 0,
+                  discountVal: inv.extraDiscount || 0,
+                  gstVal: inv.totalTaxAmount || 0,
+                  totalDueVal: inv.grandTotal || 0,
+                  cashVal: inv.paymentMode === "Cash" ? (inv.grandTotal || 0) : 0,
+                  onlineVal: inv.paymentMode !== "Cash" ? (inv.grandTotal || 0) : 0,
+                  totalPaidVal: inv.grandTotal || 0,
+                  whatsappNumber: inv.buyer?.phone || ""
+                })
+              }
+            })
+          }
+        }
+      } catch (e) {
+        console.warn("Could not parse Maxxi invoices:", e)
+      }
+
       const sorted = Array.from(mergedMap.values())
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
@@ -273,6 +434,18 @@ export default function PaymentsPage() {
     fetchRecords()
   }, [])
 
+  // Helper to extract YYYY-MM-DD from a record's date
+  const getRecordDateStr = (dateVal?: any) => {
+    if (!dateVal) return ""
+    const clean = String(dateVal).split("T")[0].trim()
+    if (/^\d{4}-\d{2}-\d{2}/.test(clean)) return clean.slice(0, 10)
+    const d = new Date(dateVal)
+    if (!isNaN(d.getTime())) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    }
+    return ""
+  }
+
   // Helper to extract YYYY-MM from a record's date
   const getRecordYearMonth = (dateVal?: string) => {
     if (!dateVal) return ""
@@ -285,23 +458,38 @@ export default function PaymentsPage() {
     return ""
   }
 
-  // Records filtered by selectedMonth
-  const monthFilteredRecords = records.filter(r => {
-    if (selectedMonth === "ALL" || !selectedMonth) return true
-    return getRecordYearMonth(r.date) === selectedMonth
+  // Records filtered by selected period (DAILY or MONTHLY) and entity
+  const periodFilteredRecords = records.filter(r => {
+    // 1. Entity filter
+    if (selectedEntity !== "ALL") {
+      const ent = r.entity || "MAXXI"
+      if (ent !== selectedEntity) return false
+    }
+
+    // 2. Period filter
+    if (reportMode === "DAILY") {
+      if (!selectedDate) return true
+      return getRecordDateStr(r.date) === selectedDate
+    } else {
+      if (selectedMonth === "ALL" || !selectedMonth) return true
+      return getRecordYearMonth(r.date) === selectedMonth
+    }
   })
 
-  // Calculated Stats (respecting selectedMonth)
-  const totalRevenue = monthFilteredRecords.reduce((sum, r) => sum + (r.totalPaidVal || 0), 0)
-  const cashRevenue = monthFilteredRecords.reduce((sum, r) => sum + (r.cashVal || 0), 0)
-  const onlineRevenue = monthFilteredRecords.reduce((sum, r) => sum + (r.onlineVal || 0), 0)
-  const totalInvoices = monthFilteredRecords.length
+  // Calculated Stats (respecting selected period and entity)
+  const totalRevenue = periodFilteredRecords.reduce((sum, r) => sum + (r.totalPaidVal || 0), 0)
+  const cashRevenue = periodFilteredRecords.reduce((sum, r) => sum + (r.cashVal || 0), 0)
+  const onlineRevenue = periodFilteredRecords.reduce((sum, r) => sum + (r.onlineVal || 0), 0)
+  const totalInvoices = periodFilteredRecords.length
 
-  // Section-wise Breakdown (SOLAN OPD SALE vs SABATHU OPD SALE vs COD SALE vs ONLINE SALE) for selectedMonth
-  const solanRecords = monthFilteredRecords.filter(r => (r.opdSection || "SOLAN OPD SALE") === "SOLAN OPD SALE")
-  const sabathuRecords = monthFilteredRecords.filter(r => r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES")
-  const codRecords = monthFilteredRecords.filter(r => r.opdSection === "COD SALE" || r.opdSection === "COD & ONLINE SALE")
-  const onlineSaleRecords = monthFilteredRecords.filter(r => r.opdSection === "ONLINE SALE")
+  // Section-wise Breakdown for selected period
+  const solanRecords = periodFilteredRecords.filter(r => (r.opdSection || "SOLAN OPD SALE") === "SOLAN OPD SALE")
+  const sabathuRecords = periodFilteredRecords.filter(r => r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES")
+  const codRecords = periodFilteredRecords.filter(r => r.opdSection === "COD SALE" || r.opdSection === "COD & ONLINE SALE")
+  const onlineSaleRecords = periodFilteredRecords.filter(r => r.opdSection === "ONLINE SALE")
+  const ksvRecords = periodFilteredRecords.filter(r => r.entity === "KSV" || r.opdSection === "KSV PHARMACY")
+  const kiyavaRecords = periodFilteredRecords.filter(r => r.entity === "KIYAVA" || r.opdSection === "KIYAVA SUBATHU")
+  const maxxiRecords = periodFilteredRecords.filter(r => (r.entity || "MAXXI") === "MAXXI")
 
   const getUnitsSoldInRecord = (r: PaymentRecord) => {
     if (r.treatments && Array.isArray(r.treatments)) {
@@ -348,6 +536,22 @@ export default function PaymentsPage() {
     total: onlineSaleRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
   }
 
+  const ksvStats = {
+    bills: ksvRecords.length,
+    units: ksvRecords.reduce((s, r) => s + getUnitsSoldInRecord(r), 0),
+    cash: ksvRecords.reduce((s, r) => s + (r.cashVal || 0), 0),
+    online: ksvRecords.reduce((s, r) => s + (r.onlineVal || 0), 0),
+    total: ksvRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
+  }
+
+  const kiyavaStats = {
+    bills: kiyavaRecords.length,
+    units: kiyavaRecords.reduce((s, r) => s + getUnitsSoldInRecord(r), 0),
+    cash: kiyavaRecords.reduce((s, r) => s + (r.cashVal || 0), 0),
+    online: kiyavaRecords.reduce((s, r) => s + (r.onlineVal || 0), 0),
+    total: kiyavaRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
+  }
+
   // Product-wise Quantity & Revenue Breakdown (Solan OPD vs Sabathu OPD vs COD Sale vs Online Sale)
   const productWiseBreakdown = (() => {
     const map = new Map<string, {
@@ -365,7 +569,7 @@ export default function PaymentsPage() {
       totalAmount: number
     }>()
 
-    monthFilteredRecords.forEach(r => {
+    periodFilteredRecords.forEach(r => {
       const isSabathu = r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES"
       const isCod = r.opdSection === "COD SALE" || r.opdSection === "COD & ONLINE SALE"
       const isOnline = r.opdSection === "ONLINE SALE"
@@ -457,7 +661,7 @@ export default function PaymentsPage() {
   })()
 
   // Filtered active records
-  const filteredRecords = monthFilteredRecords.filter(r => {
+  const filteredRecords = periodFilteredRecords.filter(r => {
     const query = searchQuery.toLowerCase()
     const matchesSearch =
       r.patientName.toLowerCase().includes(query) ||
@@ -474,12 +678,14 @@ export default function PaymentsPage() {
     if (paymentFilter === "SABATHU") return r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES"
     if (paymentFilter === "COD") return r.opdSection === "COD SALE" || r.opdSection === "COD & ONLINE SALE"
     if (paymentFilter === "ONLINE_SALE") return r.opdSection === "ONLINE SALE"
+    if (paymentFilter === "KSV") return r.entity === "KSV" || r.opdSection === "KSV PHARMACY"
+    if (paymentFilter === "KIYAVA") return r.entity === "KIYAVA" || r.opdSection === "KIYAVA SUBATHU"
 
     return true
   })
 
-  // Export Month-End Report to Excel (.csv with UTF-8 BOM for Microsoft Excel)
-  const handleExportExcel = (scope: "ALL" | "SOLAN" | "SABATHU" | "COD" | "ONLINE_SALE" = "ALL") => {
+  // Export Daily / Month-End Report to Excel (.csv with UTF-8 BOM for Microsoft Excel)
+  const handleExportExcel = (scope: "ALL" | "SOLAN" | "SABATHU" | "COD" | "ONLINE_SALE" | "KSV" | "KIYAVA" | "MAXXI" = "ALL") => {
     const targetRecords =
       scope === "SOLAN"
         ? solanRecords
@@ -489,10 +695,16 @@ export default function PaymentsPage() {
         ? codRecords
         : scope === "ONLINE_SALE"
         ? onlineSaleRecords
+        : scope === "KSV"
+        ? ksvRecords
+        : scope === "KIYAVA"
+        ? kiyavaRecords
+        : scope === "MAXXI"
+        ? maxxiRecords
         : filteredRecords
 
     if (targetRecords.length === 0) {
-      alert("No invoice records found for the selected month / section to export.")
+      alert("No invoice records found for the selected period / section to export.")
       return
     }
 
@@ -501,7 +713,16 @@ export default function PaymentsPage() {
       return `"${str}"`
     }
 
-    const periodLabel = selectedMonth === "ALL" ? "All-Months" : selectedMonth
+    const periodLabel = reportMode === "DAILY" ? `Daily Date: ${selectedDate}` : `Month: ${selectedMonth}`
+    const entityLabel =
+      selectedEntity === "ALL"
+        ? "KIYAVA / KSV / MAXXI"
+        : selectedEntity === "KSV"
+        ? "KSV PHARMACY"
+        : selectedEntity === "KIYAVA"
+        ? "KIYAVA SUBATHU"
+        : "MAXXI PHARMA"
+    const reportTypeTitle = reportMode === "DAILY" ? "DAILY SALES REPORT" : "MONTH-END SALES REPORT"
     const scopeLabel =
       scope === "SOLAN"
         ? "SOLAN-OPD-SALE"
@@ -511,17 +732,21 @@ export default function PaymentsPage() {
         ? "COD-SALE"
         : scope === "ONLINE_SALE"
         ? "ONLINE-SALE"
+        : scope === "KSV"
+        ? "KSV-PHARMACY"
+        : scope === "KIYAVA"
+        ? "KIYAVA-SUBATHU"
         : "ALL-SECTIONS"
 
     const rows: string[] = []
 
     // 1. Report Title & Summary Section
-    rows.push([esc(`MAXXI PHARMA / KSV - MONTH-END OPD SALES REPORT (${periodLabel} | ${scopeLabel})`)].join(","))
+    rows.push([esc(`${entityLabel} - ${reportTypeTitle} (${periodLabel} | ${scopeLabel})`)].join(","))
     rows.push([esc(`Generated On: ${new Date().toLocaleString("en-IN")}`)].join(","))
     rows.push("")
 
     rows.push([
-      esc("OPD SECTION (BILL SOURCE)"),
+      esc("OPD SECTION / ENTITY (BILL SOURCE)"),
       esc("TOTAL BILLS"),
       esc("TOTAL UNITS / KITS SOLD"),
       esc("CASH COLLECTED (Rs.)"),
@@ -569,14 +794,34 @@ export default function PaymentsPage() {
         esc(onlineSaleStats.total.toFixed(2))
       ].join(","))
     }
+    if (scope === "ALL" || scope === "KSV") {
+      rows.push([
+        esc("KSV PHARMACY SALES"),
+        esc(ksvStats.bills),
+        esc(ksvStats.units),
+        esc(ksvStats.cash.toFixed(2)),
+        esc(ksvStats.online.toFixed(2)),
+        esc(ksvStats.total.toFixed(2))
+      ].join(","))
+    }
+    if (scope === "ALL" || scope === "KIYAVA") {
+      rows.push([
+        esc("KIYAVA SUBATHU SALES"),
+        esc(kiyavaStats.bills),
+        esc(kiyavaStats.units),
+        esc(kiyavaStats.cash.toFixed(2)),
+        esc(kiyavaStats.online.toFixed(2)),
+        esc(kiyavaStats.total.toFixed(2))
+      ].join(","))
+    }
     if (scope === "ALL") {
       rows.push([
         esc("GRAND TOTAL"),
-        esc(solanStats.bills + sabathuStats.bills + codStats.bills + onlineSaleStats.bills),
-        esc(solanStats.units + sabathuStats.units + codStats.units + onlineSaleStats.units),
-        esc((solanStats.cash + sabathuStats.cash + codStats.cash + onlineSaleStats.cash).toFixed(2)),
-        esc((solanStats.online + sabathuStats.online + codStats.online + onlineSaleStats.online).toFixed(2)),
-        esc((solanStats.total + sabathuStats.total + codStats.total + onlineSaleStats.total).toFixed(2))
+        esc(solanStats.bills + sabathuStats.bills + codStats.bills + onlineSaleStats.bills + ksvStats.bills + kiyavaStats.bills),
+        esc(solanStats.units + sabathuStats.units + codStats.units + onlineSaleStats.units + ksvStats.units + kiyavaStats.units),
+        esc((solanStats.cash + sabathuStats.cash + codStats.cash + onlineSaleStats.cash + ksvStats.cash + kiyavaStats.cash).toFixed(2)),
+        esc((solanStats.online + sabathuStats.online + codStats.online + onlineSaleStats.online + ksvStats.online + kiyavaStats.online).toFixed(2)),
+        esc((solanStats.total + sabathuStats.total + codStats.total + onlineSaleStats.total + ksvStats.total + kiyavaStats.total).toFixed(2))
       ].join(","))
     }
 
@@ -620,27 +865,28 @@ export default function PaymentsPage() {
 
     rows.push("")
 
-    // 3. Detailed Invoice-Wise Sales Register
+    // 3. Detailed Invoice-Wise Sales Register with TAXABLE AMOUNT, DISCOUNT, AFTER DISCOUNT, GST
     rows.push([esc("DETAILED INVOICE-WISE SALES REGISTER")].join(","))
     rows.push([
       esc("S.No"),
       esc("Date"),
       esc("Invoice No"),
-      esc("Token No"),
-      esc("OPD Section (Bill Source)"),
-      esc("Patient Name"),
+      esc("Entity"),
+      esc("OPD Section / Bill Source"),
+      esc("Patient / Buyer Name"),
       esc("Patient Mobile / ID"),
       esc("City"),
       esc("State"),
       esc("State Code"),
       esc("Prescribed Products & Quantities"),
       esc("Units Sold"),
-      esc("Taxable Value (Rs.)"),
+      esc("Gross Taxable Amount (Before Discount) (Rs.)"),
+      esc("Discount (Rs.)"),
+      esc("Taxable Amount (After Discount) (Rs.)"),
       esc("CGST (Rs.)"),
       esc("SGST (Rs.)"),
       esc("IGST (Rs.)"),
       esc("Total GST (Rs.)"),
-      esc("Discount (Rs.)"),
       esc("Grand Total (Rs.)"),
       esc("Cash Paid (Rs.)"),
       esc("Online Paid (Rs.)"),
@@ -664,7 +910,7 @@ export default function PaymentsPage() {
         esc(idx + 1),
         esc(r.date),
         esc(r.invoiceNo),
-        esc(r.tokenNo || "-"),
+        esc(r.entity === "KSV" ? "KSV Pharmacy" : r.entity === "KIYAVA" ? "Kiyava Subathu" : "Maxxi Pharma"),
         esc(r.opdSection || "SOLAN OPD SALE"),
         esc(r.patientName),
         esc(r.patientId),
@@ -673,12 +919,13 @@ export default function PaymentsPage() {
         esc(patientStateCode || "02"),
         esc(r.combinedKitName),
         esc(getUnitsSoldInRecord(r)),
+        esc(calc.grossAmount.toFixed(2)),
+        esc((calc.discountApplied || r.discountVal || 0).toFixed(2)),
         esc(calc.totalTaxableValue.toFixed(2)),
         esc(calc.totalCgst.toFixed(2)),
         esc(calc.totalSgst.toFixed(2)),
         esc(calc.totalIgst.toFixed(2)),
         esc(calc.totalTax.toFixed(2)),
-        esc((r.discountVal || 0).toFixed(2)),
         esc(calc.grandTotal.toFixed(2)),
         esc((r.cashVal || 0).toFixed(2)),
         esc((r.onlineVal || 0).toFixed(2)),
@@ -691,7 +938,8 @@ export default function PaymentsPage() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.setAttribute("download", `OPD_Sales_Report_${scopeLabel}_${periodLabel}.csv`)
+    const safeDate = reportMode === "DAILY" ? selectedDate : (selectedMonth === "ALL" ? "All-Months" : selectedMonth)
+    link.download = `${entityLabel.replace(/[\s\/]+/g, "-")}-${reportTypeTitle.replace(/\s+/g, "-")}-${safeDate}-${scopeLabel}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -997,213 +1245,382 @@ export default function PaymentsPage() {
 
       </div>
 
-      {/* MONTH-END OPD SECTION SALES REPORT & EXCEL EXPORT PANEL */}
+      {/* DAILY SALES REPORT (DALY REPOT) & MONTH-END REGISTER PANEL */}
       <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm mb-6 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+        {/* Panel Header & Controls */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
-            <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              Month-End Sales Report: Solan OPD vs COD Sale vs Online Sale
-            </h2>
-            <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-              Select a month to view section-wise sales, product quantities sold, and download Excel (.csv) reports
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                Live Reports
+              </span>
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                {reportMode === "DAILY" ? "Daily Sales Report (Daly Repot)" : "Month-End Sales Register"}
+              </h2>
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium mt-1">
+              {reportMode === "DAILY" 
+                ? `Daily revenue & GST breakdown across Kiyava Subathu, KSV Pharmacy, and Maxxi Pharma for ${selectedDate || "selected date"}`
+                : `Monthly consolidated sales register & product quantity breakdown for ${selectedMonth === "ALL" ? "All Months" : selectedMonth}`}
             </p>
           </div>
 
+          {/* Action & Filter Controls */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Month Filter */}
-            <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
-              <Calendar className="w-3.5 h-3.5 text-slate-500" />
-              <span className="font-bold text-slate-500 text-[11px] uppercase">Month:</span>
-              <input
-                type="month"
-                value={selectedMonth === "ALL" ? "" : selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value || "ALL")}
-                className="bg-transparent font-extrabold text-slate-800 outline-none cursor-pointer text-xs"
-              />
-              {selectedMonth !== "ALL" && (
+            {/* Daily vs Monthly Mode Toggle */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-black">
+              <button
+                type="button"
+                onClick={() => setReportMode("DAILY")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                  reportMode === "DAILY" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" /> Daily Report
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportMode("MONTHLY")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                  reportMode === "MONTHLY" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" /> Monthly
+              </button>
+            </div>
+
+            {/* Date Picker (Daily Mode) */}
+            {reportMode === "DAILY" ? (
+              <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200 text-xs">
                 <button
                   type="button"
-                  onClick={() => setSelectedMonth("ALL")}
-                  className="text-[10px] font-black text-blue-600 hover:underline ml-1 cursor-pointer"
+                  onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-black cursor-pointer transition-all ${
+                    selectedDate === new Date().toISOString().split("T")[0]
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                  }`}
                 >
-                  All Months
+                  Today
                 </button>
-              )}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const y = new Date()
+                    y.setDate(y.getDate() - 1)
+                    setSelectedDate(y.toISOString().split("T")[0])
+                  }}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-black cursor-pointer transition-all ${
+                    selectedDate === new Date(Date.now() - 86400000).toISOString().split("T")[0]
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  Yesterday
+                </button>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-transparent font-extrabold text-slate-800 outline-none cursor-pointer text-xs ml-1"
+                />
+              </div>
+            ) : (
+              /* Month Picker (Monthly Mode) */
+              <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span className="font-bold text-slate-500 text-[11px] uppercase">Month:</span>
+                <input
+                  type="month"
+                  value={selectedMonth === "ALL" ? "" : selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value || "ALL")}
+                  className="bg-transparent font-extrabold text-slate-800 outline-none cursor-pointer text-xs"
+                />
+                {selectedMonth !== "ALL" && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMonth("ALL")}
+                    className="text-[10px] font-black text-blue-600 hover:underline ml-1 cursor-pointer"
+                  >
+                    All Months
+                  </button>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
               onClick={() => setShowProductSummary(prev => !prev)}
               className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
             >
-              {showProductSummary ? "Hide Product Breakdown" : `Product-Wise Sold (${productWiseBreakdown.length})`}
+              {showProductSummary ? "Hide Breakdown" : `Product-Wise (${productWiseBreakdown.length})`}
             </button>
 
             <button
               type="button"
               onClick={() => handleExportExcel("ALL")}
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              title="Download Excel Report with Taxable Amount, Discount & GST details"
             >
-              <Download className="w-3.5 h-3.5" /> Download Full Excel Report
+              <Download className="w-3.5 h-3.5" /> Export Excel Report
             </button>
           </div>
         </div>
 
-        {/* Section-Wise Comparison Cards (4 Separate Cards) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Entity Selector Pills (Kiyava, KSV, Maxxi, All) */}
+        <div className="flex flex-wrap items-center gap-1.5 pb-2">
+          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
+            Entity Filter:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedEntity("ALL")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              selectedEntity === "ALL"
+                ? "bg-slate-900 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            All Entities (Kiyava + KSV + Maxxi)
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedEntity("MAXXI")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              selectedEntity === "MAXXI"
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
+            }`}
+          >
+            Maxxi Pharma (Solan/Sabathu OPD + B2B)
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedEntity("KSV")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              selectedEntity === "KSV"
+                ? "bg-purple-600 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-purple-50 hover:text-purple-700"
+            }`}
+          >
+            KSV Pharmacy
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedEntity("KIYAVA")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              selectedEntity === "KIYAVA"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+            }`}
+          >
+            Kiyava Subathu
+          </button>
+        </div>
+
+        {/* Section & Entity Comparison Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           {/* 1. Solan OPD Sale Card */}
-          <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
-            <div className="flex items-start justify-between gap-2">
+          <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5">
+            <div className="flex items-start justify-between gap-1.5">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  SOLAN OPD SALE
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  SOLAN OPD
                 </span>
-                <h3 className="text-xl font-black text-emerald-900 mt-2 font-mono">
+                <h3 className="text-lg font-black text-emerald-900 mt-1.5 font-mono">
                   ₹{solanStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => handleExportExcel("SOLAN")}
-                className="px-2.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                className="p-1.5 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-xs"
+                title="Download Solan OPD Excel"
               >
-                <Download className="w-3.5 h-3.5" /> Excel
+                <Download className="w-3 h-3" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-emerald-200/60 text-xs">
+            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-emerald-200/60 text-[11px]">
               <div>
-                <span className="text-[10px] text-emerald-700/80 font-bold uppercase block">Bills</span>
-                <strong className="font-black text-slate-800 font-mono">{solanStats.bills}</strong>
+                <span className="text-[9px] text-emerald-700/80 font-bold uppercase block">Bills / Units</span>
+                <strong className="font-black text-slate-800 font-mono">{solanStats.bills} / {solanStats.units}</strong>
               </div>
               <div>
-                <span className="text-[10px] text-emerald-700/80 font-bold uppercase block">Units</span>
-                <strong className="font-black text-slate-800 font-mono">{solanStats.units}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] text-emerald-700/80 font-bold uppercase block">Cash</span>
-                <strong className="font-black text-emerald-800 font-mono">₹{solanStats.cash.toLocaleString("en-IN")}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] text-emerald-700/80 font-bold uppercase block">Online</span>
-                <strong className="font-black text-indigo-700 font-mono">₹{solanStats.online.toLocaleString("en-IN")}</strong>
+                <span className="text-[9px] text-emerald-700/80 font-bold uppercase block">Cash / Online</span>
+                <span className="font-mono text-[10px] font-bold text-slate-700 block">
+                  ₹{solanStats.cash.toLocaleString("en-IN")} / ₹{solanStats.online.toLocaleString("en-IN")}
+                </span>
               </div>
             </div>
           </div>
 
           {/* 2. Sabathu OPD Sale Card */}
-          <div className="bg-teal-50/60 border border-teal-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
-            <div className="flex items-start justify-between gap-2">
+          <div className="bg-teal-50/60 border border-teal-100 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5">
+            <div className="flex items-start justify-between gap-1.5">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
-                  SABATHU OPD SALE
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                  SABATHU OPD
                 </span>
-                <h3 className="text-xl font-black text-teal-900 mt-2 font-mono">
+                <h3 className="text-lg font-black text-teal-900 mt-1.5 font-mono">
                   ₹{sabathuStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => handleExportExcel("SABATHU")}
-                className="px-2.5 py-1.5 bg-white hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-xl font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                className="p-1.5 bg-white hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-xs"
+                title="Download Sabathu OPD Excel"
               >
-                <Download className="w-3.5 h-3.5" /> Excel
+                <Download className="w-3 h-3" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-teal-200/60 text-xs">
+            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-teal-200/60 text-[11px]">
               <div>
-                <span className="text-[10px] text-teal-700/80 font-bold uppercase block">Bills</span>
-                <strong className="font-black text-slate-800 font-mono">{sabathuStats.bills}</strong>
+                <span className="text-[9px] text-teal-700/80 font-bold uppercase block">Bills / Units</span>
+                <strong className="font-black text-slate-800 font-mono">{sabathuStats.bills} / {sabathuStats.units}</strong>
               </div>
               <div>
-                <span className="text-[10px] text-teal-700/80 font-bold uppercase block">Units</span>
-                <strong className="font-black text-slate-800 font-mono">{sabathuStats.units}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] text-teal-700/80 font-bold uppercase block">Cash</span>
-                <strong className="font-black text-emerald-800 font-mono">₹{sabathuStats.cash.toLocaleString("en-IN")}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] text-teal-700/80 font-bold uppercase block">Online</span>
-                <strong className="font-black text-indigo-700 font-mono">₹{sabathuStats.online.toLocaleString("en-IN")}</strong>
+                <span className="text-[9px] text-teal-700/80 font-bold uppercase block">Cash / Online</span>
+                <span className="font-mono text-[10px] font-bold text-slate-700 block">
+                  ₹{sabathuStats.cash.toLocaleString("en-IN")} / ₹{sabathuStats.online.toLocaleString("en-IN")}
+                </span>
               </div>
             </div>
           </div>
 
           {/* 3. COD Sale Card */}
-          <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
-            <div className="flex items-start justify-between gap-2">
+          <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5">
+            <div className="flex items-start justify-between gap-1.5">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
                   COD SALE
                 </span>
-                <h3 className="text-xl font-black text-amber-900 mt-2 font-mono">
+                <h3 className="text-lg font-black text-amber-900 mt-1.5 font-mono">
                   ₹{codStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => handleExportExcel("COD")}
-                className="px-2.5 py-1.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                className="p-1.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-xs"
+                title="Download COD Sale Excel"
               >
-                <Download className="w-3.5 h-3.5" /> Excel
+                <Download className="w-3 h-3" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-amber-200/60 text-xs">
+            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-amber-200/60 text-[11px]">
               <div>
-                <span className="text-[10px] text-amber-800/80 font-bold uppercase block">Bills</span>
-                <strong className="font-black text-slate-800 font-mono">{codStats.bills}</strong>
+                <span className="text-[9px] text-amber-800/80 font-bold uppercase block">Bills / Units</span>
+                <strong className="font-black text-slate-800 font-mono">{codStats.bills} / {codStats.units}</strong>
               </div>
               <div>
-                <span className="text-[10px] text-amber-800/80 font-bold uppercase block">Units</span>
-                <strong className="font-black text-slate-800 font-mono">{codStats.units}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] text-amber-800/80 font-bold uppercase block">Cash / COD</span>
-                <strong className="font-black text-emerald-800 font-mono">₹{codStats.cash.toLocaleString("en-IN")}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] text-amber-800/80 font-bold uppercase block">Online</span>
-                <strong className="font-black text-indigo-700 font-mono">₹{codStats.online.toLocaleString("en-IN")}</strong>
+                <span className="text-[9px] text-amber-800/80 font-bold uppercase block">Cash / Online</span>
+                <span className="font-mono text-[10px] font-bold text-slate-700 block">
+                  ₹{codStats.cash.toLocaleString("en-IN")} / ₹{codStats.online.toLocaleString("en-IN")}
+                </span>
               </div>
             </div>
           </div>
 
           {/* 4. Online Sale Card */}
-          <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
-            <div className="flex items-start justify-between gap-2">
+          <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5">
+            <div className="flex items-start justify-between gap-1.5">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
                   ONLINE SALE
                 </span>
-                <h3 className="text-xl font-black text-indigo-900 mt-2 font-mono">
+                <h3 className="text-lg font-black text-indigo-900 mt-1.5 font-mono">
                   ₹{onlineSaleStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => handleExportExcel("ONLINE_SALE")}
-                className="px-2.5 py-1.5 bg-white hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                className="p-1.5 bg-white hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-xs"
+                title="Download Online Sale Excel"
               >
-                <Download className="w-3.5 h-3.5" /> Excel
+                <Download className="w-3 h-3" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-indigo-200/60 text-xs">
+            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-indigo-200/60 text-[11px]">
               <div>
-                <span className="text-[10px] text-indigo-800/80 font-bold uppercase block">Bills</span>
-                <strong className="font-black text-slate-800 font-mono">{onlineSaleStats.bills}</strong>
+                <span className="text-[9px] text-indigo-800/80 font-bold uppercase block">Bills / Units</span>
+                <strong className="font-black text-slate-800 font-mono">{onlineSaleStats.bills} / {onlineSaleStats.units}</strong>
               </div>
               <div>
-                <span className="text-[10px] text-indigo-800/80 font-bold uppercase block">Units</span>
-                <strong className="font-black text-slate-800 font-mono">{onlineSaleStats.units}</strong>
+                <span className="text-[9px] text-indigo-800/80 font-bold uppercase block">Cash / Online</span>
+                <span className="font-mono text-[10px] font-bold text-slate-700 block">
+                  ₹{onlineSaleStats.cash.toLocaleString("en-IN")} / ₹{onlineSaleStats.online.toLocaleString("en-IN")}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. KSV Pharmacy Card */}
+          <div className="bg-purple-50/60 border border-purple-100 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5">
+            <div className="flex items-start justify-between gap-1.5">
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                  KSV PHARMACY
+                </span>
+                <h3 className="text-lg font-black text-purple-900 mt-1.5 font-mono">
+                  ₹{ksvStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleExportExcel("KSV")}
+                className="p-1.5 bg-white hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-xs"
+                title="Download KSV Pharmacy Excel"
+              >
+                <Download className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-purple-200/60 text-[11px]">
+              <div>
+                <span className="text-[9px] text-purple-800/80 font-bold uppercase block">Invoices / Qty</span>
+                <strong className="font-black text-slate-800 font-mono">{ksvStats.bills} / {ksvStats.units}</strong>
               </div>
               <div>
-                <span className="text-[10px] text-indigo-800/80 font-bold uppercase block">Cash</span>
-                <strong className="font-black text-emerald-800 font-mono">₹{onlineSaleStats.cash.toLocaleString("en-IN")}</strong>
+                <span className="text-[9px] text-purple-800/80 font-bold uppercase block">Cash / Online</span>
+                <span className="font-mono text-[10px] font-bold text-slate-700 block">
+                  ₹{ksvStats.cash.toLocaleString("en-IN")} / ₹{ksvStats.online.toLocaleString("en-IN")}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 6. Kiyava Subathu Card */}
+          <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5">
+            <div className="flex items-start justify-between gap-1.5">
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                  KIYAVA SUBATHU
+                </span>
+                <h3 className="text-lg font-black text-blue-900 mt-1.5 font-mono">
+                  ₹{kiyavaStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleExportExcel("KIYAVA")}
+                className="p-1.5 bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-xs"
+                title="Download Kiyava Subathu Excel"
+              >
+                <Download className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-blue-200/60 text-[11px]">
+              <div>
+                <span className="text-[9px] text-blue-800/80 font-bold uppercase block">Invoices / Qty</span>
+                <strong className="font-black text-slate-800 font-mono">{kiyavaStats.bills} / {kiyavaStats.units}</strong>
               </div>
               <div>
-                <span className="text-[10px] text-indigo-800/80 font-bold uppercase block">Online</span>
-                <strong className="font-black text-indigo-700 font-mono">₹{onlineSaleStats.online.toLocaleString("en-IN")}</strong>
+                <span className="text-[9px] text-blue-800/80 font-bold uppercase block">Cash / Online</span>
+                <span className="font-mono text-[10px] font-bold text-slate-700 block">
+                  ₹{kiyavaStats.cash.toLocaleString("en-IN")} / ₹{kiyavaStats.online.toLocaleString("en-IN")}
+                </span>
               </div>
             </div>
           </div>
@@ -1324,6 +1741,20 @@ export default function PaymentsPage() {
                 }`}
             >
               Online Sale
+            </button>
+            <button
+              onClick={() => setPaymentFilter("KSV")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "KSV" ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+            >
+              KSV Pharmacy
+            </button>
+            <button
+              onClick={() => setPaymentFilter("KIYAVA")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "KIYAVA" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+            >
+              Kiyava Subathu
             </button>
             <button
               onClick={() => setPaymentFilter("CASH")}
