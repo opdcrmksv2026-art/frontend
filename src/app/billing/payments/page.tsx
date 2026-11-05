@@ -297,8 +297,9 @@ export default function PaymentsPage() {
   const onlineRevenue = monthFilteredRecords.reduce((sum, r) => sum + (r.onlineVal || 0), 0)
   const totalInvoices = monthFilteredRecords.length
 
-  // Section-wise Breakdown (SOLAN OPD SALE vs COD SALE vs ONLINE SALE) for selectedMonth
+  // Section-wise Breakdown (SOLAN OPD SALE vs SABATHU OPD SALE vs COD SALE vs ONLINE SALE) for selectedMonth
   const solanRecords = monthFilteredRecords.filter(r => (r.opdSection || "SOLAN OPD SALE") === "SOLAN OPD SALE")
+  const sabathuRecords = monthFilteredRecords.filter(r => r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES")
   const codRecords = monthFilteredRecords.filter(r => r.opdSection === "COD SALE" || r.opdSection === "COD & ONLINE SALE")
   const onlineSaleRecords = monthFilteredRecords.filter(r => r.opdSection === "ONLINE SALE")
 
@@ -323,6 +324,14 @@ export default function PaymentsPage() {
     total: solanRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
   }
 
+  const sabathuStats = {
+    bills: sabathuRecords.length,
+    units: sabathuRecords.reduce((s, r) => s + getUnitsSoldInRecord(r), 0),
+    cash: sabathuRecords.reduce((s, r) => s + (r.cashVal || 0), 0),
+    online: sabathuRecords.reduce((s, r) => s + (r.onlineVal || 0), 0),
+    total: sabathuRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
+  }
+
   const codStats = {
     bills: codRecords.length,
     units: codRecords.reduce((s, r) => s + getUnitsSoldInRecord(r), 0),
@@ -339,22 +348,25 @@ export default function PaymentsPage() {
     total: onlineSaleRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
   }
 
-  // Product-wise Quantity & Revenue Breakdown (Solan OPD vs COD Sale vs Online Sale)
+  // Product-wise Quantity & Revenue Breakdown (Solan OPD vs Sabathu OPD vs COD Sale vs Online Sale)
   const productWiseBreakdown = (() => {
     const map = new Map<string, {
       name: string
       hsnCode: string
       solanQty: number
+      sabathuQty: number
       codQty: number
       onlineQty: number
       totalQty: number
       solanAmount: number
+      sabathuAmount: number
       codAmount: number
       onlineAmount: number
       totalAmount: number
     }>()
 
     monthFilteredRecords.forEach(r => {
+      const isSabathu = r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES"
       const isCod = r.opdSection === "COD SALE" || r.opdSection === "COD & ONLINE SALE"
       const isOnline = r.opdSection === "ONLINE SALE"
       if (r.treatments && Array.isArray(r.treatments)) {
@@ -372,15 +384,20 @@ export default function PaymentsPage() {
                 name: pName,
                 hsnCode: p.hsnCode || p.hsnSac || "",
                 solanQty: 0,
+                sabathuQty: 0,
                 codQty: 0,
                 onlineQty: 0,
                 totalQty: 0,
                 solanAmount: 0,
+                sabathuAmount: 0,
                 codAmount: 0,
                 onlineAmount: 0,
                 totalAmount: 0
               }
-              if (isCod) {
+              if (isSabathu) {
+                existing.sabathuQty += qty
+                existing.sabathuAmount += lineTotal
+              } else if (isCod) {
                 existing.codQty += qty
                 existing.codAmount += lineTotal
               } else if (isOnline) {
@@ -405,15 +422,20 @@ export default function PaymentsPage() {
               name: pName,
               hsnCode: "",
               solanQty: 0,
+              sabathuQty: 0,
               codQty: 0,
               onlineQty: 0,
               totalQty: 0,
               solanAmount: 0,
+              sabathuAmount: 0,
               codAmount: 0,
               onlineAmount: 0,
               totalAmount: 0
             }
-            if (isCod) {
+            if (isSabathu) {
+              existing.sabathuQty += 1
+              existing.sabathuAmount += lineTotal
+            } else if (isCod) {
               existing.codQty += 1
               existing.codAmount += lineTotal
             } else if (isOnline) {
@@ -449,6 +471,7 @@ export default function PaymentsPage() {
     if (paymentFilter === "CASH") return r.cashVal > 0 && r.onlineVal === 0
     if (paymentFilter === "SPLIT") return r.cashVal > 0 && r.onlineVal > 0
     if (paymentFilter === "SOLAN") return (r.opdSection || "SOLAN OPD SALE") === "SOLAN OPD SALE"
+    if (paymentFilter === "SABATHU") return r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES"
     if (paymentFilter === "COD") return r.opdSection === "COD SALE" || r.opdSection === "COD & ONLINE SALE"
     if (paymentFilter === "ONLINE_SALE") return r.opdSection === "ONLINE SALE"
 
@@ -456,10 +479,12 @@ export default function PaymentsPage() {
   })
 
   // Export Month-End Report to Excel (.csv with UTF-8 BOM for Microsoft Excel)
-  const handleExportExcel = (scope: "ALL" | "SOLAN" | "COD" | "ONLINE_SALE" = "ALL") => {
+  const handleExportExcel = (scope: "ALL" | "SOLAN" | "SABATHU" | "COD" | "ONLINE_SALE" = "ALL") => {
     const targetRecords =
       scope === "SOLAN"
         ? solanRecords
+        : scope === "SABATHU"
+        ? sabathuRecords
         : scope === "COD"
         ? codRecords
         : scope === "ONLINE_SALE"
@@ -480,6 +505,8 @@ export default function PaymentsPage() {
     const scopeLabel =
       scope === "SOLAN"
         ? "SOLAN-OPD-SALE"
+        : scope === "SABATHU"
+        ? "SABATHU-OPD-SALE"
         : scope === "COD"
         ? "COD-SALE"
         : scope === "ONLINE_SALE"
@@ -512,6 +539,16 @@ export default function PaymentsPage() {
         esc(solanStats.total.toFixed(2))
       ].join(","))
     }
+    if (scope === "ALL" || scope === "SABATHU") {
+      rows.push([
+        esc("SABATHU OPD SALE"),
+        esc(sabathuStats.bills),
+        esc(sabathuStats.units),
+        esc(sabathuStats.cash.toFixed(2)),
+        esc(sabathuStats.online.toFixed(2)),
+        esc(sabathuStats.total.toFixed(2))
+      ].join(","))
+    }
     if (scope === "ALL" || scope === "COD") {
       rows.push([
         esc("COD SALE"),
@@ -535,27 +572,29 @@ export default function PaymentsPage() {
     if (scope === "ALL") {
       rows.push([
         esc("GRAND TOTAL"),
-        esc(solanStats.bills + codStats.bills + onlineSaleStats.bills),
-        esc(solanStats.units + codStats.units + onlineSaleStats.units),
-        esc((solanStats.cash + codStats.cash + onlineSaleStats.cash).toFixed(2)),
-        esc((solanStats.online + codStats.online + onlineSaleStats.online).toFixed(2)),
-        esc((solanStats.total + codStats.total + onlineSaleStats.total).toFixed(2))
+        esc(solanStats.bills + sabathuStats.bills + codStats.bills + onlineSaleStats.bills),
+        esc(solanStats.units + sabathuStats.units + codStats.units + onlineSaleStats.units),
+        esc((solanStats.cash + sabathuStats.cash + codStats.cash + onlineSaleStats.cash).toFixed(2)),
+        esc((solanStats.online + sabathuStats.online + codStats.online + onlineSaleStats.online).toFixed(2)),
+        esc((solanStats.total + sabathuStats.total + codStats.total + onlineSaleStats.total).toFixed(2))
       ].join(","))
     }
 
     rows.push("")
 
     // 2. Product-Wise Quantity Sold Breakdown
-    rows.push([esc("PRODUCT-WISE QUANTITY SOLD BREAKDOWN (SOLAN OPD vs COD SALE vs ONLINE SALE)")].join(","))
+    rows.push([esc("PRODUCT-WISE QUANTITY SOLD BREAKDOWN (SOLAN OPD vs SABATHU OPD vs COD SALE vs ONLINE SALE)")].join(","))
     rows.push([
       esc("S.No"),
       esc("PRODUCT / MEDICINE NAME"),
       esc("HSN CODE"),
       esc("SOLAN OPD QTY SOLD"),
+      esc("SABATHU OPD QTY SOLD"),
       esc("COD SALE QTY SOLD"),
       esc("ONLINE SALE QTY SOLD"),
       esc("TOTAL QTY SOLD"),
       esc("SOLAN OPD AMOUNT (Rs.)"),
+      esc("SABATHU OPD AMOUNT (Rs.)"),
       esc("COD SALE AMOUNT (Rs.)"),
       esc("ONLINE SALE AMOUNT (Rs.)"),
       esc("TOTAL AMOUNT (Rs.)")
@@ -567,10 +606,12 @@ export default function PaymentsPage() {
         esc(prod.name),
         esc(prod.hsnCode || "-"),
         esc(prod.solanQty),
+        esc(prod.sabathuQty),
         esc(prod.codQty),
         esc(prod.onlineQty),
         esc(prod.totalQty),
         esc(prod.solanAmount.toFixed(2)),
+        esc(prod.sabathuAmount.toFixed(2)),
         esc(prod.codAmount.toFixed(2)),
         esc(prod.onlineAmount.toFixed(2)),
         esc(prod.totalAmount.toFixed(2))
@@ -1009,8 +1050,8 @@ export default function PaymentsPage() {
           </div>
         </div>
 
-        {/* Section-Wise Comparison Cards (3 Separate Cards) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Section-Wise Comparison Cards (4 Separate Cards) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 1. Solan OPD Sale Card */}
           <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div className="flex items-start justify-between gap-2">
@@ -1050,7 +1091,46 @@ export default function PaymentsPage() {
             </div>
           </div>
 
-          {/* 2. COD Sale Card */}
+          {/* 2. Sabathu OPD Sale Card */}
+          <div className="bg-teal-50/60 border border-teal-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                  SABATHU OPD SALE
+                </span>
+                <h3 className="text-xl font-black text-teal-900 mt-2 font-mono">
+                  ₹{sabathuStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleExportExcel("SABATHU")}
+                className="px-2.5 py-1.5 bg-white hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-xl font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" /> Excel
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-teal-200/60 text-xs">
+              <div>
+                <span className="text-[10px] text-teal-700/80 font-bold uppercase block">Bills</span>
+                <strong className="font-black text-slate-800 font-mono">{sabathuStats.bills}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-teal-700/80 font-bold uppercase block">Units</span>
+                <strong className="font-black text-slate-800 font-mono">{sabathuStats.units}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-teal-700/80 font-bold uppercase block">Cash</span>
+                <strong className="font-black text-emerald-800 font-mono">₹{sabathuStats.cash.toLocaleString("en-IN")}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-teal-700/80 font-bold uppercase block">Online</span>
+                <strong className="font-black text-indigo-700 font-mono">₹{sabathuStats.online.toLocaleString("en-IN")}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. COD Sale Card */}
           <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -1089,7 +1169,7 @@ export default function PaymentsPage() {
             </div>
           </div>
 
-          {/* 3. Online Sale Card */}
+          {/* 4. Online Sale Card */}
           <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -1134,7 +1214,7 @@ export default function PaymentsPage() {
           <div className="border border-slate-200 rounded-2xl overflow-hidden mt-3">
             <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
               <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
-                Product-Wise Quantity Sold (Solan OPD vs COD Sale vs Online Sale)
+                Product-Wise Quantity Sold (Solan OPD vs Sabathu OPD vs COD Sale vs Online Sale)
               </span>
               <span className="text-[10px] font-bold text-slate-500">
                 {productWiseBreakdown.length} Product(s)
@@ -1149,6 +1229,7 @@ export default function PaymentsPage() {
                       <th className="py-2.5 px-4">Product / Medicine Name</th>
                       <th className="py-2.5 px-4">HSN</th>
                       <th className="py-2.5 px-4 text-right text-emerald-700">Solan OPD Qty</th>
+                      <th className="py-2.5 px-4 text-right text-teal-700">Sabathu OPD Qty</th>
                       <th className="py-2.5 px-4 text-right text-amber-700">COD Sale Qty</th>
                       <th className="py-2.5 px-4 text-right text-indigo-700">Online Sale Qty</th>
                       <th className="py-2.5 px-4 text-right">Total Qty Sold</th>
@@ -1162,6 +1243,7 @@ export default function PaymentsPage() {
                         <td className="py-2 px-4 font-bold text-slate-800 uppercase">{prod.name}</td>
                         <td className="py-2 px-4 font-mono text-[10px] text-slate-500">{prod.hsnCode || "—"}</td>
                         <td className="py-2 px-4 text-right font-mono font-bold text-emerald-700">{prod.solanQty}</td>
+                        <td className="py-2 px-4 text-right font-mono font-bold text-teal-700">{prod.sabathuQty}</td>
                         <td className="py-2 px-4 text-right font-mono font-bold text-amber-700">{prod.codQty}</td>
                         <td className="py-2 px-4 text-right font-mono font-bold text-indigo-700">{prod.onlineQty}</td>
                         <td className="py-2 px-4 text-right font-mono font-black text-slate-900">{prod.totalQty}</td>
@@ -1221,6 +1303,13 @@ export default function PaymentsPage() {
                 }`}
             >
               Solan OPD Sale
+            </button>
+            <button
+              onClick={() => setPaymentFilter("SABATHU")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "SABATHU" ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+            >
+              Sabathu OPD Sale
             </button>
             <button
               onClick={() => setPaymentFilter("COD")}
@@ -1350,6 +1439,8 @@ export default function PaymentsPage() {
                               ? "text-amber-700 bg-amber-50 border-amber-200"
                               : r.opdSection === "ONLINE SALE"
                               ? "text-indigo-700 bg-indigo-50 border-indigo-200"
+                              : r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES"
+                              ? "text-teal-700 bg-teal-50 border-teal-200"
                               : "text-emerald-700 bg-emerald-50 border-emerald-200"
                           }`}>
                             {r.opdSection || "SOLAN OPD SALE"}
@@ -1614,6 +1705,8 @@ export default function PaymentsPage() {
                           ? "text-amber-700 bg-amber-50 border-amber-200"
                           : selectedBill.opdSection === "ONLINE SALE"
                           ? "text-indigo-700 bg-indigo-50 border-indigo-200"
+                          : selectedBill.opdSection === "SABATHU OPD SALE" || selectedBill.opdSection === "SABATHU OPD SALES"
+                          ? "text-teal-700 bg-teal-50 border-teal-200"
                           : "text-emerald-700 bg-emerald-50 border-emerald-200"
                       }`}>
                         {selectedBill.opdSection || "SOLAN OPD SALE"}
@@ -2045,6 +2138,7 @@ export default function PaymentsPage() {
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-bold outline-none focus:border-blue-500 cursor-pointer"
                   >
                     <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
+                    <option value="SABATHU OPD SALE">SABATHU OPD SALE</option>
                     <option value="COD SALE">COD SALE</option>
                     <option value="ONLINE SALE">ONLINE SALE</option>
                   </select>
