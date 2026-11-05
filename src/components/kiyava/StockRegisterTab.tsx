@@ -98,21 +98,21 @@ export default function StockRegisterTab({
         })
       })
 
-      // 6. Stock Transfers (KSV Store <-> KSV Factory)
-      let transferredToFactoryQty = 0
+      // 6. Stock Transfers (KSV Factory <-> KSV Store)
+      let netTransferredToStoreQty = 0
       stockTransfers.forEach(tr => {
         if (tr.itemId === item.id || isItemMatch(tr.itemName, item.name, item.id, tr.itemId)) {
-          if (tr.direction === 'STORE_TO_FACTORY') {
-            transferredToFactoryQty += tr.quantity
-          } else if (tr.direction === 'FACTORY_TO_STORE') {
-            transferredToFactoryQty -= tr.quantity
+          if (tr.direction === 'FACTORY_TO_STORE') {
+            netTransferredToStoreQty += tr.quantity
+          } else if (tr.direction === 'STORE_TO_FACTORY') {
+            netTransferredToStoreQty -= tr.quantity
           }
         }
       })
 
-      // Location Balances
-      const storeClosingQty = openingQty + purchasedQty + mfgProducedQty - mfgConsumedQty - transferredToFactoryQty - soldFromStoreQty
-      const factoryClosingQty = transferredToFactoryQty - soldFromFactoryQty
+      // Location Balances (Production goods enter KSV Factory; Store stock increases on transfer from Factory)
+      const factoryClosingQty = mfgProducedQty - netTransferredToStoreQty - soldFromFactoryQty
+      const storeClosingQty = openingQty + purchasedQty + netTransferredToStoreQty - mfgConsumedQty - soldFromStoreQty
 
       // Final Closing Stock
       const totalIn = openingQty + purchasedQty + mfgProducedQty
@@ -128,7 +128,8 @@ export default function StockRegisterTab({
         soldFromFactoryQty,
         mfgProducedQty,
         mfgConsumedQty,
-        transferredToFactoryQty,
+        transferredToFactoryQty: -netTransferredToStoreQty,
+        transferredToStoreQty: netTransferredToStoreQty,
         storeClosingQty,
         factoryClosingQty,
         closingQty

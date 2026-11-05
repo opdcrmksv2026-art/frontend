@@ -190,7 +190,13 @@ export default function KsvPage() {
       let parsedTransfers: StockTransferLog[] = storedTransfers ? JSON.parse(storedTransfers) : []
       let transfersChanged = false
       parsedTransfers = parsedTransfers.map((tr) => {
-        if (tr.direction === 'STORE_TO_FACTORY' && (tr.notes?.includes('during production') || tr.batchId)) {
+        if (
+          tr.direction === 'STORE_TO_FACTORY' &&
+          (tr.notes?.includes('during production') ||
+            tr.notes?.toLowerCase().includes('batch') ||
+            tr.batchId ||
+            tr.batchNo)
+        ) {
           transfersChanged = true
           return { ...tr, direction: 'FACTORY_TO_STORE' as const }
         }
@@ -799,7 +805,7 @@ export default function KsvPage() {
   // Open Stock Transfer Modal for a specific Production Batch (Factory ➔ Store)
   const openTransferModalForBatch = (log: ManufacturingLog) => {
     const batchTransferredToStore = stockTransfers
-      .filter((tr) => tr.batchId === log.id)
+      .filter((tr) => tr.batchId === log.id || (log.batchNo && tr.batchNo === log.batchNo))
       .reduce((sum, tr) => sum + (tr.direction === 'FACTORY_TO_STORE' ? tr.quantity : (tr.direction === 'STORE_TO_FACTORY' ? -tr.quantity : 0)), 0)
     const remainingInBatchFactory = Math.max(0, (log.producedQuantity || 0) - batchTransferredToStore)
 
@@ -2336,9 +2342,9 @@ export default function KsvPage() {
           ? getItemStockBreakdown(transferForm.itemId, transferForm.itemName, transferForm.unit)
           : null
         const maxAvailable =
-          transferForm.direction === 'STORE_TO_FACTORY'
-            ? Math.max(0, selectedStock?.storeClosingQty || 0)
-            : Math.max(0, selectedStock?.factoryClosingQty || 0)
+          transferForm.direction === 'FACTORY_TO_STORE'
+            ? Math.max(0, selectedStock?.factoryClosingQty || 0)
+            : Math.max(0, selectedStock?.storeClosingQty || 0)
 
         return (
           <div className="fixed inset-0 z-[100] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -2350,10 +2356,10 @@ export default function KsvPage() {
                   </div>
                   <div>
                     <h2 className="text-base font-black text-slate-800 uppercase tracking-wide">
-                      {editingTransferId ? 'Edit Stock Transfer' : 'Transfer Stock (Store ↔ Factory)'}
+                      {editingTransferId ? 'Edit Stock Transfer' : 'Transfer Stock (Factory ➔ Store)'}
                     </h2>
                     <p className="text-[11px] text-slate-400 font-medium">
-                      Move finished goods between KSV Store and KSV Factory
+                      Move finished goods from KSV Factory to KSV Store
                     </p>
                   </div>
                 </div>
@@ -2443,16 +2449,16 @@ export default function KsvPage() {
                 {/* Live Stock Balance Preview */}
                 {selectedStock && (
                   <div className="grid grid-cols-2 gap-2.5 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                    <div className="bg-teal-50 border border-teal-200 rounded-xl p-2.5 flex justify-between items-center">
-                      <span className="text-[10px] font-extrabold text-teal-700 uppercase">🏪 KSV Store:</span>
-                      <span className="font-mono font-black text-sm text-teal-800">
-                        {selectedStock.storeClosingQty} {selectedStock.unit}
-                      </span>
-                    </div>
                     <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 flex justify-between items-center">
                       <span className="text-[10px] font-extrabold text-indigo-700 uppercase">🏭 KSV Factory:</span>
                       <span className="font-mono font-black text-sm text-indigo-800">
                         {selectedStock.factoryClosingQty} {selectedStock.unit}
+                      </span>
+                    </div>
+                    <div className="bg-teal-50 border border-teal-200 rounded-xl p-2.5 flex justify-between items-center">
+                      <span className="text-[10px] font-extrabold text-teal-700 uppercase">🏪 KSV Store:</span>
+                      <span className="font-mono font-black text-sm text-teal-800">
+                        {selectedStock.storeClosingQty} {selectedStock.unit}
                       </span>
                     </div>
                   </div>
