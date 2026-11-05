@@ -169,6 +169,7 @@ export interface ManufacturingLog {
   finishedGoodName: string
   producedQuantity: number
   transferredToFactoryQty?: number
+  transferredToStoreQty?: number
   unit: string
   costAllocationPercent?: number
   rawMaterialsConsumed: RawMaterialConsumed[]

@@ -108,7 +108,7 @@ export default function KsvPage() {
     itemName: '',
     quantity: 1,
     unit: 'PCS',
-    direction: 'STORE_TO_FACTORY',
+    direction: 'FACTORY_TO_STORE',
     date: new Date().toISOString().split('T')[0],
     notes: ''
   })
@@ -185,7 +185,21 @@ export default function KsvPage() {
 
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
-      setStockTransfers(storedTransfers ? JSON.parse(storedTransfers) : [])
+
+      // Migration: ensure any legacy production batch transfers use FACTORY_TO_STORE
+      let parsedTransfers: StockTransferLog[] = storedTransfers ? JSON.parse(storedTransfers) : []
+      let transfersChanged = false
+      parsedTransfers = parsedTransfers.map((tr) => {
+        if (tr.direction === 'STORE_TO_FACTORY' && (tr.notes?.includes('during production') || tr.batchId)) {
+          transfersChanged = true
+          return { ...tr, direction: 'FACTORY_TO_STORE' as const }
+        }
+        return tr
+      })
+      if (transfersChanged) {
+        localStorage.setItem('ksv_app_stock_transfers', JSON.stringify(parsedTransfers))
+      }
+      setStockTransfers(parsedTransfers)
 
       // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) IN PARALLEL ---
       const fetchDatabaseData = async () => {
@@ -638,12 +652,12 @@ export default function KsvPage() {
       })
     const soldQty = soldFromStoreQty + soldFromFactoryQty
 
-    // Manufactured Qty (Produced in KSV Store)
+    // Manufactured Qty (Produced in KSV Factory)
     const manufacturedQty = manufacturingLogs
       .filter((log) => log.finishedGoodItemId === itemId || log.finishedGoodName.toLowerCase() === nameLower)
       .reduce((sum, log) => sum + (log.producedQuantity || 0), 0)
 
-    // Consumed Qty in Manufacturing (Raw Materials from KSV Store)
+    // Consumed Qty in Manufacturing (Raw Materials consumed from KSV Store)
     const consumedQty = manufacturingLogs.reduce((sum, log) => {
       const consumed = log.rawMaterialsConsumed.filter(
         (rm) => rm.itemId === itemId || rm.itemName.toLowerCase() === nameLower
@@ -651,15 +665,20 @@ export default function KsvPage() {
       return sum + consumed.reduce((s, rm) => s + (rm.quantity || 0), 0)
     }, 0)
 
-    // Net Transferred from KSV Store to KSV Factory
-    const transferredToFactoryQty = stockTransfers
+    // Net Transferred from KSV Factory to KSV Store
+    // (FACTORY_TO_STORE moves stock out of Factory and into Store; STORE_TO_FACTORY moves back)
+    const netTransferredToStoreQty = stockTransfers
       .filter((tr) => tr.itemId === itemId || tr.itemName.toLowerCase() === nameLower)
       .reduce((sum, tr) => {
-        return sum + (tr.direction === 'STORE_TO_FACTORY' ? tr.quantity : -tr.quantity)
+        return sum + (tr.direction === 'FACTORY_TO_STORE' ? tr.quantity : (tr.direction === 'STORE_TO_FACTORY' ? -tr.quantity : 0))
       }, 0)
 
-    const storeClosingQty = openingQty + purchasedQty + manufacturedQty - consumedQty - transferredToFactoryQty - soldFromStoreQty
-    const factoryClosingQty = transferredToFactoryQty - soldFromFactoryQty
+    // Store Closing: Opening + Purchased + Received from Factory - Raw Materials Consumed - Sold from Store
+    const storeClosingQty = openingQty + purchasedQty + netTransferredToStoreQty - consumedQty - soldFromStoreQty
+
+    // Factory Closing: Produced in Factory - Transferred to Store - Sold from Factory
+    const factoryClosingQty = manufacturedQty - netTransferredToStoreQty - soldFromFactoryQty
+
     const closingQty = storeClosingQty + factoryClosingQty
 
     return {
@@ -670,7 +689,8 @@ export default function KsvPage() {
       soldFromFactoryQty,
       manufacturedQty,
       consumedQty,
-      transferredToFactoryQty,
+      transferredToFactoryQty: -netTransferredToStoreQty,
+      transferredToStoreQty: netTransferredToStoreQty,
       storeClosingQty,
       factoryClosingQty,
       closingQty,
@@ -687,8 +707,9 @@ export default function KsvPage() {
     saveManufacturingLogs(updated)
     setEditingManufacturingLog(null)
 
-    // Sync transfer to KSV Factory inside the Manufacturing Modal
-    if (!exists && log.transferredToFactoryQty && log.transferredToFactoryQty > 0) {
+    // Sync transfer from Factory to KSV Store inside the Manufacturing Modal
+    const transferredToStore = log.transferredToStoreQty ?? log.transferredToFactoryQty
+    if (!exists && transferredToStore && transferredToStore > 0) {
       const newTransfer: StockTransferLog = {
         id: `tr_${Date.now()}`,
         date: log.date,
@@ -696,16 +717,16 @@ export default function KsvPage() {
         batchNo: log.batchNo || '',
         itemId: log.finishedGoodItemId,
         itemName: log.finishedGoodName,
-        quantity: Number(log.transferredToFactoryQty),
+        quantity: Number(transferredToStore),
         unit: log.unit || 'PCS',
-        direction: 'STORE_TO_FACTORY',
-        notes: `Transferred from Batch ${log.batchNo || 'N/A'} during production`,
+        direction: 'FACTORY_TO_STORE',
+        notes: `Transferred to KSV Store from Batch ${log.batchNo || 'N/A'}`,
         createdAt: new Date().toISOString()
       }
       saveStockTransfers([newTransfer, ...stockTransfers])
-    } else if (exists && log.transferredToFactoryQty !== undefined) {
+    } else if (exists && transferredToStore !== undefined) {
       const batchTransfers = stockTransfers.filter((tr) => tr.batchId === log.id)
-      const targetQty = Number(log.transferredToFactoryQty) || 0
+      const targetQty = Number(transferredToStore) || 0
       if (batchTransfers.length === 1) {
         if (targetQty > 0) {
           const updatedTransfers = stockTransfers.map((tr) =>
@@ -718,7 +739,7 @@ export default function KsvPage() {
                   itemName: log.finishedGoodName,
                   quantity: targetQty,
                   unit: log.unit || 'PCS',
-                  direction: 'STORE_TO_FACTORY' as const
+                  direction: 'FACTORY_TO_STORE' as const
                 }
               : tr
           )
@@ -736,8 +757,8 @@ export default function KsvPage() {
           itemName: log.finishedGoodName,
           quantity: targetQty,
           unit: log.unit || 'PCS',
-          direction: 'STORE_TO_FACTORY',
-          notes: `Transferred from Batch ${log.batchNo || 'N/A'} during production`,
+          direction: 'FACTORY_TO_STORE',
+          notes: `Transferred to KSV Store from Batch ${log.batchNo || 'N/A'}`,
           createdAt: new Date().toISOString()
         }
         saveStockTransfers([newTransfer, ...stockTransfers])
@@ -775,12 +796,12 @@ export default function KsvPage() {
     }
   }
 
-  // Open Stock Transfer Modal for a specific Production Batch
+  // Open Stock Transfer Modal for a specific Production Batch (Factory ➔ Store)
   const openTransferModalForBatch = (log: ManufacturingLog) => {
-    const batchTransferred = stockTransfers
+    const batchTransferredToStore = stockTransfers
       .filter((tr) => tr.batchId === log.id)
-      .reduce((sum, tr) => sum + (tr.direction === 'STORE_TO_FACTORY' ? tr.quantity : -tr.quantity), 0)
-    const remainingInBatchStore = Math.max(0, (log.producedQuantity || 0) - batchTransferred)
+      .reduce((sum, tr) => sum + (tr.direction === 'FACTORY_TO_STORE' ? tr.quantity : (tr.direction === 'STORE_TO_FACTORY' ? -tr.quantity : 0)), 0)
+    const remainingInBatchFactory = Math.max(0, (log.producedQuantity || 0) - batchTransferredToStore)
 
     setEditingTransferId(null)
     setTransferForm({
@@ -788,11 +809,11 @@ export default function KsvPage() {
       batchNo: log.batchNo || '',
       itemId: log.finishedGoodItemId,
       itemName: log.finishedGoodName,
-      quantity: remainingInBatchStore > 0 ? remainingInBatchStore : 1,
+      quantity: remainingInBatchFactory > 0 ? remainingInBatchFactory : 1,
       unit: log.unit || 'PCS',
-      direction: remainingInBatchStore > 0 ? 'STORE_TO_FACTORY' : 'FACTORY_TO_STORE',
+      direction: 'FACTORY_TO_STORE',
       date: new Date().toISOString().split('T')[0],
-      notes: log.batchNo ? `Batch ${log.batchNo} transfer` : ''
+      notes: log.batchNo ? `Batch ${log.batchNo} transfer Factory ➔ Store` : 'Transfer Factory ➔ Store'
     })
     setIsTransferModalOpen(true)
   }
@@ -819,14 +840,15 @@ export default function KsvPage() {
     setEditingTransferId(null)
     if (item) {
       const breakdown = getItemStockBreakdown(item.id, item.name, item.defaultUnit, item.quantity)
+      const hasFactory = breakdown.factoryClosingQty > 0
       setTransferForm({
         batchId: '',
         batchNo: '',
         itemId: item.id,
         itemName: item.name,
-        quantity: breakdown.storeClosingQty > 0 ? breakdown.storeClosingQty : 1,
+        quantity: hasFactory ? breakdown.factoryClosingQty : (breakdown.storeClosingQty > 0 ? breakdown.storeClosingQty : 1),
         unit: item.defaultUnit || 'PCS',
-        direction: 'STORE_TO_FACTORY',
+        direction: hasFactory ? 'FACTORY_TO_STORE' : (breakdown.storeClosingQty > 0 ? 'STORE_TO_FACTORY' : 'FACTORY_TO_STORE'),
         date: new Date().toISOString().split('T')[0],
         notes: ''
       })
@@ -840,7 +862,7 @@ export default function KsvPage() {
         itemName: firstMfg?.finishedGoodName || firstItem?.name || '',
         quantity: 1,
         unit: firstMfg?.unit || firstItem?.defaultUnit || 'PCS',
-        direction: 'STORE_TO_FACTORY',
+        direction: 'FACTORY_TO_STORE',
         date: new Date().toISOString().split('T')[0],
         notes: ''
       })
@@ -1784,9 +1806,9 @@ export default function KsvPage() {
             {/* Top Header Bar */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
               <div>
-                <h2 className="text-sm font-black text-slate-800">Production of Finished Goods &amp; KSV Factory Transfer</h2>
+                <h2 className="text-sm font-black text-slate-800">Production of Finished Goods &amp; KSV Store Transfer</h2>
                 <p className="text-[11px] text-slate-400">
-                  Finished goods are manufactured in <strong>KSV Store</strong> and can be transferred to <strong>KSV Factory</strong>.
+                  Finished goods are manufactured in <strong>KSV Factory</strong> and transferred to <strong>KSV Store</strong>.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1794,7 +1816,7 @@ export default function KsvPage() {
                   onClick={() => openTransferModalForItem()}
                   className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 >
-                  <ArrowLeftRight className="w-3.5 h-3.5" /> Transfer Store ↔ Factory
+                  <ArrowLeftRight className="w-3.5 h-3.5" /> Transfer Factory ➔ Store
                 </button>
                 <button
                   onClick={() => {
@@ -1808,7 +1830,7 @@ export default function KsvPage() {
               </div>
             </div>
 
-            {/* Store vs Factory Summary Cards */}
+            {/* Factory vs Store Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-4 shadow-sm">
                 <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 mb-1">⚗️ Total Produced (All Batches)</p>
@@ -1817,19 +1839,19 @@ export default function KsvPage() {
                 </h3>
                 <p className="text-[10px] text-cyan-600/80 font-medium mt-0.5">{manufacturingLogs.length} production batch(es)</p>
               </div>
-              <div className="bg-teal-50 border border-teal-100 rounded-2xl p-4 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-wider text-teal-600 mb-1">🏪 Available in KSV Store</p>
-                <h3 className="text-xl font-black text-teal-800 font-mono">
-                  {totalFinishedInStore.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                </h3>
-                <p className="text-[10px] text-teal-600/80 font-medium mt-0.5">Remaining in KSV Store after transfers &amp; store sales</p>
-              </div>
               <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 shadow-sm">
                 <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 mb-1">🏭 Available in KSV Factory</p>
                 <h3 className="text-xl font-black text-indigo-800 font-mono">
                   {totalFinishedInFactory.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </h3>
-                <p className="text-[10px] text-indigo-600/80 font-medium mt-0.5">Transferred to KSV Factory minus factory sales</p>
+                <p className="text-[10px] text-indigo-600/80 font-medium mt-0.5">Remaining in KSV Factory after production &amp; transfers</p>
+              </div>
+              <div className="bg-teal-50 border border-teal-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-teal-600 mb-1">🏪 Available in KSV Store</p>
+                <h3 className="text-xl font-black text-teal-800 font-mono">
+                  {totalFinishedInStore.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-teal-600/80 font-medium mt-0.5">Transferred to KSV Store minus store sales</p>
               </div>
             </div>
 
@@ -1843,8 +1865,8 @@ export default function KsvPage() {
                         <th className="p-3">Batch Name</th>
                         <th className="p-3">Manufactured Product (Output)</th>
                         <th className="p-3 text-right">Qty Produced</th>
-                        <th className="p-3 text-right text-teal-300">🏪 KSV Store Qty</th>
                         <th className="p-3 text-right text-indigo-300">🏭 KSV Factory Qty</th>
+                        <th className="p-3 text-right text-teal-300">🏪 KSV Store Qty</th>
                         <th className="p-3 text-right">Effective Rate (₹)</th>
                         <th className="p-3 text-right">Effective Cost (₹)</th>
                         <th className="p-3">Components Consumed (Input)</th>
@@ -1856,14 +1878,13 @@ export default function KsvPage() {
                         const totalCost = log.effectiveCost ?? log.rawMaterialsConsumed.reduce((s, rm) => s + (rm.amount ?? (rm.quantity * (rm.rate || 0))), 0)
                         const effectiveRate = log.effectiveRatePerUnit ?? (log.producedQuantity > 0 ? totalCost / log.producedQuantity : 0)
 
-                        // Live Store & Factory stock for this product
-                        const catItem = catalog.find((c) => c.name.toLowerCase() === log.finishedGoodName.toLowerCase())
-                        const itemStock = getItemStockBreakdown(
-                          catItem?.id || log.finishedGoodItemId,
-                          log.finishedGoodName,
-                          catItem?.defaultUnit || log.unit,
-                          catItem?.quantity || 0
-                        )
+                        // Batch-specific transfers to Store
+                        const batchTransferredToStore = stockTransfers
+                          .filter((tr) => tr.batchId === log.id)
+                          .reduce((sum, tr) => sum + (tr.direction === 'FACTORY_TO_STORE' ? tr.quantity : (tr.direction === 'STORE_TO_FACTORY' ? -tr.quantity : 0)), 0)
+
+                        const batchFactoryQty = Math.max(0, (log.producedQuantity || 0) - batchTransferredToStore)
+                        const batchStoreQty = Math.max(0, batchTransferredToStore)
 
                         return (
                           <tr key={log.id} className="hover:bg-slate-50 transition-colors">
@@ -1873,18 +1894,18 @@ export default function KsvPage() {
                             <td className="p-3 text-right font-mono font-black text-emerald-600">
                               +{log.producedQuantity} <span className="text-[10px] text-emerald-500 font-bold uppercase">{log.unit}</span>
                             </td>
-                            <td className="p-3 text-right bg-teal-50/30">
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg font-mono font-black text-xs ${
-                                itemStock.storeClosingQty > 0 ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-500'
-                              }`}>
-                                {itemStock.storeClosingQty} <span className="text-[9px] font-bold ml-1 uppercase">{log.unit}</span>
-                              </span>
-                            </td>
                             <td className="p-3 text-right bg-indigo-50/30">
                               <span className={`inline-flex items-center px-2.5 py-1 rounded-lg font-mono font-black text-xs ${
-                                itemStock.factoryClosingQty > 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-500'
+                                batchFactoryQty > 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-500'
                               }`}>
-                                {itemStock.factoryClosingQty} <span className="text-[9px] font-bold ml-1 uppercase">{log.unit}</span>
+                                {batchFactoryQty} <span className="text-[9px] font-bold ml-1 uppercase">{log.unit}</span>
+                              </span>
+                            </td>
+                            <td className="p-3 text-right bg-teal-50/30">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg font-mono font-black text-xs ${
+                                batchStoreQty > 0 ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {batchStoreQty} <span className="text-[9px] font-bold ml-1 uppercase">{log.unit}</span>
                               </span>
                             </td>
                             <td className="p-3 text-right font-mono font-bold text-slate-700">
@@ -1909,12 +1930,10 @@ export default function KsvPage() {
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   onClick={() => {
-                                    const batchTransferred = stockTransfers
-                                      .filter((tr) => tr.batchId === log.id)
-                                      .reduce((sum, tr) => sum + (tr.direction === 'STORE_TO_FACTORY' ? tr.quantity : -tr.quantity), 0)
                                     setEditingManufacturingLog({
                                       ...log,
-                                      transferredToFactoryQty: Math.max(0, batchTransferred)
+                                      transferredToStoreQty: Math.max(0, batchTransferredToStore),
+                                      transferredToFactoryQty: Math.max(0, batchTransferredToStore)
                                     })
                                     setIsManufacturingModalOpen(true)
                                   }}
@@ -1926,7 +1945,7 @@ export default function KsvPage() {
                                 <button
                                   onClick={() => openTransferModalForBatch(log)}
                                   className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-indigo-200 cursor-pointer"
-                                  title="Transfer between KSV Store and KSV Factory"
+                                  title="Transfer from KSV Factory to KSV Store"
                                 >
                                   <ArrowLeftRight className="w-3.5 h-3.5" /> Transfer
                                 </button>
@@ -2115,7 +2134,7 @@ export default function KsvPage() {
 
         const totalFactoryAvailable = factoryProductRows.reduce((s, r) => s + r.factoryClosingQty, 0)
         const totalStoreRemaining = factoryProductRows.reduce((s, r) => s + r.storeClosingQty, 0)
-        const totalNetTransferred = factoryProductRows.reduce((s, r) => s + r.transferredToFactoryQty, 0)
+        const totalNetTransferredToStore = factoryProductRows.reduce((s, r) => s + (r.transferredToStoreQty || 0), 0)
         const totalSoldFromFactory = factoryProductRows.reduce((s, r) => s + r.soldFromFactoryQty, 0)
 
         return (
@@ -2170,11 +2189,11 @@ export default function KsvPage() {
               </div>
 
               <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-4 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 mb-1">🔄 Net Transferred to Factory</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 mb-1">🔄 Net Transferred to Store</p>
                 <h3 className="text-2xl font-black text-cyan-800 font-mono">
-                  +{totalNetTransferred.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                  +{totalNetTransferredToStore.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </h3>
-                <p className="text-[10px] text-cyan-600/80 font-medium mt-0.5">Moved from KSV Store → Factory</p>
+                <p className="text-[10px] text-cyan-600/80 font-medium mt-0.5">Moved from KSV Factory → Store</p>
               </div>
 
               <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 shadow-sm">
@@ -2359,17 +2378,6 @@ export default function KsvPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => setTransferForm({ ...transferForm, direction: 'STORE_TO_FACTORY' })}
-                      className={`py-2.5 px-3 rounded-xl font-extrabold text-xs border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                        transferForm.direction === 'STORE_TO_FACTORY'
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      🏪 Store → 🏭 Factory
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setTransferForm({ ...transferForm, direction: 'FACTORY_TO_STORE' })}
                       className={`py-2.5 px-3 rounded-xl font-extrabold text-xs border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                         transferForm.direction === 'FACTORY_TO_STORE'
@@ -2378,6 +2386,17 @@ export default function KsvPage() {
                       }`}
                     >
                       🏭 Factory → 🏪 Store
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTransferForm({ ...transferForm, direction: 'STORE_TO_FACTORY' })}
+                      className={`py-2.5 px-3 rounded-xl font-extrabold text-xs border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        transferForm.direction === 'STORE_TO_FACTORY'
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      🏪 Store → 🏭 Factory
                     </button>
                   </div>
                 </div>
