@@ -738,160 +738,105 @@ export default function PaymentsPage() {
         ? "KIYAVA-SUBATHU"
         : "ALL-SECTIONS"
 
+  // Export Clean, Column-Aligned Daily / Month-End Sales Register to Excel (.csv)
+  const handleExportExcel = (scope: "ALL" | "SOLAN" | "SABATHU" | "COD" | "ONLINE_SALE" | "KSV" | "KIYAVA" | "MAXXI" = "ALL") => {
+    const targetRecords =
+      scope === "SOLAN"
+        ? solanRecords
+        : scope === "SABATHU"
+        ? sabathuRecords
+        : scope === "COD"
+        ? codRecords
+        : scope === "ONLINE_SALE"
+        ? onlineSaleRecords
+        : scope === "KSV"
+        ? ksvRecords
+        : scope === "KIYAVA"
+        ? kiyavaRecords
+        : scope === "MAXXI"
+        ? maxxiRecords
+        : filteredRecords
+
+    if (targetRecords.length === 0) {
+      alert("No invoice records found for the selected period / section to export.")
+      return
+    }
+
+    const escStr = (val: any) => `"${String(val ?? "").replace(/"/g, '""')}"`
+    const escNum = (val: any) => {
+      const num = Number(val)
+      return isNaN(num) ? "0.00" : num.toFixed(2)
+    }
+
+    const periodLabel = reportMode === "DAILY" ? `Daily-${selectedDate}` : `Month-${selectedMonth}`
+    const entityLabel =
+      selectedEntity === "ALL"
+        ? "KIYAVA-KSV-MAXXI"
+        : selectedEntity === "KSV"
+        ? "KSV-PHARMACY"
+        : selectedEntity === "KIYAVA"
+        ? "KIYAVA-SUBATHU"
+        : "MAXXI-PHARMA"
+    const reportTypeTitle = reportMode === "DAILY" ? "DAILY-SALES-REPORT" : "MONTH-END-SALES-REGISTER"
+    const scopeLabel =
+      scope === "SOLAN"
+        ? "SOLAN-OPD"
+        : scope === "SABATHU"
+        ? "SABATHU-OPD"
+        : scope === "COD"
+        ? "COD-SALE"
+        : scope === "ONLINE_SALE"
+        ? "ONLINE-SALE"
+        : scope === "KSV"
+        ? "KSV-PHARMACY"
+        : scope === "KIYAVA"
+        ? "KIYAVA-SUBATHU"
+        : "ALL-SECTIONS"
+
+    const headers = [
+      "Sr No",
+      "Invoice Date",
+      "Invoice No",
+      "Entity",
+      "OPD Section / Bill Source",
+      "Patient / Buyer Name",
+      "Patient Mobile / ID",
+      "City",
+      "State",
+      "State Code",
+      "Prescribed Products & Quantities",
+      "Units Sold",
+      "Gross Taxable Amount (Before Discount) (Rs.)",
+      "Discount (Rs.)",
+      "Taxable Amount (After Discount) (Rs.)",
+      "CGST (Rs.)",
+      "SGST (Rs.)",
+      "IGST (Rs.)",
+      "Total GST (Rs.)",
+      "Grand Total (Rs.)",
+      "Payment Mode",
+      "Cash Paid (Rs.)",
+      "Online / UPI Paid (Rs.)",
+      "Total Paid (Rs.)"
+    ]
+
     const rows: string[] = []
 
-    // 1. Report Title & Summary Section
-    rows.push([esc(`${entityLabel} - ${reportTypeTitle} (${periodLabel} | ${scopeLabel})`)].join(","))
-    rows.push([esc(`Generated On: ${new Date().toLocaleString("en-IN")}`)].join(","))
-    rows.push("")
+    // Row 1: EXACT 24-Column Header Row!
+    rows.push(headers.map(h => `"${h}"`).join(","))
 
-    rows.push([
-      esc("OPD SECTION / ENTITY (BILL SOURCE)"),
-      esc("TOTAL BILLS"),
-      esc("TOTAL UNITS / KITS SOLD"),
-      esc("CASH COLLECTED (Rs.)"),
-      esc("ONLINE / UPI PAID (Rs.)"),
-      esc("TOTAL SALES REVENUE (Rs.)")
-    ].join(","))
-
-    if (scope === "ALL" || scope === "SOLAN") {
-      rows.push([
-        esc("SOLAN OPD SALE"),
-        esc(solanStats.bills),
-        esc(solanStats.units),
-        esc(solanStats.cash.toFixed(2)),
-        esc(solanStats.online.toFixed(2)),
-        esc(solanStats.total.toFixed(2))
-      ].join(","))
-    }
-    if (scope === "ALL" || scope === "SABATHU") {
-      rows.push([
-        esc("SABATHU OPD SALE"),
-        esc(sabathuStats.bills),
-        esc(sabathuStats.units),
-        esc(sabathuStats.cash.toFixed(2)),
-        esc(sabathuStats.online.toFixed(2)),
-        esc(sabathuStats.total.toFixed(2))
-      ].join(","))
-    }
-    if (scope === "ALL" || scope === "COD") {
-      rows.push([
-        esc("COD SALE"),
-        esc(codStats.bills),
-        esc(codStats.units),
-        esc(codStats.cash.toFixed(2)),
-        esc(codStats.online.toFixed(2)),
-        esc(codStats.total.toFixed(2))
-      ].join(","))
-    }
-    if (scope === "ALL" || scope === "ONLINE_SALE") {
-      rows.push([
-        esc("ONLINE SALE"),
-        esc(onlineSaleStats.bills),
-        esc(onlineSaleStats.units),
-        esc(onlineSaleStats.cash.toFixed(2)),
-        esc(onlineSaleStats.online.toFixed(2)),
-        esc(onlineSaleStats.total.toFixed(2))
-      ].join(","))
-    }
-    if (scope === "ALL" || scope === "KSV") {
-      rows.push([
-        esc("KSV PHARMACY SALES"),
-        esc(ksvStats.bills),
-        esc(ksvStats.units),
-        esc(ksvStats.cash.toFixed(2)),
-        esc(ksvStats.online.toFixed(2)),
-        esc(ksvStats.total.toFixed(2))
-      ].join(","))
-    }
-    if (scope === "ALL" || scope === "KIYAVA") {
-      rows.push([
-        esc("KIYAVA SUBATHU SALES"),
-        esc(kiyavaStats.bills),
-        esc(kiyavaStats.units),
-        esc(kiyavaStats.cash.toFixed(2)),
-        esc(kiyavaStats.online.toFixed(2)),
-        esc(kiyavaStats.total.toFixed(2))
-      ].join(","))
-    }
-    if (scope === "ALL") {
-      rows.push([
-        esc("GRAND TOTAL"),
-        esc(solanStats.bills + sabathuStats.bills + codStats.bills + onlineSaleStats.bills + ksvStats.bills + kiyavaStats.bills),
-        esc(solanStats.units + sabathuStats.units + codStats.units + onlineSaleStats.units + ksvStats.units + kiyavaStats.units),
-        esc((solanStats.cash + sabathuStats.cash + codStats.cash + onlineSaleStats.cash + ksvStats.cash + kiyavaStats.cash).toFixed(2)),
-        esc((solanStats.online + sabathuStats.online + codStats.online + onlineSaleStats.online + ksvStats.online + kiyavaStats.online).toFixed(2)),
-        esc((solanStats.total + sabathuStats.total + codStats.total + onlineSaleStats.total + ksvStats.total + kiyavaStats.total).toFixed(2))
-      ].join(","))
-    }
-
-    rows.push("")
-
-    // 2. Product-Wise Quantity Sold Breakdown
-    rows.push([esc("PRODUCT-WISE QUANTITY SOLD BREAKDOWN (SOLAN OPD vs SABATHU OPD vs COD SALE vs ONLINE SALE)")].join(","))
-    rows.push([
-      esc("S.No"),
-      esc("PRODUCT / MEDICINE NAME"),
-      esc("HSN CODE"),
-      esc("SOLAN OPD QTY SOLD"),
-      esc("SABATHU OPD QTY SOLD"),
-      esc("COD SALE QTY SOLD"),
-      esc("ONLINE SALE QTY SOLD"),
-      esc("TOTAL QTY SOLD"),
-      esc("SOLAN OPD AMOUNT (Rs.)"),
-      esc("SABATHU OPD AMOUNT (Rs.)"),
-      esc("COD SALE AMOUNT (Rs.)"),
-      esc("ONLINE SALE AMOUNT (Rs.)"),
-      esc("TOTAL AMOUNT (Rs.)")
-    ].join(","))
-
-    productWiseBreakdown.forEach((prod, idx) => {
-      rows.push([
-        esc(idx + 1),
-        esc(prod.name),
-        esc(prod.hsnCode || "-"),
-        esc(prod.solanQty),
-        esc(prod.sabathuQty),
-        esc(prod.codQty),
-        esc(prod.onlineQty),
-        esc(prod.totalQty),
-        esc(prod.solanAmount.toFixed(2)),
-        esc(prod.sabathuAmount.toFixed(2)),
-        esc(prod.codAmount.toFixed(2)),
-        esc(prod.onlineAmount.toFixed(2)),
-        esc(prod.totalAmount.toFixed(2))
-      ].join(","))
-    })
-
-    rows.push("")
-
-    // 3. Detailed Invoice-Wise Sales Register with TAXABLE AMOUNT, DISCOUNT, AFTER DISCOUNT, GST
-    rows.push([esc("DETAILED INVOICE-WISE SALES REGISTER")].join(","))
-    rows.push([
-      esc("S.No"),
-      esc("Date"),
-      esc("Invoice No"),
-      esc("Entity"),
-      esc("OPD Section / Bill Source"),
-      esc("Patient / Buyer Name"),
-      esc("Patient Mobile / ID"),
-      esc("City"),
-      esc("State"),
-      esc("State Code"),
-      esc("Prescribed Products & Quantities"),
-      esc("Units Sold"),
-      esc("Gross Taxable Amount (Before Discount) (Rs.)"),
-      esc("Discount (Rs.)"),
-      esc("Taxable Amount (After Discount) (Rs.)"),
-      esc("CGST (Rs.)"),
-      esc("SGST (Rs.)"),
-      esc("IGST (Rs.)"),
-      esc("Total GST (Rs.)"),
-      esc("Grand Total (Rs.)"),
-      esc("Cash Paid (Rs.)"),
-      esc("Online Paid (Rs.)"),
-      esc("Total Paid (Rs.)")
-    ].join(","))
+    let sumUnits = 0
+    let sumGross = 0
+    let sumDisc = 0
+    let sumTaxable = 0
+    let sumCgst = 0
+    let sumSgst = 0
+    let sumIgst = 0
+    let sumTotalGst = 0
+    let sumGrand = 0
+    let sumCash = 0
+    let sumOnline = 0
+    let sumTotalPaid = 0
 
     targetRecords.forEach((r, idx) => {
       const patientState = r.state || (r.calcResult?.isInterState ? "Punjab" : "Himachal Pradesh")
@@ -906,32 +851,90 @@ export default function PaymentsPage() {
         patientStateCode
       )
 
+      const u = getUnitsSoldInRecord(r)
+      const g = calc.grossAmount
+      const d = calc.discountApplied || r.discountVal || 0
+      const t = calc.totalTaxableValue
+      const cg = calc.totalCgst
+      const sg = calc.totalSgst
+      const ig = calc.totalIgst
+      const gst = calc.totalTax
+      const grand = calc.grandTotal
+      const cash = r.cashVal || 0
+      const on = r.onlineVal || 0
+      const paid = r.totalPaidVal || (cash + on) || grand
+
+      sumUnits += u
+      sumGross += g
+      sumDisc += d
+      sumTaxable += t
+      sumCgst += cg
+      sumSgst += sg
+      sumIgst += ig
+      sumTotalGst += gst
+      sumGrand += grand
+      sumCash += cash
+      sumOnline += on
+      sumTotalPaid += paid
+
       rows.push([
-        esc(idx + 1),
-        esc(r.date),
-        esc(r.invoiceNo),
-        esc(r.entity === "KSV" ? "KSV Pharmacy" : r.entity === "KIYAVA" ? "Kiyava Subathu" : "Maxxi Pharma"),
-        esc(r.opdSection || "SOLAN OPD SALE"),
-        esc(r.patientName),
-        esc(r.patientId),
-        esc(r.city || "-"),
-        esc(patientState),
-        esc(patientStateCode || "02"),
-        esc(r.combinedKitName),
-        esc(getUnitsSoldInRecord(r)),
-        esc(calc.grossAmount.toFixed(2)),
-        esc((calc.discountApplied || r.discountVal || 0).toFixed(2)),
-        esc(calc.totalTaxableValue.toFixed(2)),
-        esc(calc.totalCgst.toFixed(2)),
-        esc(calc.totalSgst.toFixed(2)),
-        esc(calc.totalIgst.toFixed(2)),
-        esc(calc.totalTax.toFixed(2)),
-        esc(calc.grandTotal.toFixed(2)),
-        esc((r.cashVal || 0).toFixed(2)),
-        esc((r.onlineVal || 0).toFixed(2)),
-        esc((r.totalPaidVal || 0).toFixed(2))
+        idx + 1,
+        escStr(r.date),
+        escStr(r.invoiceNo),
+        escStr(r.entity === "KSV" ? "KSV Pharmacy" : r.entity === "KIYAVA" ? "Kiyava Subathu" : "Maxxi Pharma"),
+        escStr(r.opdSection || "SOLAN OPD SALE"),
+        escStr(r.patientName),
+        escStr(r.patientId || r.whatsappNumber || "-"),
+        escStr(r.city || "-"),
+        escStr(patientState),
+        escStr(patientStateCode || "02"),
+        escStr(r.combinedKitName),
+        escNum(u),
+        escNum(g),
+        escNum(d),
+        escNum(t),
+        escNum(cg),
+        escNum(sg),
+        escNum(ig),
+        escNum(gst),
+        escNum(grand),
+        escStr(cash > 0 && on > 0 ? "Cash + Online Split" : (cash > 0 ? "Cash" : "Online / UPI")),
+        escNum(cash),
+        escNum(on),
+        escNum(paid)
       ].join(","))
     })
+
+    // Blank separator line (exactly 24 columns)
+    rows.push(Array(24).fill("").join(","))
+
+    // Clean, Column-Aligned TOTAL Row (exactly 24 columns)
+    rows.push([
+      `"TOTAL (${targetRecords.length} Bills)"`,
+      '""',
+      '""',
+      '""',
+      '""',
+      '""',
+      '""',
+      '""',
+      '""',
+      '""',
+      '""',
+      escNum(sumUnits),
+      escNum(sumGross),
+      escNum(sumDisc),
+      escNum(sumTaxable),
+      escNum(sumCgst),
+      escNum(sumSgst),
+      escNum(sumIgst),
+      escNum(sumTotalGst),
+      escNum(sumGrand),
+      '""',
+      escNum(sumCash),
+      escNum(sumOnline),
+      escNum(sumTotalPaid)
+    ].join(","))
 
     const csvContent = "\uFEFF" + rows.join("\r\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
@@ -939,11 +942,113 @@ export default function PaymentsPage() {
     const link = document.createElement("a")
     link.href = url
     const safeDate = reportMode === "DAILY" ? selectedDate : (selectedMonth === "ALL" ? "All-Months" : selectedMonth)
-    link.download = `${entityLabel.replace(/[\s\/]+/g, "-")}-${reportTypeTitle.replace(/\s+/g, "-")}-${safeDate}-${scopeLabel}.csv`
+    link.download = `${entityLabel}-${reportTypeTitle}-${safeDate}-${scopeLabel}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+  }
+
+  // Export Dedicated Product-Wise Sold Breakdown (clean 13-column Excel)
+  const handleExportProductExcel = () => {
+    if (productWiseBreakdown.length === 0) {
+      alert("No product breakdown records to export for this period.")
+      return
+    }
+
+    const escStr = (val: any) => `"${String(val ?? "").replace(/"/g, '""')}"`
+    const escNum = (val: any) => {
+      const num = Number(val)
+      return isNaN(num) ? "0.00" : num.toFixed(2)
+    }
+
+    const headers = [
+      "Sr No",
+      "Product / Medicine Name",
+      "HSN Code",
+      "Solan OPD Qty Sold",
+      "Sabathu OPD Qty Sold",
+      "COD Sale Qty Sold",
+      "Online Sale Qty Sold",
+      "Total Qty Sold",
+      "Solan OPD Sales (Rs.)",
+      "Sabathu OPD Sales (Rs.)",
+      "COD Sale Sales (Rs.)",
+      "Online Sale Sales (Rs.)",
+      "Total Product Revenue (Rs.)"
+    ]
+
+    const rows: string[] = []
+    rows.push(headers.map(h => `"${h}"`).join(","))
+
+    let sumSolanQty = 0
+    let sumSabathuQty = 0
+    let sumCodQty = 0
+    let sumOnlineQty = 0
+    let sumTotalQty = 0
+    let sumSolanAmt = 0
+    let sumSabathuAmt = 0
+    let sumCodAmt = 0
+    let sumOnlineAmt = 0
+    let sumTotalAmt = 0
+
+    productWiseBreakdown.forEach((prod, idx) => {
+      sumSolanQty += prod.solanQty
+      sumSabathuQty += prod.sabathuQty
+      sumCodQty += prod.codQty
+      sumOnlineQty += prod.onlineQty
+      sumTotalQty += prod.totalQty
+      sumSolanAmt += prod.solanAmount
+      sumSabathuAmt += prod.sabathuAmount
+      sumCodAmt += prod.codAmount
+      sumOnlineAmt += prod.onlineAmount
+      sumTotalAmt += prod.totalAmount
+
+      rows.push([
+        idx + 1,
+        escStr(prod.name),
+        escStr(prod.hsnCode || "-"),
+        escNum(prod.solanQty),
+        escNum(prod.sabathuQty),
+        escNum(prod.codQty),
+        escNum(prod.onlineQty),
+        escNum(prod.totalQty),
+        escNum(prod.solanAmount),
+        escNum(prod.sabathuAmount),
+        escNum(prod.codAmount),
+        escNum(prod.onlineAmount),
+        escNum(prod.totalAmount)
+      ].join(","))
+    })
+
+    rows.push(Array(13).fill("").join(","))
+    rows.push([
+      `"TOTAL (${productWiseBreakdown.length} Products)"`,
+      '""',
+      '""',
+      escNum(sumSolanQty),
+      escNum(sumSabathuQty),
+      escNum(sumCodQty),
+      escNum(sumOnlineQty),
+      escNum(sumTotalQty),
+      escNum(sumSolanAmt),
+      escNum(sumSabathuAmt),
+      escNum(sumCodAmt),
+      escNum(sumOnlineAmt),
+      escNum(sumTotalAmt)
+    ].join(","))
+
+    const csvContent = "\uFEFF" + rows.join("\r\n")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `PRODUCT-SALES-BREAKDOWN-${reportMode === "DAILY" ? selectedDate : selectedMonth}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
   }
 
   // Filtered trash records
