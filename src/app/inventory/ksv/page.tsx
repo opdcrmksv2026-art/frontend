@@ -2620,7 +2620,7 @@ export default function KsvPage() {
         const totalTransferredQty = selectedTransfersForPrint.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0)
 
         return (
-          <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center lg:justify-end p-4 lg:pr-8 lg:pl-64 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
+          <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center lg:justify-end p-4 lg:pr-8 lg:pl-64 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto print:overflow-visible print:block">
             {/* Floating Action Bar (Hidden during print) */}
             <div className="fixed top-4 right-4 z-50 flex items-center gap-2 print:hidden">
               <button
@@ -2638,7 +2638,10 @@ export default function KsvPage() {
             </div>
 
             {/* Printable Voucher Paper */}
-            <div className="bg-white w-full max-w-4xl p-8 border border-slate-300 shadow-2xl rounded-xl print:shadow-none print:border-none print:p-4 text-black font-sans text-xs">
+            <div
+              id="tally-printable-transfer"
+              className="bg-white w-full max-w-4xl p-8 border border-slate-300 shadow-2xl rounded-xl print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:max-w-none text-black font-sans text-xs"
+            >
               {/* Title Header */}
               <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-4">
                 <div>

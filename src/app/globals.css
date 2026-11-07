@@ -93,12 +93,16 @@
   }
   
   #printable-receipt, #printable-receipt *,
-  #tally-printable-invoice, #tally-printable-invoice * {
+  #tally-printable-invoice, #tally-printable-invoice *,
+  #tally-printable-manufacturing, #tally-printable-manufacturing *,
+  #tally-printable-transfer, #tally-printable-transfer * {
     visibility: visible !important;
   }
 
   #printable-receipt,
-  #tally-printable-invoice {
+  #tally-printable-invoice,
+  #tally-printable-manufacturing,
+  #tally-printable-transfer {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
