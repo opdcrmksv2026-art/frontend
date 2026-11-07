@@ -2187,7 +2187,10 @@ export default function PaymentsPage() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    window.scrollTo(0, 0)
+                    window.print()
+                  }}
                   className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all cursor-pointer active:scale-95"
                 >
                   <Printer className="w-4 h-4" /> Print / Save PDF

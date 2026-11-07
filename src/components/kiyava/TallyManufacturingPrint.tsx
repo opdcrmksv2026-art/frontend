@@ -14,6 +14,7 @@ export default function TallyManufacturingPrint({
   onClose
 }: TallyManufacturingPrintProps) {
   const handlePrint = () => {
+    window.scrollTo(0, 0)
     window.print()
   }
 
@@ -26,49 +27,7 @@ export default function TallyManufacturingPrint({
   const effectiveRatePerUnit = log.effectiveRatePerUnit ?? (log.producedQuantity > 0 ? effectiveCost / log.producedQuantity : 0)
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:pl-0 print:pr-0 print:bg-white print:overflow-visible print:block print:w-full">
-      {/* Inline Print Stylesheet ensuring 100% visibility even if external CSS is cached */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 8mm 10mm;
-          }
-          html, body {
-            background: #ffffff !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          #tally-printable-invoice,
-          #tally-printable-invoice *,
-          #tally-printable-manufacturing,
-          #tally-printable-manufacturing * {
-            visibility: visible !important;
-          }
-          #tally-printable-invoice,
-          #tally-printable-manufacturing {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: #ffffff !important;
-            color: #000000 !important;
-            border: none !important;
-            box-shadow: none !important;
-            display: block !important;
-          }
-          .print\\:hidden {
-            display: none !important;
-          }
-        }
-      `}} />
-
+    <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block print:w-full">
       {/* Floating Action Bar (Hidden during print) */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2 print:hidden">
         <button
@@ -87,7 +46,7 @@ export default function TallyManufacturingPrint({
 
       {/* Printable Voucher Paper */}
       <div
-        id="tally-printable-invoice"
+        id="tally-printable-manufacturing"
         className="bg-white w-full max-w-4xl p-8 border border-slate-300 shadow-2xl rounded-xl print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:max-w-none text-black font-sans text-xs"
       >
 

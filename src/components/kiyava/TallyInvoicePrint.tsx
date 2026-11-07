@@ -16,6 +16,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
   const [copiedLink, setCopiedLink] = useState(false)
 
   const handlePrint = () => {
+    window.scrollTo(0, 0)
     window.print()
   }
 
@@ -37,7 +38,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 backdrop-blur-md flex flex-col items-center p-2 sm:p-6 print:p-0 print:bg-white print:static print:overflow-visible">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 backdrop-blur-md flex flex-col items-center p-2 sm:p-6 print:p-0 print:m-0 print:bg-white print:static print:overflow-visible print:block print:w-full">
       {/* Top Action Bar (hidden during print) */}
       <div className="w-full max-w-4xl bg-slate-900 text-white rounded-2xl p-3.5 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-2xl border border-slate-800 print:hidden">
         <div className="flex items-center gap-3">
@@ -127,7 +128,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
           transformOrigin: 'top center',
           fontFamily: "'Segoe UI', Arial, Helvetica, sans-serif"
         }}
-        className="w-full max-w-[800px] bg-white text-black text-[11px] leading-tight border-2 border-black shadow-2xl p-0 print:border print:border-black print:m-0 print:w-full print:max-w-none print:shadow-none transition-transform"
+        className="w-full max-w-[800px] bg-white text-black text-[11px] leading-tight border-2 border-black shadow-2xl p-0 print:border print:border-black print:m-0 print:w-full print:max-w-none print:shadow-none print:transform-none transition-transform"
       >
         {/* Header Ribbon: GSTIN | TAX INVOICE | Copy Type */}
         <div className="border-b border-black px-2 py-1 flex justify-between items-center bg-white text-[10px]">
