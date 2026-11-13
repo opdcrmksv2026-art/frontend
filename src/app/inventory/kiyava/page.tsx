@@ -7,7 +7,8 @@ import {
   CatalogItem,
   KiyavaInvoice,
   OpeningStockEntry,
-  ManufacturingLog
+  ManufacturingLog,
+  StockTransferLog
 } from '@/types/kiyavaBilling'
 import {
   DEFAULT_COMPANIES,
@@ -42,7 +43,11 @@ import {
   Receipt,
   FileSpreadsheet,
   RotateCcw,
-  FlaskConical
+  FlaskConical,
+  ArrowLeftRight,
+  Factory,
+  Save,
+  X
 } from 'lucide-react'
 
 import { API_URL } from '@/lib/apiConfig'
@@ -77,9 +82,37 @@ export default function KiyavaPage() {
 
   const [isManufacturingModalOpen, setIsManufacturingModalOpen] = useState(false)
 
+  // Stock Transfer Modal (Kiyava Store <-> Kiyava Factory)
+  const [stockTransfers, setStockTransfers] = useState<StockTransferLog[]>([])
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
+  const [editingTransferId, setEditingTransferId] = useState<string | null>(null)
+  const [selectedTransfersForPrint, setSelectedTransfersForPrint] = useState<StockTransferLog[] | null>(null)
+  const [transferForm, setTransferForm] = useState<{
+    batchId: string
+    batchNo: string
+    itemId: string
+    itemName: string
+    quantity: number
+    unit: string
+    direction: 'STORE_TO_FACTORY' | 'FACTORY_TO_STORE'
+    date: string
+    notes: string
+  }>({
+    batchId: '',
+    batchNo: '',
+    itemId: '',
+    itemName: '',
+    quantity: 1,
+    unit: 'PCS',
+    direction: 'FACTORY_TO_STORE',
+    date: new Date().toISOString().split('T')[0],
+    notes: ''
+  })
+
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('')
+  const [factorySearchQuery, setFactorySearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
   const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE'>('SALE')
 
@@ -92,6 +125,7 @@ export default function KiyavaPage() {
       const storedInvoices = localStorage.getItem('ksv_kiyava_invoices')
       const storedOpeningStock = localStorage.getItem('ksv_kiyava_opening_stock')
       const storedMfgLogs = localStorage.getItem('ksv_kiyava_manufacturing')
+      const storedTransfers = localStorage.getItem('ksv_kiyava_stock_transfers')
 
       let parsedCompanies: CompanyProfile[] = storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_COMPANIES
       parsedCompanies = parsedCompanies.filter((c) => c.name.toUpperCase().includes('KIYAVA') || c.isDefault)
@@ -135,6 +169,7 @@ export default function KiyavaPage() {
       setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_INVOICES)
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
+      setStockTransfers(storedTransfers ? JSON.parse(storedTransfers) : [])
 
       // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) IN PARALLEL ---
       const fetchDatabaseData = async () => {
@@ -210,10 +245,15 @@ export default function KiyavaPage() {
       setInvoices(SEEDED_INVOICES)
       setOpeningStock([])
       setManufacturingLogs([])
+      setStockTransfers([])
     }
   }, [])
 
   // Persist helpers
+  const saveStockTransfers = (newTransfers: StockTransferLog[]) => {
+    setStockTransfers(newTransfers)
+    localStorage.setItem('ksv_kiyava_stock_transfers', JSON.stringify(newTransfers))
+  }
   const saveCompanies = (newCompanies: CompanyProfile[]) => {
     setCompanies(newCompanies)
     localStorage.setItem('ksv_kiyava_companies', JSON.stringify(newCompanies))
@@ -244,6 +284,84 @@ export default function KiyavaPage() {
     localStorage.setItem('ksv_kiyava_manufacturing', JSON.stringify(newLogs))
   }
 
+  // Helper to compute Kiyava Store vs Kiyava Factory stock for any item
+  const getItemStockBreakdown = (itemId: string, itemName: string, defaultUnit: string = 'PCS', defaultQty: number = 0) => {
+    const nameLower = (itemName || '').toLowerCase()
+    const openingEntry = openingStock.find(
+      (s) => s.itemId === itemId || (s.itemName && s.itemName.toLowerCase() === nameLower)
+    )
+    const openingQty = openingEntry?.quantity || Number(defaultQty) || 0
+    const unit = openingEntry?.unit ?? defaultUnit
+
+    // Purchased Qty (goes into Kiyava Store)
+    const purchasedQty = invoices
+      .filter((inv) => inv.type === 'PURCHASE')
+      .reduce((sum, inv) => {
+        const rows = inv.items.filter((it) => it.description.toLowerCase() === nameLower)
+        return sum + rows.reduce((s, r) => s + (r.quantity || 0), 0)
+      }, 0)
+
+    // Sold Qty (split by Kiyava Store vs Kiyava Factory)
+    let soldFromStoreQty = 0
+    let soldFromFactoryQty = 0
+    invoices
+      .filter((inv) => (inv.type || 'SALE') === 'SALE')
+      .forEach((inv) => {
+        const rows = inv.items.filter((it) => it.description.toLowerCase() === nameLower)
+        const qty = rows.reduce((s, r) => s + (r.quantity || 0), 0)
+        if (inv.matCenter === 'Kiyava Factory' || inv.matCenter === 'KSV Factory') {
+          soldFromFactoryQty += qty
+        } else {
+          soldFromStoreQty += qty
+        }
+      })
+    const soldQty = soldFromStoreQty + soldFromFactoryQty
+
+    // Manufactured Qty (Produced in Kiyava Factory)
+    const manufacturedQty = manufacturingLogs
+      .filter((log) => log.finishedGoodItemId === itemId || log.finishedGoodName.toLowerCase() === nameLower)
+      .reduce((sum, log) => sum + (log.producedQuantity || 0), 0)
+
+    // Consumed Qty in Manufacturing (Raw Materials consumed from Kiyava Store)
+    const consumedQty = manufacturingLogs.reduce((sum, log) => {
+      const consumed = log.rawMaterialsConsumed.filter(
+        (rm) => rm.itemId === itemId || rm.itemName.toLowerCase() === nameLower
+      )
+      return sum + consumed.reduce((s, rm) => s + (rm.quantity || 0), 0)
+    }, 0)
+
+    // Net Transferred from Kiyava Factory to Kiyava Store
+    const netTransferredToStoreQty = stockTransfers
+      .filter((tr) => tr.itemId === itemId || tr.itemName.toLowerCase() === nameLower)
+      .reduce((sum, tr) => {
+        return sum + (tr.direction === 'FACTORY_TO_STORE' ? tr.quantity : (tr.direction === 'STORE_TO_FACTORY' ? -tr.quantity : 0))
+      }, 0)
+
+    // Store Closing: Opening + Purchased + Received from Factory - Raw Materials Consumed - Sold from Store
+    const storeClosingQty = openingQty + purchasedQty + netTransferredToStoreQty - consumedQty - soldFromStoreQty
+
+    // Factory Closing: Produced in Factory - Transferred to Store - Sold from Factory
+    const factoryClosingQty = manufacturedQty - netTransferredToStoreQty - soldFromFactoryQty
+
+    const closingQty = storeClosingQty + factoryClosingQty
+
+    return {
+      openingQty,
+      purchasedQty,
+      soldQty,
+      soldFromStoreQty,
+      soldFromFactoryQty,
+      manufacturedQty,
+      consumedQty,
+      transferredToFactoryQty: -netTransferredToStoreQty,
+      transferredToStoreQty: netTransferredToStoreQty,
+      storeClosingQty,
+      factoryClosingQty,
+      closingQty,
+      unit
+    }
+  }
+
   // Manufacturing Handlers
   const handleSaveManufacturingLog = (log: ManufacturingLog) => {
     const exists = manufacturingLogs.some((l) => l.id === log.id)
@@ -251,6 +369,65 @@ export default function KiyavaPage() {
       ? manufacturingLogs.map((l) => (l.id === log.id ? log : l))
       : [...manufacturingLogs, log]
     saveManufacturingLogs(updated)
+    setIsManufacturingModalOpen(false)
+
+    // Sync transfer from Factory to Kiyava Store inside the Manufacturing Modal
+    const transferredToStore = log.transferredToStoreQty ?? log.transferredToFactoryQty
+    if (!exists && transferredToStore && transferredToStore > 0) {
+      const newTransfer: StockTransferLog = {
+        id: `tr_${Date.now()}`,
+        date: log.date,
+        batchId: log.id,
+        batchNo: log.batchNo || '',
+        itemId: log.finishedGoodItemId,
+        itemName: log.finishedGoodName,
+        quantity: Number(transferredToStore),
+        unit: log.unit || 'PCS',
+        direction: 'FACTORY_TO_STORE',
+        notes: `Transferred to Kiyava Store from Batch ${log.batchNo || 'N/A'}`,
+        createdAt: new Date().toISOString()
+      }
+      saveStockTransfers([newTransfer, ...stockTransfers])
+    } else if (exists && transferredToStore !== undefined) {
+      const batchTransfers = stockTransfers.filter((tr) => tr.batchId === log.id)
+      const targetQty = Number(transferredToStore) || 0
+      if (batchTransfers.length === 1) {
+        if (targetQty > 0) {
+          const updatedTransfers = stockTransfers.map((tr) =>
+            tr.id === batchTransfers[0].id
+              ? {
+                  ...tr,
+                  date: log.date,
+                  batchNo: log.batchNo || '',
+                  itemId: log.finishedGoodItemId,
+                  itemName: log.finishedGoodName,
+                  quantity: targetQty,
+                  unit: log.unit || 'PCS',
+                  direction: 'FACTORY_TO_STORE' as const
+                }
+              : tr
+          )
+          saveStockTransfers(updatedTransfers)
+        } else {
+          saveStockTransfers(stockTransfers.filter((tr) => tr.id !== batchTransfers[0].id))
+        }
+      } else if (batchTransfers.length === 0 && targetQty > 0) {
+        const newTransfer: StockTransferLog = {
+          id: `tr_${Date.now()}`,
+          date: log.date,
+          batchId: log.id,
+          batchNo: log.batchNo || '',
+          itemId: log.finishedGoodItemId,
+          itemName: log.finishedGoodName,
+          quantity: targetQty,
+          unit: log.unit || 'PCS',
+          direction: 'FACTORY_TO_STORE',
+          notes: `Transferred to Kiyava Store from Batch ${log.batchNo || 'N/A'}`,
+          createdAt: new Date().toISOString()
+        }
+        saveStockTransfers([newTransfer, ...stockTransfers])
+      }
+    }
 
     // Ensure the finished product is added to the Catalog so it appears in the Sales Dropdown
     if (log.finishedGoodName) {
@@ -275,11 +452,120 @@ export default function KiyavaPage() {
     if (confirm('Delete this manufacturing entry? Stock will be updated accordingly.')) {
       const updated = manufacturingLogs.filter((l) => l.id !== id)
       saveManufacturingLogs(updated)
+      // Also clean up any stock transfers linked to this batch
+      const updatedTransfers = stockTransfers.filter((tr) => tr.batchId !== id)
+      if (updatedTransfers.length !== stockTransfers.length) {
+        saveStockTransfers(updatedTransfers)
+      }
       try {
         await fetch(`${API_URL}/api/kiyava/manufacturing/${id}`, { method: 'DELETE' })
       } catch (err) {
         console.warn('Could not delete manufacturing log from database:', err)
       }
+    }
+  }
+
+  // Open Stock Transfer Modal to Edit an existing Transfer
+  const openEditTransferModal = (tr: StockTransferLog) => {
+    setEditingTransferId(tr.id)
+    setTransferForm({
+      batchId: tr.batchId || '',
+      batchNo: tr.batchNo || '',
+      itemId: tr.itemId || '',
+      itemName: tr.itemName,
+      quantity: tr.quantity,
+      unit: tr.unit || 'PCS',
+      direction: tr.direction,
+      date: tr.date || new Date().toISOString().split('T')[0],
+      notes: tr.notes || ''
+    })
+    setIsTransferModalOpen(true)
+  }
+
+  // Open Stock Transfer Modal for a Catalog Item (or blank)
+  const openTransferModalForItem = (item?: CatalogItem) => {
+    setEditingTransferId(null)
+    if (item) {
+      const breakdown = getItemStockBreakdown(item.id, item.name, item.defaultUnit, item.quantity)
+      const hasFactory = breakdown.factoryClosingQty > 0
+      setTransferForm({
+        batchId: '',
+        batchNo: '',
+        itemId: item.id,
+        itemName: item.name,
+        quantity: hasFactory ? breakdown.factoryClosingQty : (breakdown.storeClosingQty > 0 ? breakdown.storeClosingQty : 1),
+        unit: item.defaultUnit || 'PCS',
+        direction: hasFactory ? 'FACTORY_TO_STORE' : (breakdown.storeClosingQty > 0 ? 'STORE_TO_FACTORY' : 'FACTORY_TO_STORE'),
+        date: new Date().toISOString().split('T')[0],
+        notes: ''
+      })
+    } else {
+      const firstMfg = manufacturingLogs[0]
+      const firstItem = catalog[0]
+      setTransferForm({
+        batchId: firstMfg?.id || '',
+        batchNo: firstMfg?.batchNo || '',
+        itemId: firstMfg?.finishedGoodItemId || firstItem?.id || '',
+        itemName: firstMfg?.finishedGoodName || firstItem?.name || '',
+        quantity: 1,
+        unit: firstMfg?.unit || firstItem?.defaultUnit || 'PCS',
+        direction: 'FACTORY_TO_STORE',
+        date: new Date().toISOString().split('T')[0],
+        notes: ''
+      })
+    }
+    setIsTransferModalOpen(true)
+  }
+
+  const handleSaveStockTransfer = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!transferForm.itemName.trim() || transferForm.quantity <= 0) {
+      alert('Please select a valid product and transfer quantity (> 0).')
+      return
+    }
+
+    if (editingTransferId) {
+      const updatedTransfers = stockTransfers.map((tr) =>
+        tr.id === editingTransferId
+          ? {
+              ...tr,
+              date: transferForm.date || new Date().toISOString().split('T')[0],
+              batchId: transferForm.batchId || undefined,
+              batchNo: transferForm.batchNo || undefined,
+              itemId: transferForm.itemId || tr.itemId || `item_${Date.now()}`,
+              itemName: transferForm.itemName.trim(),
+              quantity: Number(transferForm.quantity) || 0,
+              unit: transferForm.unit || 'PCS',
+              direction: transferForm.direction,
+              notes: transferForm.notes
+            }
+          : tr
+      )
+      saveStockTransfers(updatedTransfers)
+    } else {
+      const newTransfer: StockTransferLog = {
+        id: `tr_${Date.now()}`,
+        date: transferForm.date || new Date().toISOString().split('T')[0],
+        batchId: transferForm.batchId || undefined,
+        batchNo: transferForm.batchNo || undefined,
+        itemId: transferForm.itemId || `item_${Date.now()}`,
+        itemName: transferForm.itemName.trim(),
+        quantity: Number(transferForm.quantity) || 0,
+        unit: transferForm.unit || 'PCS',
+        direction: transferForm.direction,
+        notes: transferForm.notes,
+        createdAt: new Date().toISOString()
+      }
+      saveStockTransfers([newTransfer, ...stockTransfers])
+    }
+
+    setEditingTransferId(null)
+    setIsTransferModalOpen(false)
+  }
+
+  const handleDeleteStockTransfer = (id: string) => {
+    if (confirm('Reverse / delete this stock transfer entry?')) {
+      saveStockTransfers(stockTransfers.filter((tr) => tr.id !== id))
     }
   }
 
@@ -594,6 +880,7 @@ export default function KiyavaPage() {
       localStorage.removeItem('ksv_kiyava_invoices')
       localStorage.removeItem('ksv_kiyava_opening_stock')
       localStorage.removeItem('ksv_kiyava_manufacturing')
+      localStorage.removeItem('ksv_kiyava_stock_transfers')
       
       setCompanies(DEFAULT_COMPANIES)
       setParties(DEFAULT_PARTIES)
@@ -601,6 +888,7 @@ export default function KiyavaPage() {
       setInvoices(SEEDED_INVOICES)
       setOpeningStock([])
       setManufacturingLogs([])
+      setStockTransfers([])
     }
   }
 
@@ -628,9 +916,14 @@ export default function KiyavaPage() {
   const saleTotalRevenue = invoices.filter((inv) => (inv.type || 'SALE') === 'SALE').reduce((sum, inv) => sum + (inv.grandTotal || 0), 0)
   const purchaseTotalSpend = invoices.filter((inv) => inv.type === 'PURCHASE').reduce((sum, inv) => sum + (inv.grandTotal || 0), 0)
 
+  const isAnyPrintModalOpen = Boolean(
+    selectedInvoiceForPrint ||
+    (selectedTransfersForPrint && selectedTransfersForPrint.length > 0)
+  )
+
   return (
     <div className="w-full space-y-3.5 pt-0">
-      <div className={`space-y-3.5 animate-in fade-in duration-300 ${selectedInvoiceForPrint ? 'print:hidden' : ''}`}>
+      <div className={`space-y-3.5 animate-in fade-in duration-300 ${isAnyPrintModalOpen ? 'print:hidden' : ''}`}>
 
       {/* 2. Key Accounting Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full">
@@ -759,6 +1052,17 @@ export default function KiyavaPage() {
         >
           <TrendingUp className="w-3.5 h-3.5" />
           Live Stock
+        </button>
+
+        <button
+          onClick={() => setActiveTab('kiyava-factory')}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'kiyava-factory'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+        >
+          <Factory className="w-3.5 h-3.5" />
+          Kiyava Factory ({stockTransfers.length})
         </button>
 
         <div className="flex-1" /> {/* Spacer */}
@@ -1160,6 +1464,12 @@ export default function KiyavaPage() {
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <button
+                  onClick={() => openTransferModalForItem()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-indigo-600/20"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" /> Transfer Store ↔ Factory
+                </button>
+                <button
                   onClick={() => setActiveTab('opening-stock')}
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-purple-600/20"
                 >
@@ -1349,15 +1659,23 @@ export default function KiyavaPage() {
                 <h2 className="text-sm font-black text-slate-800">📦 Stock Register</h2>
                 <p className="text-xs text-slate-400 font-medium">Opening Stock + Purchases − Sales = Closing Balance</p>
               </div>
-              <button
-                onClick={() => {
-                  setEditingOpeningStockEntry(null)
-                  setIsOpeningStockModalOpen(true)
-                }}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-purple-600/20"
-              >
-                <Plus className="w-3.5 h-3.5" /> Set Opening Stock
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openTransferModalForItem()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-indigo-600/20"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" /> Transfer Store ↔ Factory
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingOpeningStockEntry(null)
+                    setIsOpeningStockModalOpen(true)
+                  }}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-purple-600/20"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Set Opening Stock
+                </button>
+              </div>
             </div>
 
             {/* Summary Cards */}
@@ -1552,9 +1870,241 @@ export default function KiyavaPage() {
           openingStock={openingStock}
           invoices={invoices}
           manufacturingLogs={manufacturingLogs}
+          stockTransfers={stockTransfers}
+          showLocationSplit={true}
           onOpenOpeningStock={() => setActiveTab('opening-stock')}
+          onOpenTransferModal={openTransferModalForItem}
         />
       )}
+
+      {/* 4. TAB CONTENT: KIYAVA FACTORY & STOCK TRANSFERS */}
+      {activeTab === 'kiyava-factory' && (() => {
+        const allCandidateNames = Array.from(
+          new Set([
+            ...manufacturingLogs.map((m) => m.finishedGoodName),
+            ...stockTransfers.map((t) => t.itemName),
+            ...catalog.map((c) => c.name)
+          ])
+        ).filter(Boolean)
+
+        const factoryProductRows = allCandidateNames
+          .map((prodName) => {
+            const nameLower = prodName.toLowerCase()
+            const catItem = catalog.find((c) => c.name.toLowerCase() === nameLower)
+            const mfgLog = manufacturingLogs.find((l) => l.finishedGoodName.toLowerCase() === nameLower)
+            const trLog = stockTransfers.find((t) => t.itemName.toLowerCase() === nameLower)
+
+            const itemId = catItem?.id || mfgLog?.finishedGoodItemId || trLog?.itemId || `fg_${nameLower}`
+            const unit = catItem?.defaultUnit || mfgLog?.unit || trLog?.unit || 'PCS'
+            const hsnCode = catItem?.hsnCode || ''
+            const breakdown = getItemStockBreakdown(itemId, prodName, unit, catItem?.quantity || 0)
+
+            const isFinishedOrTransferred = Boolean(mfgLog || trLog || breakdown.transferredToFactoryQty !== 0 || breakdown.soldFromFactoryQty > 0)
+
+            return {
+              itemId,
+              name: prodName,
+              hsnCode,
+              isFinishedOrTransferred,
+              ...breakdown
+            }
+          })
+          .filter((row) => {
+            const matchesQuery =
+              !factorySearchQuery.trim() ||
+              row.name.toLowerCase().includes(factorySearchQuery.toLowerCase()) ||
+              row.hsnCode.toLowerCase().includes(factorySearchQuery.toLowerCase())
+            const hasActivity =
+              row.isFinishedOrTransferred ||
+              row.factoryClosingQty !== 0 ||
+              row.manufacturedQty > 0 ||
+              Boolean(factorySearchQuery.trim())
+            return matchesQuery && hasActivity
+          })
+
+        const totalFactoryAvailable = factoryProductRows.reduce((s, r) => s + r.factoryClosingQty, 0)
+        const totalStoreRemaining = factoryProductRows.reduce((s, r) => s + r.storeClosingQty, 0)
+        const totalNetTransferredToStore = factoryProductRows.reduce((s, r) => s + (r.transferredToStoreQty || 0), 0)
+        const totalSoldFromFactory = factoryProductRows.reduce((s, r) => s + r.soldFromFactoryQty, 0)
+
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            {/* Top Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div>
+                <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <Factory className="w-4 h-4 text-indigo-600" />
+                  Kiyava Factory Stock &amp; Store Comparison
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Check live finished goods quantity available in <strong>Kiyava Factory</strong> vs remaining in <strong>Kiyava Store</strong>.
+                </p>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={factorySearchQuery}
+                  onChange={(e) => setFactorySearchQuery(e.target.value)}
+                  placeholder="Search item in Kiyava Factory..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              <button
+                onClick={() => openTransferModalForItem()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-md shrink-0"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" /> + Transfer Stock (Store ↔ Factory)
+              </button>
+            </div>
+
+            {/* 4 Summary Metrics Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 mb-1">🏭 Kiyava Factory Stock</p>
+                <h3 className="text-2xl font-black text-indigo-800 font-mono">
+                  {totalFactoryAvailable.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-indigo-600/80 font-medium mt-0.5">Available now in Kiyava Factory</p>
+              </div>
+
+              <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-teal-600 mb-1">🏪 Kiyava Store Stock</p>
+                <h3 className="text-2xl font-black text-teal-800 font-mono">
+                  {totalStoreRemaining.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-teal-600/80 font-medium mt-0.5">Remaining in Kiyava Store</p>
+              </div>
+
+              <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 mb-1">🔄 Net Transferred to Store</p>
+                <h3 className="text-2xl font-black text-cyan-800 font-mono">
+                  +{totalNetTransferredToStore.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-cyan-600/80 font-medium mt-0.5">Moved from Factory → Store</p>
+              </div>
+
+              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-rose-600 mb-1">📤 Sold from Factory</p>
+                <h3 className="text-2xl font-black text-rose-700 font-mono">
+                  −{totalSoldFromFactory.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[10px] text-rose-500 font-medium mt-0.5">Dispatched via Factory Sale Invoices</p>
+              </div>
+            </div>
+
+            {/* Transfer History Table inside Kiyava Factory Tab */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+                <div>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-600" />
+                    Kiyava Factory Transfer History (Store ↔ Factory)
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-medium">Complete log of all stock transfers between Kiyava Store and Kiyava Factory</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {stockTransfers.length > 0 && (
+                    <button
+                      onClick={() => setSelectedTransfersForPrint(stockTransfers)}
+                      className="px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-cyan-200 cursor-pointer"
+                      title="Print Full Stock Transfer Ledger"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Print Ledger
+                    </button>
+                  )}
+                  <span className="text-[10px] font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+                    {stockTransfers.length} Transfer(s)
+                  </span>
+                </div>
+              </div>
+
+              {stockTransfers.filter((tr) =>
+                !factorySearchQuery.trim() ||
+                tr.itemName.toLowerCase().includes(factorySearchQuery.toLowerCase()) ||
+                (tr.batchNo && tr.batchNo.toLowerCase().includes(factorySearchQuery.toLowerCase()))
+              ).length > 0 ? (
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] border-b border-slate-200">
+                      <tr>
+                        <th className="p-3 pl-5">Date</th>
+                        <th className="p-3">Batch #</th>
+                        <th className="p-3">Product Name</th>
+                        <th className="p-3">Transfer Direction</th>
+                        <th className="p-3 text-right">Quantity Transferred</th>
+                        <th className="p-3">Notes</th>
+                        <th className="p-3 text-right pr-5">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {stockTransfers
+                        .filter((tr) =>
+                          !factorySearchQuery.trim() ||
+                          tr.itemName.toLowerCase().includes(factorySearchQuery.toLowerCase()) ||
+                          (tr.batchNo && tr.batchNo.toLowerCase().includes(factorySearchQuery.toLowerCase()))
+                        )
+                        .map((tr) => (
+                        <tr key={tr.id} className="hover:bg-slate-50">
+                          <td className="p-3 pl-5 font-mono text-slate-600">{tr.date}</td>
+                          <td className="p-3 font-mono font-bold text-slate-700 uppercase">{tr.batchNo || '—'}</td>
+                          <td className="p-3 font-bold text-slate-900 uppercase">{tr.itemName}</td>
+                          <td className="p-3">
+                            {tr.direction === 'STORE_TO_FACTORY' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold text-[10px]">
+                                🏪 Kiyava Store → 🏭 Kiyava Factory
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200 font-extrabold text-[10px]">
+                                🏭 Kiyava Factory → 🏪 Kiyava Store
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right font-mono font-black text-indigo-700">
+                            {tr.quantity} <span className="text-[10px] uppercase">{tr.unit}</span>
+                          </td>
+                          <td className="p-3 text-slate-500 text-[11px]">{tr.notes || '—'}</td>
+                          <td className="p-3 text-right pr-5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => setSelectedTransfersForPrint([tr])}
+                                className="px-2.5 py-1 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors border border-cyan-200 cursor-pointer"
+                                title="Print Transfer Voucher / Challan"
+                              >
+                                <Printer className="w-3.5 h-3.5" /> Print
+                              </button>
+                              <button
+                                onClick={() => openEditTransferModal(tr)}
+                                className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
+                                title="Edit Transfer"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteStockTransfer(tr.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="Undo / Delete Transfer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-6 text-center text-xs text-slate-400 font-medium">
+                  No transfers recorded yet. Click &quot;+ Transfer Stock (Store ↔ Factory)&quot; above to move finished goods to Kiyava Factory.
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
       </div>
 
       {/* 5. TALLY INVOICE PRINT / PREVIEW MODAL */}
@@ -1594,6 +2144,378 @@ export default function KiyavaPage() {
         initialData={editingOpeningStockEntry}
         catalog={catalog}
       />
+
+      <ManufacturingModal
+        isOpen={isManufacturingModalOpen}
+        onClose={() => setIsManufacturingModalOpen(false)}
+        onSave={handleSaveManufacturingLog}
+        catalog={catalog}
+      />
+
+      {/* STOCK TRANSFER MODAL (STORE <-> FACTORY) */}
+      {isTransferModalOpen && (() => {
+        const selectedStock = transferForm.itemName
+          ? getItemStockBreakdown(transferForm.itemId, transferForm.itemName, transferForm.unit)
+          : null
+        const maxAvailable =
+          transferForm.direction === 'FACTORY_TO_STORE'
+            ? Math.max(0, selectedStock?.factoryClosingQty || 0)
+            : Math.max(0, selectedStock?.storeClosingQty || 0)
+
+        return (
+          <div className="fixed inset-0 z-[100] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center">
+                    <ArrowLeftRight className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-slate-800 uppercase tracking-wide">
+                      {editingTransferId
+                        ? 'Edit Stock Transfer'
+                        : transferForm.direction === 'FACTORY_TO_STORE'
+                        ? 'Transfer Stock (Factory ➔ Store)'
+                        : 'Transfer Stock (Store ➔ Factory)'}
+                    </h2>
+                    <p className="text-[11px] text-slate-400 font-medium">
+                      {transferForm.direction === 'FACTORY_TO_STORE'
+                        ? 'Move finished goods from Kiyava Factory to Kiyava Store'
+                        : 'Move goods from Kiyava Store to Kiyava Factory'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingTransferId(null)
+                    setIsTransferModalOpen(false)
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveStockTransfer} className="space-y-4">
+                {/* Direction Selector */}
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    Transfer Direction *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTransferForm({ ...transferForm, direction: 'FACTORY_TO_STORE' })}
+                      className={`py-2.5 px-3 rounded-xl font-extrabold text-xs border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        transferForm.direction === 'FACTORY_TO_STORE'
+                          ? 'bg-teal-600 text-white border-teal-600 shadow-md'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      🏭 Factory → 🏪 Store
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTransferForm({ ...transferForm, direction: 'STORE_TO_FACTORY' })}
+                      className={`py-2.5 px-3 rounded-xl font-extrabold text-xs border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        transferForm.direction === 'STORE_TO_FACTORY'
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      🏪 Store → 🏭 Factory
+                    </button>
+                  </div>
+                </div>
+
+                {/* Product Selection */}
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
+                    Finished Good / Product *
+                  </label>
+                  <select
+                    required
+                    value={transferForm.itemName}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      const catMatch = catalog.find((c) => c.name.toLowerCase() === val.toLowerCase())
+                      const mfgMatch = manufacturingLogs.find((m) => m.finishedGoodName.toLowerCase() === val.toLowerCase())
+                      setTransferForm({
+                        ...transferForm,
+                        itemName: val,
+                        itemId: catMatch?.id || mfgMatch?.finishedGoodItemId || '',
+                        unit: catMatch?.defaultUnit || mfgMatch?.unit || 'PCS',
+                        batchId: mfgMatch?.id || '',
+                        batchNo: mfgMatch?.batchNo || ''
+                      })
+                    }}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
+                  >
+                    <option value="">-- Select Product --</option>
+                    {Array.from(
+                      new Set([
+                        ...manufacturingLogs.map((m) => m.finishedGoodName),
+                        ...catalog.map((c) => c.name)
+                      ])
+                    )
+                      .filter(Boolean)
+                      .map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Live Stock Balance Preview */}
+                {selectedStock && (
+                  <div className="grid grid-cols-2 gap-2.5 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 flex justify-between items-center">
+                      <span className="text-[10px] font-extrabold text-indigo-700 uppercase">🏭 Kiyava Factory:</span>
+                      <span className="font-mono font-black text-sm text-indigo-800">
+                        {selectedStock.factoryClosingQty} {selectedStock.unit}
+                      </span>
+                    </div>
+                    <div className="bg-teal-50 border border-teal-200 rounded-xl p-2.5 flex justify-between items-center">
+                      <span className="text-[10px] font-extrabold text-teal-700 uppercase">🏪 Kiyava Store:</span>
+                      <span className="font-mono font-black text-sm text-teal-800">
+                        {selectedStock.storeClosingQty} {selectedStock.unit}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quantity & Date */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
+                        Transfer Qty ({transferForm.unit}) *
+                      </label>
+                      {maxAvailable > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setTransferForm({ ...transferForm, quantity: maxAvailable })}
+                          className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                        >
+                          Max ({maxAvailable})
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.001"
+                      required
+                      value={transferForm.quantity}
+                      onChange={(e) => setTransferForm({ ...transferForm, quantity: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-black text-slate-900 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
+                      Transfer Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={transferForm.date}
+                      onChange={(e) => setTransferForm({ ...transferForm, date: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Batch No & Notes */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
+                      Batch No.
+                    </label>
+                    <input
+                      type="text"
+                      value={transferForm.batchNo}
+                      onChange={(e) => setTransferForm({ ...transferForm, batchNo: e.target.value })}
+                      placeholder="e.g. 104"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 uppercase outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
+                      Notes / Remarks
+                    </label>
+                    <input
+                      type="text"
+                      value={transferForm.notes}
+                      onChange={(e) => setTransferForm({ ...transferForm, notes: e.target.value })}
+                      placeholder="e.g. Dispatched to Kiyava Store"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTransferId(null)
+                      setIsTransferModalOpen(false)
+                    }}
+                    className="px-4 py-2 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" /> {editingTransferId ? 'Update Transfer' : 'Save Transfer'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* PRINTABLE STOCK TRANSFER VOUCHER / CHALLAN MODAL */}
+      {selectedTransfersForPrint && selectedTransfersForPrint.length > 0 && (() => {
+        const isSingle = selectedTransfersForPrint.length === 1
+        const singleTr = selectedTransfersForPrint[0]
+        const primaryCompany = companies[0]
+        const totalTransferredQty = selectedTransfersForPrint.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0)
+
+        return (
+          <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block print:w-full print:backdrop-blur-none">
+            {/* Floating Action Bar (Hidden during print) */}
+            <div className="fixed top-4 right-4 z-50 flex items-center gap-2 print:hidden">
+              <button
+                onClick={() => {
+                  window.scrollTo(0, 0)
+                  window.print()
+                }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition-all"
+              >
+                <Printer className="w-4 h-4" /> Print {isSingle ? 'Transfer Voucher' : 'Transfer Ledger'}
+              </button>
+              <button
+                onClick={() => setSelectedTransfersForPrint(null)}
+                className="p-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl shadow-lg border border-slate-200 cursor-pointer transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Printable Voucher Paper */}
+            <div
+              id="tally-printable-transfer"
+              className="bg-white w-full max-w-4xl p-8 border border-slate-300 shadow-2xl rounded-xl print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:max-w-none text-black font-sans text-xs"
+            >
+              {/* Title Header */}
+              <div className="flex justify-between items-start border-b-2 border-black pb-3 print:pb-2 mb-4 print:mb-2">
+                <div>
+                  <h1 className="text-lg font-black uppercase tracking-wide text-slate-900 print:text-base">
+                    {primaryCompany?.name || 'KIYAVA HEALTHCARE'}
+                  </h1>
+                  <p className="text-[11px] font-semibold text-slate-600 print:text-[10px]">
+                    {primaryCompany ? `${primaryCompany.addressLine1}${primaryCompany.city ? `, ${primaryCompany.city}` : ''}` : 'Solan, Himachal Pradesh'}
+                  </p>
+                  {primaryCompany?.gstin && (
+                    <p className="text-[10px] font-mono font-bold text-slate-500 print:text-[9px]">
+                      GSTIN: {primaryCompany.gstin} | State: {primaryCompany.state} ({primaryCompany.stateCode})
+                    </p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="font-black uppercase text-sm tracking-wide text-indigo-900 print:text-xs">
+                    {isSingle ? 'Stock Transfer Challan / Voucher' : 'Stock Transfer Ledger (Store ↔ Factory)'}
+                  </div>
+                  <div className="text-[11px] font-mono font-bold text-slate-600 mt-1 print:text-[10px]">
+                    Date: {isSingle ? singleTr.date : new Date().toISOString().split('T')[0]}
+                  </div>
+                  {isSingle && singleTr.batchNo && (
+                    <div className="text-[11px] font-mono font-bold text-slate-700 print:text-[10px]">
+                      Batch No: {singleTr.batchNo}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Source & Destination Summary for Single Voucher */}
+              {isSingle && (
+                <div className="grid grid-cols-2 gap-4 mb-4 print:mb-2 p-3 print:p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 block print:text-[9px]">Source Location (From)</span>
+                    <strong className="text-sm font-black text-slate-900 print:text-xs">
+                      {singleTr.direction === 'STORE_TO_FACTORY' ? '🏪 Kiyava Store' : '🏭 Kiyava Factory'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 block print:text-[9px]">Destination Location (To)</span>
+                    <strong className="text-sm font-black text-indigo-800 print:text-xs">
+                      {singleTr.direction === 'STORE_TO_FACTORY' ? '🏭 Kiyava Factory' : '🏪 Kiyava Store'}
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {/* Main Table */}
+              <table className="w-full border-collapse border border-slate-400 text-xs mb-6 print:mb-3 print:text-[11px]">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-slate-400 text-[10px] uppercase font-extrabold text-slate-800">
+                    <th className="border-r border-slate-400 p-2 text-center w-10">#</th>
+                    <th className="border-r border-slate-400 p-2 text-left">Date</th>
+                    <th className="border-r border-slate-400 p-2 text-left">Batch #</th>
+                    <th className="border-r border-slate-400 p-2 text-left">Product / Finished Good Name</th>
+                    <th className="border-r border-slate-400 p-2 text-left">Transfer Direction</th>
+                    <th className="border-r border-slate-400 p-2 text-right">Qty Transferred</th>
+                    <th className="p-2 text-left">Remarks / Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-300">
+                  {selectedTransfersForPrint.map((tr, idx) => (
+                    <tr key={tr.id}>
+                      <td className="p-2 border-r border-slate-300 text-center font-mono font-bold">{idx + 1}</td>
+                      <td className="p-2 border-r border-slate-300 font-mono">{tr.date}</td>
+                      <td className="p-2 border-r border-slate-300 font-mono font-bold uppercase">{tr.batchNo || '—'}</td>
+                      <td className="p-2 border-r border-slate-300 font-black uppercase text-slate-900">{tr.itemName}</td>
+                      <td className="p-2 border-r border-slate-300 font-bold">
+                        {tr.direction === 'STORE_TO_FACTORY'
+                          ? 'Kiyava Store → Kiyava Factory'
+                          : 'Kiyava Factory → Kiyava Store'}
+                      </td>
+                      <td className="p-2 border-r border-slate-300 text-right font-mono font-black text-slate-900">
+                        {tr.quantity} <span className="text-[10px] uppercase">{tr.unit}</span>
+                      </td>
+                      <td className="p-2 text-slate-700">{tr.notes || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-100 border-t-2 border-slate-400 font-extrabold text-xs print:text-[11px]">
+                    <td className="p-2 border-r border-slate-400 text-right uppercase" colSpan={5}>
+                      Total Quantity Transferred:
+                    </td>
+                    <td className="p-2 border-r border-slate-400 text-right font-mono text-sm font-black text-slate-900 print:text-xs">
+                      {totalTransferredQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}{' '}
+                      {isSingle ? singleTr.unit : ''}
+                    </td>
+                    <td className="p-2"></td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              {/* Signatures */}
+              <div className="mt-8 print:mt-4 flex justify-between items-end pt-6 print:pt-3 border-t border-slate-300 text-[11px] font-bold text-slate-700">
+                <div>Dispatched By (Kiyava Store): _______________</div>
+                <div>Received By (Kiyava Factory): _______________</div>
+                <div>Authorized Signatory</div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
 
     </div>
