@@ -133,7 +133,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
         {/* Header Ribbon: GSTIN | TAX INVOICE | Copy Type */}
         <div className="border-b border-black px-2 py-1 flex justify-between items-center bg-white text-[10px]">
           <div>
-            GSTIN : <strong className="font-mono text-[11px] font-black">07AAAAA0000A1Z5</strong>
+            GSTIN : <strong className="font-mono text-[11px] font-black">{invoice.company?.gstin || '02DFBPS6121B2Z2'}</strong>
           </div>
           <div className="text-xs font-black uppercase tracking-widest text-center">
             TAX INVOICE
@@ -146,14 +146,16 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
         {/* Company / Seller Banner */}
         <div className="border-b border-black p-2.5 text-center bg-white">
           <h1 className="text-xl font-black tracking-wide uppercase font-serif text-black leading-none">
-            KSV HEALTHCARE & AYURVEDA
+            {invoice.company?.name && !invoice.company.name.includes('KSV HEALTHCARE')
+              ? invoice.company.name.replace(' (KSV)', '')
+              : 'KARAN SINGH VAIDH'}
           </h1>
           <p className="text-[10.5px] font-bold text-neutral-800 mt-1 tracking-wide">
-            Specialized Medical Care & Ayurvedic OPD Clinic
+            {invoice.company?.tagline || 'Specialized Medical Care & Ayurvedic OPD Clinic'}
           </p>
           <div className="flex justify-center items-center gap-4 text-[10px] font-bold text-black mt-1.5 flex-wrap">
-            <span>Helpline : <strong>+91 98765 43210</strong></span>
-            <span>GSTIN : <strong>07AAAAA0000A1Z5</strong></span>
+            <span>Helpline : <strong>{invoice.company?.phone ? (invoice.company.phone.startsWith('+') ? invoice.company.phone : `+91 ${invoice.company.phone}`) : '+91 98160 12345'}</strong></span>
+            <span>GSTIN : <strong>{invoice.company?.gstin || '02DFBPS6121B2Z2'}</strong></span>
           </div>
         </div>
 
