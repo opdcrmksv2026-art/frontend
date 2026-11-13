@@ -953,8 +953,16 @@ export default function KsvPage() {
     return matchesSearch && matchesCompany && matchesType
   })
 
+  const isAnyPrintModalOpen = Boolean(
+    selectedInvoiceForPrint ||
+    selectedMfgLogForPrint ||
+    (selectedTransfersForPrint && selectedTransfersForPrint.length > 0)
+  )
+
   return (
-    <div className="w-full space-y-4 pt-0 animate-in fade-in duration-300">
+    <div className="w-full space-y-4 pt-0">
+      {/* Main Page Content (Hidden during print if any print modal is active) */}
+      <div className={`space-y-4 animate-in fade-in duration-300 ${isAnyPrintModalOpen ? 'print:hidden' : ''}`}>
 
       {/* 2. Key Accounting & Procurement Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full">
@@ -2556,6 +2564,7 @@ export default function KsvPage() {
           </div>
         )
       })()}
+      </div>
 
       {/* MODALS */}
       {selectedInvoiceForPrint && (
@@ -2620,7 +2629,7 @@ export default function KsvPage() {
         const totalTransferredQty = selectedTransfersForPrint.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0)
 
         return (
-          <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block print:w-full">
+          <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block print:w-full print:backdrop-blur-none">
             {/* Floating Action Bar (Hidden during print) */}
             <div className="fixed top-4 right-4 z-50 flex items-center gap-2 print:hidden">
               <button
@@ -2646,29 +2655,29 @@ export default function KsvPage() {
               className="bg-white w-full max-w-4xl p-8 border border-slate-300 shadow-2xl rounded-xl print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:max-w-none text-black font-sans text-xs"
             >
               {/* Title Header */}
-              <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-4">
+              <div className="flex justify-between items-start border-b-2 border-black pb-3 print:pb-2 mb-4 print:mb-2">
                 <div>
-                  <h1 className="text-lg font-black uppercase tracking-wide text-slate-900">
+                  <h1 className="text-lg font-black uppercase tracking-wide text-slate-900 print:text-base">
                     {primaryCompany?.name || 'Karan Singh Vaidh (KSV)'}
                   </h1>
-                  <p className="text-[11px] font-semibold text-slate-600">
+                  <p className="text-[11px] font-semibold text-slate-600 print:text-[10px]">
                     {primaryCompany ? `${primaryCompany.addressLine1}${primaryCompany.city ? `, ${primaryCompany.city}` : ''}` : 'Solan, Himachal Pradesh'}
                   </p>
                   {primaryCompany?.gstin && (
-                    <p className="text-[10px] font-mono font-bold text-slate-500">
+                    <p className="text-[10px] font-mono font-bold text-slate-500 print:text-[9px]">
                       GSTIN: {primaryCompany.gstin} | State: {primaryCompany.state} ({primaryCompany.stateCode})
                     </p>
                   )}
                 </div>
                 <div className="text-right">
-                  <div className="font-black uppercase text-sm tracking-wide text-indigo-900">
+                  <div className="font-black uppercase text-sm tracking-wide text-indigo-900 print:text-xs">
                     {isSingle ? 'Stock Transfer Challan / Voucher' : 'Stock Transfer Ledger (Store ↔ Factory)'}
                   </div>
-                  <div className="text-[11px] font-mono font-bold text-slate-600 mt-1">
+                  <div className="text-[11px] font-mono font-bold text-slate-600 mt-1 print:text-[10px]">
                     Date: {isSingle ? singleTr.date : new Date().toISOString().split('T')[0]}
                   </div>
                   {isSingle && singleTr.batchNo && (
-                    <div className="text-[11px] font-mono font-bold text-slate-700">
+                    <div className="text-[11px] font-mono font-bold text-slate-700 print:text-[10px]">
                       Batch No: {singleTr.batchNo}
                     </div>
                   )}
@@ -2677,16 +2686,16 @@ export default function KsvPage() {
 
               {/* Source & Destination Summary for Single Voucher */}
               {isSingle && (
-                <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs">
+                <div className="grid grid-cols-2 gap-4 mb-4 print:mb-2 p-3 print:p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs">
                   <div>
-                    <span className="text-[10px] uppercase font-extrabold text-slate-500 block">Source Location (From)</span>
-                    <strong className="text-sm font-black text-slate-900">
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 block print:text-[9px]">Source Location (From)</span>
+                    <strong className="text-sm font-black text-slate-900 print:text-xs">
                       {singleTr.direction === 'STORE_TO_FACTORY' ? '🏪 KSV Store' : '🏭 KSV Factory'}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-extrabold text-slate-500 block">Destination Location (To)</span>
-                    <strong className="text-sm font-black text-indigo-800">
+                    <span className="text-[10px] uppercase font-extrabold text-slate-500 block print:text-[9px]">Destination Location (To)</span>
+                    <strong className="text-sm font-black text-indigo-800 print:text-xs">
                       {singleTr.direction === 'STORE_TO_FACTORY' ? '🏭 KSV Factory' : '🏪 KSV Store'}
                     </strong>
                   </div>
@@ -2694,7 +2703,7 @@ export default function KsvPage() {
               )}
 
               {/* Main Table */}
-              <table className="w-full border-collapse border border-slate-400 text-xs mb-6">
+              <table className="w-full border-collapse border border-slate-400 text-xs mb-6 print:mb-3 print:text-[11px]">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-400 text-[10px] uppercase font-extrabold text-slate-800">
                     <th className="border-r border-slate-400 p-2 text-center w-10">#</th>
@@ -2726,11 +2735,11 @@ export default function KsvPage() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-slate-100 border-t-2 border-slate-400 font-extrabold text-xs">
+                  <tr className="bg-slate-100 border-t-2 border-slate-400 font-extrabold text-xs print:text-[11px]">
                     <td className="p-2 border-r border-slate-400 text-right uppercase" colSpan={5}>
                       Total Quantity Transferred:
                     </td>
-                    <td className="p-2 border-r border-slate-400 text-right font-mono text-sm font-black text-slate-900">
+                    <td className="p-2 border-r border-slate-400 text-right font-mono text-sm font-black text-slate-900 print:text-xs">
                       {totalTransferredQty.toLocaleString('en-IN', { maximumFractionDigits: 2 })}{' '}
                       {isSingle ? singleTr.unit : ''}
                     </td>
@@ -2740,7 +2749,7 @@ export default function KsvPage() {
               </table>
 
               {/* Signatures */}
-              <div className="mt-12 flex justify-between items-end pt-8 border-t border-slate-300 text-[11px] font-bold text-slate-700">
+              <div className="mt-8 print:mt-4 flex justify-between items-end pt-6 print:pt-3 border-t border-slate-300 text-[11px] font-bold text-slate-700">
                 <div>Dispatched By (KSV Store): _______________</div>
                 <div>Received By (KSV Factory): _______________</div>
                 <div>Authorized Signatory</div>

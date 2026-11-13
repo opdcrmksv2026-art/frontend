@@ -27,7 +27,7 @@ export default function TallyManufacturingPrint({
   const effectiveRatePerUnit = log.effectiveRatePerUnit ?? (log.producedQuantity > 0 ? effectiveCost / log.producedQuantity : 0)
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block print:w-full">
+    <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block print:w-full print:backdrop-blur-none">
       {/* Floating Action Bar (Hidden during print) */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2 print:hidden">
         <button

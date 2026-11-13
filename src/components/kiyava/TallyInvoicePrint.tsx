@@ -38,7 +38,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 backdrop-blur-md flex flex-col items-center p-2 sm:p-6 print:p-0 print:m-0 print:bg-white print:static print:overflow-visible print:block print:w-full">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 backdrop-blur-md flex flex-col items-center p-2 sm:p-6 print:p-0 print:m-0 print:bg-white print:static print:overflow-visible print:block print:w-full print:backdrop-blur-none">
       {/* Top Action Bar (hidden during print) */}
       <div className="w-full max-w-4xl bg-slate-900 text-white rounded-2xl p-3.5 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-2xl border border-slate-800 print:hidden">
         <div className="flex items-center gap-3">

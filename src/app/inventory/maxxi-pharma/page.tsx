@@ -599,7 +599,8 @@ export default function MaxxiPharmaPage() {
   })
 
   return (
-    <div className="w-full space-y-4 pt-0 animate-in fade-in duration-300">
+    <div className="w-full space-y-4 pt-0">
+      <div className={`space-y-4 animate-in fade-in duration-300 ${selectedInvoiceForPrint ? 'print:hidden' : ''}`}>
 
 
       {/* 2. Key Accounting & Inventory Metrics */}
@@ -1303,6 +1304,7 @@ export default function MaxxiPharmaPage() {
           onOpenOpeningStock={() => setActiveTab('opening-stock')}
         />
       )}
+      </div>
 
       {/* MODALS */}
       {selectedInvoiceForPrint && (

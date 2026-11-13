@@ -629,7 +629,8 @@ export default function KiyavaPage() {
   const purchaseTotalSpend = invoices.filter((inv) => inv.type === 'PURCHASE').reduce((sum, inv) => sum + (inv.grandTotal || 0), 0)
 
   return (
-    <div className="w-full space-y-3.5 pt-0 animate-in fade-in duration-300">
+    <div className="w-full space-y-3.5 pt-0">
+      <div className={`space-y-3.5 animate-in fade-in duration-300 ${selectedInvoiceForPrint ? 'print:hidden' : ''}`}>
 
       {/* 2. Key Accounting Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full">
@@ -1554,6 +1555,7 @@ export default function KiyavaPage() {
           onOpenOpeningStock={() => setActiveTab('opening-stock')}
         />
       )}
+      </div>
 
       {/* 5. TALLY INVOICE PRINT / PREVIEW MODAL */}
       {selectedInvoiceForPrint && (
