@@ -15,13 +15,84 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
   const [zoomLevel, setZoomLevel] = useState<number>(100)
   const [copiedLink, setCopiedLink] = useState(false)
 
+  // Detect whether this invoice represents a PURCHASE from a vendor (like Maxxi Pharma or Kiyava)
+  // or a transaction where Karan Singh Vaidh is the purchasing firm.
+  // In either case, KARAN SINGH VAIDH is always at the top banner, and the vendor is in Party / Billed To!
+  const isKsvBuyer =
+    invoice.type === 'PURCHASE' ||
+    (Boolean(invoice.buyer?.name?.toUpperCase().includes('KARAN') || invoice.buyer?.name?.toUpperCase().includes('KSV')) &&
+     Boolean(!invoice.company?.name?.toUpperCase().includes('KARAN') && !invoice.company?.name?.toUpperCase().includes('KSV')))
+
+  // Top Header Company Profile (KARAN SINGH VAIDH for KSV purchases & sales)
+  const headerCompany = isKsvBuyer
+    ? {
+        name: 'KARAN SINGH VAIDH',
+        tagline: 'Specialized Medical Care & Ayurvedic OPD Clinic',
+        phone: '98160 12345',
+        gstin: invoice.buyer?.gstin || '02DFBPS6121B2Z2',
+        addressLine1: invoice.buyer?.addressLine1 || 'VILL- RADIYANA, PO SUBATHU',
+        addressLine2: invoice.buyer?.addressLine2 || 'TEH & DISTT - SOLAN',
+        city: invoice.buyer?.city || 'Solan',
+        state: invoice.buyer?.state || 'Himachal Pradesh',
+        stateCode: invoice.buyer?.stateCode || '02',
+        pincode: invoice.buyer?.pincode || '173206',
+        bankName: 'HDFC Bank',
+        branch: 'Solan Branch',
+        accountNo: '50200049281729',
+        ifscCode: 'HDFC0001423'
+      }
+    : {
+        name:
+          invoice.company?.name && !invoice.company.name.includes('KSV HEALTHCARE')
+            ? invoice.company.name.replace(' (KSV)', '')
+            : 'KARAN SINGH VAIDH',
+        tagline: invoice.company?.tagline || 'Specialized Medical Care & Ayurvedic OPD Clinic',
+        phone: invoice.company?.phone || '98160 12345',
+        gstin: invoice.company?.gstin || '02DFBPS6121B2Z2',
+        addressLine1: invoice.company?.addressLine1 || 'VILL- RADIYANA, PO SUBATHU',
+        addressLine2: invoice.company?.addressLine2 || 'TEH & DISTT - SOLAN',
+        city: invoice.company?.city || 'Solan',
+        state: invoice.company?.state || 'Himachal Pradesh',
+        stateCode: invoice.company?.stateCode || '02',
+        pincode: invoice.company?.pincode || '173206',
+        bankName: invoice.company?.bankName || 'HDFC Bank',
+        branch: invoice.company?.branch || 'Solan Branch',
+        accountNo: invoice.company?.accountNo || '50200049281729',
+        ifscCode: invoice.company?.ifscCode || 'HDFC0001423'
+      }
+
+  // Party / Billed To Profile (Supplier / Vendor like Maxxi in purchases, or Buyer in sales)
+  const billedParty = isKsvBuyer
+    ? {
+        name: invoice.company?.name || 'MAXXI PHARMA PVT. LTD.',
+        addressLine1: invoice.company?.addressLine1 || 'Plot No. 45, Industrial Area Phase 1',
+        addressLine2: invoice.company?.addressLine2 || 'Near ESI Hospital, Solan',
+        city: invoice.company?.city || 'Solan',
+        state: invoice.company?.state || 'Himachal Pradesh',
+        stateCode: invoice.company?.stateCode || '02',
+        pincode: invoice.company?.pincode || '173212',
+        phone: invoice.company?.phone || '01792-234890 / 98160 54321',
+        gstin: invoice.company?.gstin || '02AAACM8821F1Z9'
+      }
+    : {
+        name: invoice.buyer?.name,
+        addressLine1: invoice.buyer?.addressLine1,
+        addressLine2: invoice.buyer?.addressLine2,
+        city: invoice.buyer?.city,
+        state: invoice.buyer?.state,
+        stateCode: invoice.buyer?.stateCode,
+        pincode: invoice.buyer?.pincode,
+        phone: invoice.buyer?.phone,
+        gstin: invoice.buyer?.gstin
+      }
+
   const handlePrint = () => {
     window.scrollTo(0, 0)
     window.print()
   }
 
   const handleCopySummary = () => {
-    const text = `TAX INVOICE: ${invoice.invoiceNo}\nSeller: ${invoice.company.name}\nBuyer: ${invoice.buyer.name}\nGrand Total: ₹${invoice.grandTotal.toLocaleString('en-IN')}\nDate: ${invoice.invoiceDate}`
+    const text = `TAX INVOICE: ${invoice.invoiceNo}\nSeller: ${headerCompany.name}\nBuyer: ${billedParty.name}\nGrand Total: ₹${invoice.grandTotal.toLocaleString('en-IN')}\nDate: ${invoice.invoiceDate}`
     navigator.clipboard.writeText(text)
     setCopiedLink(true)
     setTimeout(() => setCopiedLink(false), 2000)
@@ -53,7 +124,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
               </span>
             </h3>
             <p className="text-[11px] text-slate-400 font-medium">
-              {invoice.company.name} ➔ {invoice.buyer.name}
+              {headerCompany.name} ➔ {billedParty.name}
             </p>
           </div>
         </div>
@@ -133,7 +204,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
         {/* Header Ribbon: GSTIN | TAX INVOICE | Copy Type */}
         <div className="border-b border-black px-2 py-1 flex justify-between items-center bg-white text-[10px]">
           <div>
-            GSTIN : <strong className="font-mono text-[11px] font-black">{invoice.company?.gstin || '02DFBPS6121B2Z2'}</strong>
+            GSTIN : <strong className="font-mono text-[11px] font-black">{headerCompany.gstin}</strong>
           </div>
           <div className="text-xs font-black uppercase tracking-widest text-center">
             TAX INVOICE
@@ -146,16 +217,14 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
         {/* Company / Seller Banner */}
         <div className="border-b border-black p-2.5 text-center bg-white">
           <h1 className="text-xl font-black tracking-wide uppercase font-serif text-black leading-none">
-            {invoice.company?.name && !invoice.company.name.includes('KSV HEALTHCARE')
-              ? invoice.company.name.replace(' (KSV)', '')
-              : 'KARAN SINGH VAIDH'}
+            {headerCompany.name}
           </h1>
           <p className="text-[10.5px] font-bold text-neutral-800 mt-1 tracking-wide">
-            {invoice.company?.tagline || 'Specialized Medical Care & Ayurvedic OPD Clinic'}
+            {headerCompany.tagline}
           </p>
           <div className="flex justify-center items-center gap-4 text-[10px] font-bold text-black mt-1.5 flex-wrap">
-            <span>Helpline : <strong>{invoice.company?.phone ? (invoice.company.phone.startsWith('+') ? invoice.company.phone : `+91 ${invoice.company.phone}`) : '+91 98160 12345'}</strong></span>
-            <span>GSTIN : <strong>{invoice.company?.gstin || '02DFBPS6121B2Z2'}</strong></span>
+            <span>Helpline : <strong>{headerCompany.phone.startsWith('+') ? headerCompany.phone : `+91 ${headerCompany.phone}`}</strong></span>
+            <span>GSTIN : <strong>{headerCompany.gstin}</strong></span>
           </div>
         </div>
 
@@ -177,7 +246,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="font-bold text-neutral-700">Place of Supply</span>
-              <span className="col-span-2 font-semibold text-black">: {invoice.placeOfSupply || `${invoice.buyer.state} (${invoice.buyer.stateCode})`}</span>
+              <span className="col-span-2 font-semibold text-black">: {invoice.placeOfSupply || `${billedParty.state} (${billedParty.stateCode})`}</span>
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="font-bold text-neutral-700">Reverse Charge</span>
@@ -205,7 +274,7 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="font-bold text-neutral-700">Station / Dest.</span>
-              <span className="col-span-2 font-semibold text-black">: {invoice.station || invoice.buyer.city || '-'}</span>
+              <span className="col-span-2 font-semibold text-black">: {invoice.station || billedParty.city || '-'}</span>
             </div>
             <div className="grid grid-cols-3 gap-1">
               <span className="font-bold text-neutral-700">E-Way Bill No.</span>
@@ -245,16 +314,16 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
             <div className="font-black text-black uppercase tracking-wider mb-0.5">
               Party / Billed to :
             </div>
-            <div className="font-black text-[11px] text-black">{invoice.buyer.name}</div>
-            <div className="text-neutral-800">{invoice.buyer.addressLine1}</div>
-            {invoice.buyer.addressLine2 && <div className="text-neutral-800">{invoice.buyer.addressLine2}</div>}
+            <div className="font-black text-[11px] text-black">{billedParty.name}</div>
+            {billedParty.addressLine1 && <div className="text-neutral-800">{billedParty.addressLine1}</div>}
+            {billedParty.addressLine2 && <div className="text-neutral-800">{billedParty.addressLine2}</div>}
             <div className="text-neutral-800">
-              {invoice.buyer.city}, {invoice.buyer.state} - {invoice.buyer.pincode}
+              {billedParty.city}{billedParty.state ? `, ${billedParty.state}` : ''}{billedParty.pincode ? ` - ${billedParty.pincode}` : ''}
             </div>
             <div className="pt-1 space-y-0.5">
-              <div>Party Mobile No : <strong className="font-mono">{invoice.buyer.phone}</strong></div>
-              <div>State Name : <strong>{invoice.buyer.state}</strong>, Code : <strong>{invoice.buyer.stateCode}</strong></div>
-              <div>GSTIN / UIN : <strong className="font-mono font-bold">{invoice.buyer.gstin || 'URP / Unregistered'}</strong></div>
+              {billedParty.phone && <div>Party Mobile No : <strong className="font-mono">{billedParty.phone}</strong></div>}
+              <div>State Name : <strong>{billedParty.state}</strong>, Code : <strong>{billedParty.stateCode}</strong></div>
+              <div>GSTIN / UIN : <strong className="font-mono font-bold">{billedParty.gstin || 'URP / Unregistered'}</strong></div>
             </div>
           </div>
 
@@ -263,35 +332,17 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
             <div className="font-black text-black uppercase tracking-wider mb-0.5">
               Shipped to :
             </div>
-            {invoice.shippedToSameAsBilled || !invoice.shippedTo ? (
-              <>
-                <div className="font-black text-[11px] text-black">{invoice.buyer.name}</div>
-                <div className="text-neutral-800">{invoice.buyer.addressLine1}</div>
-                {invoice.buyer.addressLine2 && <div className="text-neutral-800">{invoice.buyer.addressLine2}</div>}
-                <div className="text-neutral-800">
-                  {invoice.buyer.city}, {invoice.buyer.state} - {invoice.buyer.pincode}
-                </div>
-                <div className="pt-1 space-y-0.5">
-                  <div>Party Mobile No : <strong className="font-mono">{invoice.buyer.phone}</strong></div>
-                  <div>State Name : <strong>{invoice.buyer.state}</strong>, Code : <strong>{invoice.buyer.stateCode}</strong></div>
-                  <div>GSTIN / UIN : <strong className="font-mono font-bold">{invoice.buyer.gstin || 'URP'}</strong></div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="font-black text-[11px] text-black">{invoice.shippedTo.name}</div>
-                <div className="text-neutral-800">{invoice.shippedTo.addressLine1}</div>
-                {invoice.shippedTo.addressLine2 && <div className="text-neutral-800">{invoice.shippedTo.addressLine2}</div>}
-                <div className="text-neutral-800">
-                  {invoice.shippedTo.city}, {invoice.shippedTo.state} - {invoice.shippedTo.pincode}
-                </div>
-                <div className="pt-1 space-y-0.5">
-                  <div>Party Mobile No : <strong className="font-mono">{invoice.shippedTo.phone}</strong></div>
-                  <div>State Name : <strong>{invoice.shippedTo.state}</strong>, Code : <strong>{invoice.shippedTo.stateCode}</strong></div>
-                  <div>GSTIN / UIN : <strong className="font-mono font-bold">{invoice.shippedTo.gstin || 'URP'}</strong></div>
-                </div>
-              </>
-            )}
+            <div className="font-black text-[11px] text-black">{billedParty.name}</div>
+            {billedParty.addressLine1 && <div className="text-neutral-800">{billedParty.addressLine1}</div>}
+            {billedParty.addressLine2 && <div className="text-neutral-800">{billedParty.addressLine2}</div>}
+            <div className="text-neutral-800">
+              {billedParty.city}{billedParty.state ? `, ${billedParty.state}` : ''}{billedParty.pincode ? ` - ${billedParty.pincode}` : ''}
+            </div>
+            <div className="pt-1 space-y-0.5">
+              {billedParty.phone && <div>Party Mobile No : <strong className="font-mono">{billedParty.phone}</strong></div>}
+              <div>State Name : <strong>{billedParty.state}</strong>, Code : <strong>{billedParty.stateCode}</strong></div>
+              <div>GSTIN / UIN : <strong className="font-mono font-bold">{billedParty.gstin || 'URP'}</strong></div>
+            </div>
           </div>
         </div>
 
@@ -566,19 +617,19 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
               </div>
               <div className="grid grid-cols-3 gap-0.5">
                 <span className="text-neutral-700 font-semibold">Bank Name</span>
-                <span className="col-span-2 font-bold text-black">: {invoice.company.bankName}</span>
+                <span className="col-span-2 font-bold text-black">: {headerCompany.bankName || 'HDFC Bank'}</span>
               </div>
               <div className="grid grid-cols-3 gap-0.5">
                 <span className="text-neutral-700 font-semibold">Branch</span>
-                <span className="col-span-2 font-semibold text-black">: {invoice.company.branch}</span>
+                <span className="col-span-2 font-semibold text-black">: {headerCompany.branch || 'Solan Branch'}</span>
               </div>
               <div className="grid grid-cols-3 gap-0.5">
                 <span className="text-neutral-700 font-semibold">A/c No.</span>
-                <span className="col-span-2 font-mono font-black text-black">: {invoice.company.accountNo}</span>
+                <span className="col-span-2 font-mono font-black text-black">: {headerCompany.accountNo || '50200049281729'}</span>
               </div>
               <div className="grid grid-cols-3 gap-0.5">
                 <span className="text-neutral-700 font-semibold">IFSC Code</span>
-                <span className="col-span-2 font-mono font-bold text-black">: {invoice.company.ifscCode}</span>
+                <span className="col-span-2 font-mono font-bold text-black">: {headerCompany.ifscCode || 'HDFC0001423'}</span>
               </div>
             </div>
 
@@ -611,15 +662,15 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
 
             <div className="pt-1 flex flex-col items-end text-right">
               <div className="font-bold text-[9.5px] uppercase text-black">
-                for <span className="font-black">{invoice.company.name}</span>
+                for <span className="font-black">{headerCompany.name}</span>
               </div>
 
               {/* Digital Stamp Seal */}
               <div className="my-1 mr-2 relative">
                 <div className="w-24 h-14 border-2 border-dashed border-blue-600/40 rounded-full flex flex-col items-center justify-center p-1 text-blue-700 rotate-[-4deg] opacity-75 pointer-events-none">
-                  <span className="text-[7px] font-black uppercase tracking-wider">{invoice.company.name}</span>
+                  <span className="text-[7px] font-black uppercase tracking-wider">{headerCompany.name}</span>
                   <span className="text-[6px] font-bold">SEAL &amp; SIGNED</span>
-                  <span className="text-[6px] font-medium">{invoice.company.city}</span>
+                  <span className="text-[6px] font-medium">{headerCompany.city || 'Solan'}</span>
                 </div>
               </div>
 
