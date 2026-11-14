@@ -75,6 +75,7 @@ export default function MaxxiPharmaPage() {
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('')
+  const [partySearchQuery, setPartySearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
   const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE'>('SALE')
 
@@ -1035,69 +1036,106 @@ export default function MaxxiPharmaPage() {
       )}
 
       {/* 4. TAB CONTENT: 4. PARTIES MASTER */}
-      {activeTab === 'parties' && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div>
-              <h2 className="text-sm font-black text-slate-800">Parties &amp; Buyers Directory</h2>
-              <p className="text-[11px] text-slate-400">
-                Directory of customer accounts, distributors, suppliers (Kiyava, KSV), and packaging vendors.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setEditingParty(null)
-                setIsPartyModalOpen(true)
-              }}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add New Party
-            </button>
-          </div>
+      {activeTab === 'parties' && (() => {
+        const filteredParties = parties.filter((party) => {
+          if (!partySearchQuery.trim()) return true
+          const q = partySearchQuery.toLowerCase()
+          return (
+            party.name?.toLowerCase().includes(q) ||
+            party.contactPerson?.toLowerCase().includes(q) ||
+            party.gstin?.toLowerCase().includes(q) ||
+            party.phone?.toLowerCase().includes(q) ||
+            party.city?.toLowerCase().includes(q) ||
+            party.state?.toLowerCase().includes(q) ||
+            party.station?.toLowerCase().includes(q) ||
+            party.transport?.toLowerCase().includes(q)
+          )
+        })
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {parties.map((party) => (
-              <div key={party.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-extrabold text-sm text-slate-900">{party.name}</h3>
-                    {party.contactPerson && (
-                      <p className="text-[10px] text-slate-400 font-medium">Contact: {party.contactPerson}</p>
-                    )}
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div>
+                <h2 className="text-sm font-black text-slate-800">Parties &amp; Buyers Directory</h2>
+                <p className="text-[11px] text-slate-400">
+                  Directory of customer accounts, distributors, suppliers (Kiyava, KSV), and packaging vendors.
+                </p>
+              </div>
+
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={partySearchQuery}
+                  onChange={(e) => setPartySearchQuery(e.target.value)}
+                  placeholder="Search party, GSTIN, city, phone..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              <button
+                onClick={() => {
+                  setEditingParty(null)
+                  setIsPartyModalOpen(true)
+                }}
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add New Party
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredParties.map((party) => (
+                <div key={party.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-extrabold text-sm text-slate-900">{party.name}</h3>
+                      {party.contactPerson && (
+                        <p className="text-[10px] text-slate-400 font-medium">Contact: {party.contactPerson}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 text-[11px] text-slate-600 border-t border-b border-slate-100 py-2">
+                    <p className="font-mono text-slate-700">GSTIN: {party.gstin || 'URP'}</p>
+                    <p className="truncate">
+                      {party.addressLine1}, {party.city}, {party.state} - {party.pincode}
+                    </p>
+                    <p className="text-slate-500">Phone: {party.phone}</p>
+                    {party.transport && <p className="text-slate-500">Transport: {party.transport}</p>}
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setEditingParty(party)
+                        setIsPartyModalOpen(true)
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Edit Party
+                    </button>
+                    <button
+                      onClick={() => handleDeleteParty(party.id)}
+                      className="px-2.5 py-1 text-[11px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
+              ))}
+            </div>
 
-                <div className="space-y-1 text-[11px] text-slate-600 border-t border-b border-slate-100 py-2">
-                  <p className="font-mono text-slate-700">GSTIN: {party.gstin || 'URP'}</p>
-                  <p className="truncate">
-                    {party.addressLine1}, {party.city}, {party.state} - {party.pincode}
-                  </p>
-                  <p className="text-slate-500">Phone: {party.phone}</p>
-                  {party.transport && <p className="text-slate-500">Transport: {party.transport}</p>}
-                </div>
-
-                <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    onClick={() => {
-                      setEditingParty(party)
-                      setIsPartyModalOpen(true)
-                    }}
-                    className="px-2.5 py-1 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
-                  >
-                    Edit Party
-                  </button>
-                  <button
-                    onClick={() => handleDeleteParty(party.id)}
-                    className="px-2.5 py-1 text-[11px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer"
-                  >
-                    Delete
-                  </button>
-                </div>
+            {filteredParties.length === 0 && (
+              <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center">
+                <p className="text-xs text-slate-400 font-medium">
+                  No parties found matching &quot;{partySearchQuery}&quot;
+                </p>
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* 4. TAB CONTENT: 5. PRODUCT CATALOG */}
       {activeTab === 'catalog' && (() => {
