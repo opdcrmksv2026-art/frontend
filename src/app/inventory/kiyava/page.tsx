@@ -145,7 +145,7 @@ export default function KiyavaPage() {
       parsedCompanies = (parsedCompanies || []).filter((c) => {
         const cId = (c.id || '').toLowerCase().trim()
         const cName = (c.name || '').toLowerCase().trim()
-        return (c.name.toUpperCase().includes('KIYAVA') || c.isDefault) && !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
+        return c.name?.toUpperCase().includes('KIYAVA') && !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
       })
       if (parsedCompanies.length === 0) parsedCompanies = DEFAULT_COMPANIES
 
@@ -161,10 +161,8 @@ export default function KiyavaPage() {
       
       // Only show user-added catalog items (clean by default)
       let parsedCatalog: CatalogItem[] = storedCatalog ? JSON.parse(storedCatalog) : []
-      const dummySet = new Set((DUMMY_CATALOG_NAMES || []).map((n: string) => n.toLowerCase()))
       parsedCatalog = parsedCatalog.filter(
-        (c: any) => c.name && !dummySet.has(c.name.trim().toLowerCase()) && !c.id?.startsWith('cat_') &&
-        !deletedCatalog.has((c.id || '').toLowerCase().trim()) && !deletedCatalog.has((c.name || '').toLowerCase().trim())
+        (c: any) => c.name && !deletedCatalog.has((c.id || '').toLowerCase().trim())
       )
 
       if (storedMfgLogs) {
@@ -195,8 +193,7 @@ export default function KiyavaPage() {
       let initialInvoices: KiyavaInvoice[] = storedInvoices ? JSON.parse(storedInvoices) : SEEDED_INVOICES
       initialInvoices = (initialInvoices || []).filter((inv: any) => {
         const id = (inv.id || '').toLowerCase().trim()
-        const invNo = (inv.invoiceNo || '').toLowerCase().trim()
-        return !deletedInvoices.has(id) && !deletedInvoices.has(invNo)
+        return !deletedInvoices.has(id)
       })
       setInvoices(initialInvoices)
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
@@ -206,9 +203,6 @@ export default function KiyavaPage() {
       // --- FETCH LIVE DATA FROM BACKEND DATABASE (MongoDB) IN PARALLEL ---
       const fetchDatabaseData = async () => {
         try {
-          // Purge default dummy items from database if any exist (fire-and-forget)
-          fetch(`${API_URL}/api/kiyava/catalog/purge-defaults`, { method: 'POST' }).catch(() => {})
-
           const applyData = (
             dbCatalog: CatalogItem[] | null,
             dbInvoices: KiyavaInvoice[] | null,
@@ -218,8 +212,7 @@ export default function KiyavaPage() {
           ) => {
             if (Array.isArray(dbCatalog)) {
               const cleanDbCatalog = dbCatalog.filter(
-                (c: any) => c.name && !dummySet.has(c.name.trim().toLowerCase()) && !c.id?.startsWith('cat_') &&
-                !deletedCatalog.has((c.id || '').toLowerCase().trim()) && !deletedCatalog.has((c.name || '').toLowerCase().trim())
+                (c: any) => c.name && !deletedCatalog.has((c.id || '').toLowerCase().trim())
               )
               setCatalog(cleanDbCatalog)
               localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(cleanDbCatalog))
@@ -227,8 +220,7 @@ export default function KiyavaPage() {
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
               const cleanDbInvoices = dbInvoices.filter((inv: any) => {
                 const id = (inv.id || '').toLowerCase().trim()
-                const invNo = (inv.invoiceNo || '').toLowerCase().trim()
-                return !deletedInvoices.has(id) && !deletedInvoices.has(invNo)
+                return !deletedInvoices.has(id)
               })
               setInvoices(cleanDbInvoices)
               localStorage.setItem('ksv_kiyava_invoices', JSON.stringify(cleanDbInvoices))
@@ -246,10 +238,12 @@ export default function KiyavaPage() {
               const cleanCompanies = dbCompanies.filter(c => {
                 const cId = (c.id || '').toLowerCase().trim()
                 const cName = (c.name || '').toLowerCase().trim()
-                return !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
+                return c.name?.toUpperCase().includes('KIYAVA') && !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
               })
-              setCompanies(cleanCompanies)
-              localStorage.setItem('ksv_kiyava_companies', JSON.stringify(cleanCompanies))
+              if (cleanCompanies.length > 0) {
+                setCompanies(cleanCompanies)
+                localStorage.setItem('ksv_kiyava_companies', JSON.stringify(cleanCompanies))
+              }
             }
             if (Array.isArray(dbMfg) && dbMfg.length > 0) {
               setManufacturingLogs(dbMfg)
@@ -618,42 +612,48 @@ export default function KiyavaPage() {
   }
 
   // Invoice Handlers
-  const handleSaveInvoice = (invoice: KiyavaInvoice, shouldPrint: boolean = false) => {
-    const exists = invoices.some((inv) => inv.id === invoice.id)
-    let updated: KiyavaInvoice[]
-    if (exists) {
-      updated = invoices.map((inv) => (inv.id === invoice.id ? invoice : inv))
-    } else {
-      updated = [invoice, ...invoices]
-    }
-    saveInvoices(updated)
+  const handleSaveInvoice = async (invoice: KiyavaInvoice, shouldPrint: boolean = false) => {
+    const isEditing = invoices.some((inv) => inv.id === invoice.id && !inv.id.startsWith('inv_'))
     setEditingInvoice(null)
 
-    // Sync to MongoDB database
+    let savedInvoice: KiyavaInvoice = { ...invoice }
+
+    // 1. Persist directly to Kiyava MongoDB database
     try {
-      if (exists) {
-        fetch(`${API_URL}/api/kiyava/invoices/${invoice.id}`, {
+      if (isEditing) {
+        const res = await fetch(`${API_URL}/api/kiyava/invoices/${invoice.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(invoice)
-        }).catch(() => {})
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
+        }
       } else {
-        fetch(`${API_URL}/api/kiyava/invoices`, {
+        const res = await fetch(`${API_URL}/api/kiyava/invoices`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(invoice)
-        }).catch(() => {})
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Could not save invoice to Kiyava database:', e)
+    }
 
-    // Auto-sync to KSV as PURCHASE if Kiyava is selling to KSV
+    const updatedInvoices = [savedInvoice, ...invoices.filter((inv) => inv.id !== invoice.id && inv.id !== savedInvoice.id)]
+    saveInvoices(updatedInvoices)
+
+    // 2. Auto-sync to KSV as PURCHASE if Kiyava is selling to KSV
     const buyerNameStr = (invoice.buyer?.name || '').toLowerCase()
-    if ((invoice.type || 'SALE') === 'SALE' && (buyerNameStr.includes('ksv') || buyerNameStr.includes('karan singh vaidh'))) {
+    if ((invoice.type || 'SALE') === 'SALE' && (buyerNameStr.includes('ksv') || buyerNameStr.includes('karan singh vaidh') || buyerNameStr.includes('karan'))) {
       try {
-        const ksvPurchaseId = `pur_ksv_${invoice.id || invoice.invoiceNo}`
-        const ksvPurchaseInvoice: KiyavaInvoice = {
+        const ksvPurchaseInvoice = {
           ...JSON.parse(JSON.stringify(invoice)),
-          id: ksvPurchaseId,
           type: 'PURCHASE',
           // Company (KSV receiving entity)
           company: {
@@ -695,54 +695,36 @@ export default function KiyavaPage() {
           }
         }
 
-        const ksvStored = localStorage.getItem('ksv_app_invoices')
-        const ksvInvoices = ksvStored ? JSON.parse(ksvStored) : []
-        const existingIndex = ksvInvoices.findIndex((inv: any) => inv.id === ksvPurchaseId || (inv.invoiceNo === invoice.invoiceNo && inv.type === 'PURCHASE'))
-        if (existingIndex >= 0) {
-          ksvInvoices[existingIndex] = ksvPurchaseInvoice
-        } else {
-          ksvInvoices.unshift(ksvPurchaseInvoice)
-        }
-        localStorage.setItem('ksv_app_invoices', JSON.stringify(ksvInvoices))
-
-        // Save to MongoDB database for KSV
-        fetch(`${API_URL}/api/ksv/invoices`, {
+        // Save directly to KSV MongoDB Database
+        const ksvRes = await fetch(`${API_URL}/api/ksv/invoices`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(ksvPurchaseInvoice)
-        }).catch(() => {})
+        })
 
-        // Also sync products to KSV catalog so they appear in Live Stock
-        const ksvCatalogStored = localStorage.getItem('ksv_app_catalog')
-        const ksvCatalog = ksvCatalogStored ? JSON.parse(ksvCatalogStored) : [...DEFAULT_KSV_CATALOG]
-        
-        let catalogChanged = false
-        invoice.items.forEach(item => {
-          if (!ksvCatalog.some((c: any) => c.name.toLowerCase() === item.description.toLowerCase())) {
-            const newCatItem = {
-              id: `cat_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        // Also update KSV local storage so it shows immediately if opened
+        const ksvStored = localStorage.getItem('ksv_app_invoices')
+        const ksvInvoices = ksvStored ? JSON.parse(ksvStored) : []
+        const ksvSaved = ksvRes.ok ? await ksvRes.json() : ksvPurchaseInvoice
+        const updatedKsv = [ksvSaved, ...ksvInvoices.filter((inv: any) => inv.invoiceNo !== invoice.invoiceNo || inv.type !== 'PURCHASE')]
+        localStorage.setItem('ksv_app_invoices', JSON.stringify(updatedKsv))
+
+        // Also sync products to KSV catalog in MongoDB
+        for (const item of invoice.items) {
+          await fetch(`${API_URL}/api/ksv/catalog`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
               name: item.description,
               hsnCode: item.hsnSac || '',
               defaultUnit: item.unit || 'kg',
-              defaultRate: item.rate || 0,
-              defaultTaxRate: item.taxRate || 0,
+              defaultRate: Number(item.rate) || 0,
+              defaultTaxRate: Number(item.taxRate) || 0,
               category: 'herb',
               description: 'Auto-added from Kiyava purchase',
               quantity: Number(item.quantity) || 0
-            }
-            ksvCatalog.push(newCatItem)
-            catalogChanged = true
-
-            fetch(`${API_URL}/api/ksv/catalog`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(newCatItem)
-            }).catch(() => {})
-          }
-        })
-        
-        if (catalogChanged) {
-          localStorage.setItem('ksv_app_catalog', JSON.stringify(ksvCatalog))
+            })
+          }).catch(() => {})
         }
       } catch (e) {
         console.error('Failed to auto-sync purchase to KSV', e)
@@ -750,7 +732,7 @@ export default function KiyavaPage() {
     }
 
     if (shouldPrint) {
-      setSelectedInvoiceForPrint(invoice)
+      setSelectedInvoiceForPrint(savedInvoice)
     } else {
       setActiveTab('invoices')
     }

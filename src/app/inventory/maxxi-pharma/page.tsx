@@ -188,8 +188,7 @@ export default function MaxxiPharmaPage() {
       }
       parsedCatalog = (parsedCatalog || []).filter((item: any) => {
         const id = (item.id || '').toLowerCase().trim()
-        const name = (item.name || '').toLowerCase().trim()
-        return !deletedCatalog.has(id) && !deletedCatalog.has(name)
+        return !deletedCatalog.has(id)
       })
       setCatalog(parsedCatalog)
 
@@ -203,10 +202,10 @@ export default function MaxxiPharmaPage() {
         }
       }
       parsedInvoices = (parsedInvoices || []).filter((inv: any) => {
-        const invNo = (inv.invoiceNo || '').toLowerCase().trim()
         const id = (inv.id || '').toLowerCase().trim()
+        const invNo = (inv.invoiceNo || '').toLowerCase().trim()
         const isDummy = invNo === 'mxp/2026/012'
-        return !isDummy && !deletedInvoices.has(id) && !deletedInvoices.has(invNo)
+        return !isDummy && !deletedInvoices.has(id)
       })
       setInvoices(parsedInvoices)
       localStorage.setItem('maxxi_app_invoices', JSON.stringify(parsedInvoices))
@@ -366,11 +365,11 @@ export default function MaxxiPharmaPage() {
   }
 
   // Invoice Handlers
-  const handleSaveInvoice = (invoice: KiyavaInvoice, shouldPrint: boolean = false) => {
-    const exists = invoices.some((inv) => inv.id === invoice.id)
+  const handleSaveInvoice = async (invoice: KiyavaInvoice, shouldPrint: boolean = false) => {
+    const isEditing = invoices.some((inv) => inv.id === invoice.id && !inv.id.startsWith('inv_'))
 
     // Adjust inventory dynamically
-    if (!exists) {
+    if (!isEditing) {
       let updatedCatalog = [...catalog];
       invoice.items.forEach(item => {
         const catalogItemIndex = updatedCatalog.findIndex(c => c.name === item.description);
@@ -385,37 +384,41 @@ export default function MaxxiPharmaPage() {
       saveCatalog(updatedCatalog);
     }
 
-    let updated: KiyavaInvoice[]
-    if (exists) {
-      updated = invoices.map((inv) => (inv.id === invoice.id ? invoice : inv))
-    } else {
-      updated = [invoice, ...invoices]
-    }
+    let savedInvoice: KiyavaInvoice = { ...invoice }
+    // Sync to backend MongoDB database
+    try {
+      if (isEditing) {
+        const res = await fetch(`${API_URL}/api/maxxi/invoices/${invoice.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
+        }
+      } else {
+        const res = await fetch(`${API_URL}/api/maxxi/invoices`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
+        }
+      }
+    } catch (e) {}
+
+    const updated = [savedInvoice, ...invoices.filter((inv) => inv.id !== invoice.id && inv.id !== savedInvoice.id)]
     saveInvoices(updated)
     setEditingInvoice(null)
 
     if (shouldPrint) {
-      setSelectedInvoiceForPrint(invoice)
+      setSelectedInvoiceForPrint(savedInvoice)
     } else {
       setActiveTab('invoices')
     }
-
-    // Sync to backend database
-    try {
-      if (exists) {
-        fetch(`${API_URL}/api/maxxi/invoices/${invoice.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(invoice)
-        }).catch(() => {})
-      } else {
-        fetch(`${API_URL}/api/maxxi/invoices`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(invoice)
-        }).catch(() => {})
-      }
-    } catch (e) {}
   }
 
   const handleDeleteInvoice = (id: string) => {

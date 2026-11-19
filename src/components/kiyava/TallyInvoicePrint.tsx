@@ -15,132 +15,112 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
   const [zoomLevel, setZoomLevel] = useState<number>(100)
   const [copiedLink, setCopiedLink] = useState(false)
 
-  // Determine if this is a Purchase Voucher of Karan Singh Vaidh (e.g. KSV purchasing from Maxxi or Kiyava)
-  // ONLY for genuine PURCHASE invoices where KSV is the purchaser.
-  // SALE invoices must NEVER be inverted: Seller is at the top banner, Buyer is in Party / Billed To!
-  const isKsvPurchaseVoucher =
-    invoice.type === 'PURCHASE' &&
-    (Boolean(invoice.buyer?.name?.toUpperCase().includes('KARAN') || invoice.buyer?.name?.toUpperCase().includes('KSV')) ||
-     Boolean(invoice.company?.name?.toUpperCase().includes('KARAN') || invoice.company?.name?.toUpperCase().includes('KSV')))
-
-  // Top Header Company Profile
+  // Determine issuing company (Seller in SALE, or Receiving company in PURCHASE)
+  const compName = (invoice.company?.name || '').toUpperCase()
   let headerCompany: any
-  if (isKsvPurchaseVoucher) {
+  if (compName.includes('KIYAVA')) {
     headerCompany = {
-      name: 'KARAN SINGH VAIDH',
-      tagline: 'Specialized Medical Care & Ayurvedic OPD Clinic',
-      phone: '98160 12345',
-      gstin: '02DFBPS6121B2Z2',
-      addressLine1: 'VILL- RADIYANA, PO SUBATHU',
-      addressLine2: 'TEH & DISTT - SOLAN',
-      city: 'Solan',
-      state: 'Himachal Pradesh',
-      stateCode: '02',
-      pincode: '173206',
-      bankName: 'HDFC Bank',
-      branch: 'Solan Branch',
-      accountNo: '50200049281729',
-      ifscCode: 'HDFC0001423'
+      name: 'KIYAVA',
+      tagline: invoice.company?.tagline || 'Herbal & Ayurvedic Raw Material Supplies',
+      phone: invoice.company?.phone || '78076 22577',
+      gstin: invoice.company?.gstin || '02DFBPS6121B1Z3',
+      addressLine1: invoice.company?.addressLine1 || 'Upper Thari, Near M.G. Steel Hardware',
+      addressLine2: invoice.company?.addressLine2 || 'Subathu Main Road, Subathu Chowk',
+      city: invoice.company?.city || 'Sabathu, Solan',
+      state: invoice.company?.state || 'Himachal Pradesh',
+      stateCode: invoice.company?.stateCode || '02',
+      pincode: invoice.company?.pincode || '173206',
+      bankName: invoice.company?.bankName || 'State Bank of India',
+      branch: invoice.company?.branch || 'Subathu Branch, Solan',
+      accountNo: invoice.company?.accountNo || '38920194821',
+      ifscCode: invoice.company?.ifscCode || 'SBIN0001234'
+    }
+  } else if (compName.includes('MAXXI')) {
+    headerCompany = {
+      name: 'MAXXI PHARMA PVT. LTD.',
+      tagline: invoice.company?.tagline || 'Pharmaceutical Manufacturing & Healthcare Formulations',
+      phone: invoice.company?.phone || '01792-234890 / 98160 54321',
+      gstin: invoice.company?.gstin || '02AAACM8821F1Z9',
+      addressLine1: invoice.company?.addressLine1 || 'Plot No. 45, Industrial Area Phase 1',
+      addressLine2: invoice.company?.addressLine2 || 'Near ESI Hospital, Solan',
+      city: invoice.company?.city || 'Solan',
+      state: invoice.company?.state || 'Himachal Pradesh',
+      stateCode: invoice.company?.stateCode || '02',
+      pincode: invoice.company?.pincode || '173212',
+      bankName: invoice.company?.bankName || 'ICICI Bank',
+      branch: invoice.company?.branch || 'Mall Road, Solan',
+      accountNo: invoice.company?.accountNo || '034105009812',
+      ifscCode: invoice.company?.ifscCode || 'ICIC0000341'
     }
   } else {
-    const compName = (invoice.company?.name || '').toUpperCase()
-    if (compName.includes('KIYAVA')) {
-      headerCompany = {
-        name: 'KIYAVA',
-        tagline: invoice.company?.tagline || 'Herbal & Ayurvedic Raw Material Supplies',
-        phone: invoice.company?.phone || '78076 22577',
-        gstin: invoice.company?.gstin || '02DFBPS6121B1Z3',
-        addressLine1: invoice.company?.addressLine1 || 'Upper Thari, Near M.G. Steel Hardware',
-        addressLine2: invoice.company?.addressLine2 || 'Subathu Main Road, Subathu Chowk',
-        city: invoice.company?.city || 'Sabathu, Solan',
-        state: invoice.company?.state || 'Himachal Pradesh',
-        stateCode: invoice.company?.stateCode || '02',
-        pincode: invoice.company?.pincode || '173206',
-        bankName: invoice.company?.bankName || 'State Bank of India',
-        branch: invoice.company?.branch || 'Subathu Branch, Solan',
-        accountNo: invoice.company?.accountNo || '38920194821',
-        ifscCode: invoice.company?.ifscCode || 'SBIN0001234'
-      }
-    } else if (compName.includes('MAXXI')) {
-      headerCompany = {
-        name: 'MAXXI PHARMA PVT. LTD.',
-        tagline: invoice.company?.tagline || 'Pharmaceutical Manufacturing & Healthcare Formulations',
-        phone: invoice.company?.phone || '01792-234890 / 98160 54321',
-        gstin: invoice.company?.gstin || '02AAACM8821F1Z9',
-        addressLine1: invoice.company?.addressLine1 || 'Plot No. 45, Industrial Area Phase 1',
-        addressLine2: invoice.company?.addressLine2 || 'Near ESI Hospital, Solan',
-        city: invoice.company?.city || 'Solan',
-        state: invoice.company?.state || 'Himachal Pradesh',
-        stateCode: invoice.company?.stateCode || '02',
-        pincode: invoice.company?.pincode || '173212',
-        bankName: invoice.company?.bankName || 'ICICI Bank',
-        branch: invoice.company?.branch || 'Mall Road, Solan',
-        accountNo: invoice.company?.accountNo || '034105009812',
-        ifscCode: invoice.company?.ifscCode || 'ICIC0000341'
-      }
-    } else {
-      headerCompany = {
-        name: invoice.company?.name ? invoice.company.name.replace(' (KSV)', '') : 'KARAN SINGH VAIDH',
-        tagline: invoice.company?.tagline || 'Specialized Medical Care & Ayurvedic OPD Clinic',
-        phone: invoice.company?.phone || '98160 12345',
-        gstin: invoice.company?.gstin || '02DFBPS6121B2Z2',
-        addressLine1: invoice.company?.addressLine1 || 'VILL- RADIYANA, PO SUBATHU',
-        addressLine2: invoice.company?.addressLine2 || 'TEH & DISTT - SOLAN',
-        city: invoice.company?.city || 'Solan',
-        state: invoice.company?.state || 'Himachal Pradesh',
-        stateCode: invoice.company?.stateCode || '02',
-        pincode: invoice.company?.pincode || '173206',
-        bankName: invoice.company?.bankName || 'HDFC Bank',
-        branch: invoice.company?.branch || 'Solan Branch',
-        accountNo: invoice.company?.accountNo || '50200049281729',
-        ifscCode: invoice.company?.ifscCode || 'HDFC0001423'
-      }
+    headerCompany = {
+      name: invoice.company?.name ? invoice.company.name.replace(' (KSV)', '') : 'KARAN SINGH VAIDH',
+      tagline: invoice.company?.tagline || 'Specialized Medical Care & Ayurvedic OPD Clinic',
+      phone: invoice.company?.phone || '98160 12345',
+      gstin: invoice.company?.gstin || '02DFBPS6121B2Z2',
+      addressLine1: invoice.company?.addressLine1 || 'VILL- RADIYANA, PO SUBATHU',
+      addressLine2: invoice.company?.addressLine2 || 'TEH & DISTT - SOLAN',
+      city: invoice.company?.city || 'Solan',
+      state: invoice.company?.state || 'Himachal Pradesh',
+      stateCode: invoice.company?.stateCode || '02',
+      pincode: invoice.company?.pincode || '173206',
+      bankName: invoice.company?.bankName || 'HDFC Bank',
+      branch: invoice.company?.branch || 'Solan Branch',
+      accountNo: invoice.company?.accountNo || '50200049281729',
+      ifscCode: invoice.company?.ifscCode || 'HDFC0001423'
     }
   }
 
-  // Party / Billed To Profile (Supplier in purchase vouchers, or Buyer in sales)
+  // Party / Billed To Profile (Customer in SALE, or Supplier in PURCHASE)
   let billedParty: any
-  if (isKsvPurchaseVoucher) {
-    const vendorObj = (invoice.company?.name?.toUpperCase().includes('KARAN') || invoice.company?.name?.toUpperCase().includes('KSV'))
-      ? invoice.buyer
-      : invoice.company
+  const buyerName = (invoice.buyer?.name || '').toUpperCase()
+  if (buyerName.includes('KARAN') || buyerName.includes('KSV')) {
     billedParty = {
-      name: vendorObj?.name || 'MAXXI PHARMA PVT. LTD.',
-      addressLine1: vendorObj?.addressLine1 || 'Plot No. 45, Industrial Area Phase 1',
-      addressLine2: vendorObj?.addressLine2 || 'Near ESI Hospital, Solan',
-      city: vendorObj?.city || 'Solan',
-      state: vendorObj?.state || 'Himachal Pradesh',
-      stateCode: vendorObj?.stateCode || '02',
-      pincode: vendorObj?.pincode || '173212',
-      phone: vendorObj?.phone || '01792-234890 / 98160 54321',
-      gstin: vendorObj?.gstin || '02AAACM8821F1Z9'
+      name: 'KARAN SINGH VAIDH (KSV)',
+      addressLine1: invoice.buyer?.addressLine1 || 'VILL- RADIYANA, PO SUBATHU',
+      addressLine2: invoice.buyer?.addressLine2 || 'TEH & DISTT - SOLAN',
+      city: invoice.buyer?.city || 'Solan',
+      state: invoice.buyer?.state || 'Himachal Pradesh',
+      stateCode: invoice.buyer?.stateCode || '02',
+      pincode: invoice.buyer?.pincode || '173206',
+      phone: invoice.buyer?.phone || '98160 12345',
+      gstin: invoice.buyer?.gstin || '02DFBPS6121B2Z2'
+    }
+  } else if (buyerName.includes('KIYAVA')) {
+    billedParty = {
+      name: 'KIYAVA',
+      addressLine1: invoice.buyer?.addressLine1 || 'Upper Thari, Near M.G. Steel Hardware',
+      addressLine2: invoice.buyer?.addressLine2 || 'Subathu Main Road, Subathu Chowk',
+      city: invoice.buyer?.city || 'Sabathu, Solan',
+      state: invoice.buyer?.state || 'Himachal Pradesh',
+      stateCode: invoice.buyer?.stateCode || '02',
+      pincode: invoice.buyer?.pincode || '173206',
+      phone: invoice.buyer?.phone || '78076 22577',
+      gstin: invoice.buyer?.gstin || '02DFBPS6121B1Z3'
+    }
+  } else if (buyerName.includes('MAXXI')) {
+    billedParty = {
+      name: 'MAXXI PHARMA PVT. LTD.',
+      addressLine1: invoice.buyer?.addressLine1 || 'Plot No. 45, Industrial Area Phase 1',
+      addressLine2: invoice.buyer?.addressLine2 || 'Near ESI Hospital, Solan',
+      city: invoice.buyer?.city || 'Solan',
+      state: invoice.buyer?.state || 'Himachal Pradesh',
+      stateCode: invoice.buyer?.stateCode || '02',
+      pincode: invoice.buyer?.pincode || '173212',
+      phone: invoice.buyer?.phone || '01792-234890 / 98160 54321',
+      gstin: invoice.buyer?.gstin || '02AAACM8821F1Z9'
     }
   } else {
-    const buyerName = invoice.buyer?.name || ''
-    if (buyerName.toUpperCase().includes('KARAN') || buyerName.toUpperCase().includes('KSV')) {
-      billedParty = {
-        name: 'KARAN SINGH VAIDH (KSV)',
-        addressLine1: invoice.buyer?.addressLine1 || 'VILL- RADIYANA, PO SUBATHU',
-        addressLine2: invoice.buyer?.addressLine2 || 'TEH & DISTT - SOLAN',
-        city: invoice.buyer?.city || 'Solan',
-        state: invoice.buyer?.state || 'Himachal Pradesh',
-        stateCode: invoice.buyer?.stateCode || '02',
-        pincode: invoice.buyer?.pincode || '173206',
-        phone: invoice.buyer?.phone || '78076 22577',
-        gstin: invoice.buyer?.gstin || '02DFBPS6121B2Z2'
-      }
-    } else {
-      billedParty = {
-        name: invoice.buyer?.name,
-        addressLine1: invoice.buyer?.addressLine1,
-        addressLine2: invoice.buyer?.addressLine2,
-        city: invoice.buyer?.city,
-        state: invoice.buyer?.state,
-        stateCode: invoice.buyer?.stateCode,
-        pincode: invoice.buyer?.pincode,
-        phone: invoice.buyer?.phone,
-        gstin: invoice.buyer?.gstin
-      }
+    billedParty = {
+      name: invoice.buyer?.name || 'Cash / Counter Customer',
+      addressLine1: invoice.buyer?.addressLine1 || '',
+      addressLine2: invoice.buyer?.addressLine2 || '',
+      city: invoice.buyer?.city || 'Solan',
+      state: invoice.buyer?.state || 'Himachal Pradesh',
+      stateCode: invoice.buyer?.stateCode || '02',
+      pincode: invoice.buyer?.pincode || '',
+      phone: invoice.buyer?.phone || '',
+      gstin: invoice.buyer?.gstin || 'URP'
     }
   }
 

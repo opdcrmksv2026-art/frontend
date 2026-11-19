@@ -164,8 +164,7 @@ export default function KsvPage() {
       let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : []
       parsedCatalog = parsedCatalog.filter((c: any) => {
         const id = (c.id || '').toLowerCase().trim()
-        const name = (c.name || '').toLowerCase().trim()
-        return !c.id.startsWith('cat_ksv_') && !deletedCatalog.has(id) && !deletedCatalog.has(name)
+        return !deletedCatalog.has(id)
       })
       if (storedMfgLogs) {
         const parsedLogs = JSON.parse(storedMfgLogs)
@@ -240,8 +239,7 @@ export default function KsvPage() {
             if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
               const cleanCatalog = dbCatalog.filter((item) => {
                 const id = (item.id || '').toLowerCase().trim()
-                const name = (item.name || '').toLowerCase().trim()
-                return !deletedCatalog.has(id) && !deletedCatalog.has(name)
+                return !deletedCatalog.has(id)
               })
               setCatalog(cleanCatalog)
               localStorage.setItem('ksv_app_catalog', JSON.stringify(cleanCatalog))
@@ -270,8 +268,7 @@ export default function KsvPage() {
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
               const cleanInvoices = dbInvoices.filter((inv: any) => {
                 const id = (inv.id || '').toLowerCase().trim()
-                const invNo = (inv.invoiceNo || '').toLowerCase().trim()
-                return !deletedInvoices.has(id) && !deletedInvoices.has(invNo)
+                return !deletedInvoices.has(id)
               })
               setInvoices(cleanInvoices)
               localStorage.setItem('ksv_app_invoices', JSON.stringify(cleanInvoices))
@@ -388,33 +385,9 @@ export default function KsvPage() {
   }
 
   // Invoice Handlers
-  const handleSaveInvoice = (invoice: KiyavaInvoice, shouldPrint: boolean = false) => {
+  const handleSaveInvoice = async (invoice: KiyavaInvoice, shouldPrint: boolean = false) => {
     const exists = invoices.some((inv) => inv.id === invoice.id)
-    let updated: KiyavaInvoice[]
-    if (exists) {
-      updated = invoices.map((inv) => (inv.id === invoice.id ? invoice : inv))
-    } else {
-      updated = [invoice, ...invoices]
-    }
-    saveInvoices(updated)
     setEditingInvoice(null)
-
-    // Sync to MongoDB Atlas database
-    try {
-      if (exists) {
-        fetch(`${API_URL}/api/ksv/invoices/${invoice.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(invoice)
-        }).catch(() => {})
-      } else {
-        fetch(`${API_URL}/api/ksv/invoices`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(invoice)
-        }).catch(() => {})
-      }
-    } catch (e) {}
 
     // Auto-sync to Maxxi Pharma as PURCHASE if KSV is selling to Maxxi
     const buyerNameStr = (invoice.buyer?.name || '').toLowerCase()
@@ -477,7 +450,7 @@ export default function KsvPage() {
         localStorage.setItem('maxxi_app_invoices', JSON.stringify(maxxiInvoices))
 
         // 2. CRITICAL: Save to MongoDB Atlas (/api/maxxi/invoices) so it is permanent!
-        fetch(`${API_URL}/api/maxxi/invoices`, {
+        await fetch(`${API_URL}/api/maxxi/invoices`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(maxxiPurchaseInvoice)
@@ -488,7 +461,7 @@ export default function KsvPage() {
         const maxxiCatalog = maxxiCatalogStored ? JSON.parse(maxxiCatalogStored) : []
 
         let catalogChanged = false
-        invoice.items.forEach(item => {
+        for (const item of invoice.items) {
           if (!maxxiCatalog.some((c: any) => c.name.toLowerCase() === item.description.toLowerCase())) {
             const newCatItem = {
               id: `cat_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -505,13 +478,13 @@ export default function KsvPage() {
             catalogChanged = true
 
             // Sync to Maxxi catalog in MongoDB
-            fetch(`${API_URL}/api/maxxi/catalog`, {
+            await fetch(`${API_URL}/api/maxxi/catalog`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(newCatItem)
             }).catch(() => {})
           }
-        })
+        }
 
         if (catalogChanged) {
           localStorage.setItem('maxxi_app_catalog', JSON.stringify(maxxiCatalog))
@@ -521,25 +494,37 @@ export default function KsvPage() {
       }
     }
 
+    let savedInvoice: KiyavaInvoice = { ...invoice }
     // Persist to MongoDB database
     try {
       if (exists) {
-        fetch(`${API_URL}/api/ksv/invoices/${invoice.id}`, {
+        const res = await fetch(`${API_URL}/api/ksv/invoices/${invoice.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(invoice)
-        }).catch(() => {})
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
+        }
       } else {
-        fetch(`${API_URL}/api/ksv/invoices`, {
+        const res = await fetch(`${API_URL}/api/ksv/invoices`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(invoice)
-        }).catch(() => {})
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
+        }
       }
     } catch (e) {}
 
+    const updated = [savedInvoice, ...invoices.filter((inv) => inv.id !== invoice.id && inv.id !== savedInvoice.id)]
+    saveInvoices(updated)
+
     if (shouldPrint) {
-      setSelectedInvoiceForPrint(invoice)
+      setSelectedInvoiceForPrint(savedInvoice)
     } else {
       setActiveTab('invoices')
       setInvoiceSummaryType((invoice.type || 'SALE') as any)
