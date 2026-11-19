@@ -359,6 +359,23 @@ export default function KsvPage() {
     saveInvoices(updated)
     setEditingInvoice(null)
 
+    // Sync to MongoDB Atlas database
+    try {
+      if (exists) {
+        fetch(`${API_URL}/api/ksv/invoices/${invoice.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        }).catch(() => {})
+      } else {
+        fetch(`${API_URL}/api/ksv/invoices`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoice)
+        }).catch(() => {})
+      }
+    } catch (e) {}
+
     // Auto-sync to Maxxi Pharma as PURCHASE if KSV is selling to Maxxi
     const buyerNameStr = invoice.buyer.name.toLowerCase()
     if ((invoice.type || 'SALE') === 'SALE' && (buyerNameStr.includes('maxxi') || buyerNameStr.includes('maxi'))) {

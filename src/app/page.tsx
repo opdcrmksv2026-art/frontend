@@ -335,8 +335,9 @@ export default function Home() {
             const data = await results[0].value.json()
             const pList = Array.isArray(data) ? data : (data.patients || [])
             pList.forEach((p: any) => {
-              if (p.history && Array.isArray(p.history)) {
-                p.history.forEach((h: any, i: number) => {
+              const visits = p.orders || p.history || []
+              if (Array.isArray(visits)) {
+                visits.forEach((h: any, i: number) => {
                   const invNo = h.invoiceNo || `PT-${p.uniqueId || i}`
                   if (recordsMap.has(invNo) || deletedNos.has(invNo)) return
 
