@@ -700,8 +700,6 @@ export default function KiyavaPage() {
             }).catch(() => {})
           }
         })
-          }
-        })
         
         if (catalogChanged) {
           localStorage.setItem('ksv_app_catalog', JSON.stringify(ksvCatalog))
