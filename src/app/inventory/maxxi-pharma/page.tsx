@@ -142,14 +142,40 @@ export default function MaxxiPharmaPage() {
   // Load Initial Data from localStorage or clean defaults
   useEffect(() => {
     try {
+      const deletedParties = new Set(
+        (JSON.parse(localStorage.getItem('maxxi_deleted_parties') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+      const deletedCompanies = new Set(
+        (JSON.parse(localStorage.getItem('maxxi_deleted_companies') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+      const deletedCatalog = new Set(
+        (JSON.parse(localStorage.getItem('maxxi_deleted_catalog') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+      const deletedInvoices = new Set(
+        (JSON.parse(localStorage.getItem('maxxi_deleted_invoices') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+
       const storedCompanies = localStorage.getItem('maxxi_app_companies')
       const storedParties = localStorage.getItem('maxxi_app_parties')
       const storedCatalog = localStorage.getItem('maxxi_app_catalog')
       const storedInvoices = localStorage.getItem('maxxi_app_invoices')
       const storedOpeningStock = localStorage.getItem('maxxi_app_opening_stock')
 
-      setCompanies(storedCompanies !== null ? JSON.parse(storedCompanies) : DEFAULT_MAXXI_COMPANIES)
-      setParties(storedParties !== null ? JSON.parse(storedParties) : DEFAULT_MAXXI_PARTIES)
+      let initialCompanies = storedCompanies !== null ? JSON.parse(storedCompanies) : DEFAULT_MAXXI_COMPANIES
+      initialCompanies = (initialCompanies || []).filter((c: any) => {
+        const cId = (c.id || '').toLowerCase().trim()
+        const cName = (c.name || '').toLowerCase().trim()
+        return !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
+      })
+      setCompanies(initialCompanies)
+
+      let initialParties = storedParties !== null ? JSON.parse(storedParties) : DEFAULT_MAXXI_PARTIES
+      initialParties = (initialParties || []).filter((p: any) => {
+        const pId = (p.id || '').toLowerCase().trim()
+        const pName = (p.name || '').toLowerCase().trim()
+        return !deletedParties.has(pId) && !deletedParties.has(pName)
+      })
+      setParties(initialParties)
 
       // Automatic dummy catalog purge - Strip out all seeded/dummy items
       let parsedCatalog: CatalogItem[] = []
@@ -160,8 +186,11 @@ export default function MaxxiPharmaPage() {
           parsedCatalog = []
         }
       }
-
-      // Preserve catalog items entered or stored
+      parsedCatalog = (parsedCatalog || []).filter((item: any) => {
+        const id = (item.id || '').toLowerCase().trim()
+        const name = (item.name || '').toLowerCase().trim()
+        return !deletedCatalog.has(id) && !deletedCatalog.has(name)
+      })
       setCatalog(parsedCatalog)
 
       // Automatic dummy invoices purge - Strip out any test/seeded invoices
@@ -173,10 +202,11 @@ export default function MaxxiPharmaPage() {
           parsedInvoices = []
         }
       }
-      parsedInvoices = (parsedInvoices || []).filter((inv) => {
-        const invNo = inv.invoiceNo || ''
-        const isDummy = invNo === 'MXP/2026/012'
-        return !isDummy
+      parsedInvoices = (parsedInvoices || []).filter((inv: any) => {
+        const invNo = (inv.invoiceNo || '').toLowerCase().trim()
+        const id = (inv.id || '').toLowerCase().trim()
+        const isDummy = invNo === 'mxp/2026/012'
+        return !isDummy && !deletedInvoices.has(id) && !deletedInvoices.has(invNo)
       })
       setInvoices(parsedInvoices)
       localStorage.setItem('maxxi_app_invoices', JSON.stringify(parsedInvoices))
@@ -204,8 +234,9 @@ export default function MaxxiPharmaPage() {
           ) => {
             if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
               const cleanCatalog = dbCatalog.filter((item) => {
-                const id = item.id || ''
-                return !id.startsWith('cat_mx_') && !id.startsWith('cat_sync_')
+                const id = (item.id || '').toLowerCase().trim()
+                const name = (item.name || '').toLowerCase().trim()
+                return !id.startsWith('cat_mx_') && !id.startsWith('cat_sync_') && !deletedCatalog.has(id) && !deletedCatalog.has(name)
               })
               setCatalog(cleanCatalog)
               localStorage.setItem('maxxi_app_catalog', JSON.stringify(cleanCatalog))
@@ -231,11 +262,14 @@ export default function MaxxiPharmaPage() {
             }
 
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
-              const cleanInvoices = dbInvoices.filter((inv) => inv.invoiceNo !== 'MXP/2026/012')
+              const cleanInvoices = dbInvoices.filter((inv) => {
+                const invNo = (inv.invoiceNo || '').toLowerCase().trim()
+                const id = (inv.id || '').toLowerCase().trim()
+                return inv.invoiceNo !== 'MXP/2026/012' && !deletedInvoices.has(id) && !deletedInvoices.has(invNo)
+              })
               setInvoices(cleanInvoices)
               localStorage.setItem('maxxi_app_invoices', JSON.stringify(cleanInvoices))
             } else if (Array.isArray(dbInvoices) && dbInvoices.length === 0 && parsedInvoices.length > 0) {
-              // If DB is clean but user entered invoices in localStorage, persist them up to MongoDB!
               Promise.allSettled(
                 parsedInvoices.map((inv) =>
                   fetch(`${API_URL}/api/maxxi/invoices`, {
@@ -248,19 +282,23 @@ export default function MaxxiPharmaPage() {
             }
 
             if (Array.isArray(dbParties) && dbParties.length > 0) {
-              const merged = [...dbParties]
-              DEFAULT_MAXXI_PARTIES.forEach(dp => {
-                if (!merged.some(p => p.name.trim().toLowerCase() === dp.name.trim().toLowerCase())) {
-                  merged.push(dp)
-                }
+              const cleanParties = dbParties.filter(p => {
+                const pId = (p.id || '').toLowerCase().trim()
+                const pName = (p.name || '').toLowerCase().trim()
+                return !deletedParties.has(pId) && !deletedParties.has(pName)
               })
-              setParties(merged)
-              localStorage.setItem('maxxi_app_parties', JSON.stringify(merged))
+              setParties(cleanParties)
+              localStorage.setItem('maxxi_app_parties', JSON.stringify(cleanParties))
             }
 
             if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
-              setCompanies(dbCompanies)
-              localStorage.setItem('maxxi_app_companies', JSON.stringify(dbCompanies))
+              const cleanCompanies = dbCompanies.filter(c => {
+                const cId = (c.id || '').toLowerCase().trim()
+                const cName = (c.name || '').toLowerCase().trim()
+                return !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
+              })
+              setCompanies(cleanCompanies)
+              localStorage.setItem('maxxi_app_companies', JSON.stringify(cleanCompanies))
             }
           }
 
@@ -382,7 +420,7 @@ export default function MaxxiPharmaPage() {
 
   const handleDeleteInvoice = (id: string) => {
     if (confirm('Are you sure you want to delete this invoice from Maxxi Pharma ledger?')) {
-      const invoiceToDelete = invoices.find(inv => inv.id === id);
+      const invoiceToDelete = invoices.find(inv => inv.id === id || inv.invoiceNo === id);
       if (invoiceToDelete) {
         let updatedCatalog = [...catalog];
         invoiceToDelete.items.forEach(item => {
@@ -399,12 +437,29 @@ export default function MaxxiPharmaPage() {
         saveCatalog(updatedCatalog);
       }
 
-      const updated = invoices.filter((inv) => inv.id !== id)
+      // If it is a synced clinic bill
+      if (id.startsWith('bill_')) {
+        const billInvNo = id.replace('bill_', '')
+        try {
+          const offlineBills = JSON.parse(localStorage.getItem('ksv_offline_bills') || '[]')
+          const filtered = offlineBills.filter((b: any) => b.invoiceNo !== billInvNo && b.id !== billInvNo)
+          localStorage.setItem('ksv_offline_bills', JSON.stringify(filtered))
+        } catch (e) {}
+      }
+
+      const updated = invoices.filter((inv) => inv.id !== id && inv.invoiceNo !== id)
       saveInvoices(updated)
 
-      // Delete from backend database
       try {
-        fetch(`${API_URL}/api/maxxi/invoices/${id}`, { method: 'DELETE' }).catch(() => {})
+        const deleted = JSON.parse(localStorage.getItem('maxxi_deleted_invoices') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (invoiceToDelete?.invoiceNo && !deleted.includes(invoiceToDelete.invoiceNo)) deleted.push(invoiceToDelete.invoiceNo)
+        localStorage.setItem('maxxi_deleted_invoices', JSON.stringify(deleted))
+
+        fetch(`${API_URL}/api/maxxi/invoices/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
+        if (invoiceToDelete?.invoiceNo) {
+          fetch(`${API_URL}/api/maxxi/invoices/${encodeURIComponent(invoiceToDelete.invoiceNo)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (e) {}
     }
   }
@@ -432,6 +487,13 @@ export default function MaxxiPharmaPage() {
       updated = [...companies, { ...company, id: company.id || `comp_${Date.now()}` }]
     }
     saveCompanies(updated)
+
+    try {
+      const deleted = JSON.parse(localStorage.getItem('maxxi_deleted_companies') || '[]')
+      const filtered = deleted.filter((d: string) => d !== company.id && d !== company.name)
+      localStorage.setItem('maxxi_deleted_companies', JSON.stringify(filtered))
+    } catch (e) {}
+
     setIsCompanyModalOpen(false)
     setEditingCompany(null)
   }
@@ -442,7 +504,21 @@ export default function MaxxiPharmaPage() {
       return
     }
     if (confirm('Delete this company profile?')) {
-      saveCompanies(companies.filter((c) => c.id !== id))
+      const compToDelete = companies.find((c) => c.id === id)
+      const updated = companies.filter((c) => c.id !== id)
+      saveCompanies(updated)
+
+      try {
+        const deleted = JSON.parse(localStorage.getItem('maxxi_deleted_companies') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (compToDelete?.name && !deleted.includes(compToDelete.name)) deleted.push(compToDelete.name)
+        localStorage.setItem('maxxi_deleted_companies', JSON.stringify(deleted))
+
+        fetch(`${API_URL}/api/maxxi/companies/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
+        if (compToDelete?.name) {
+          fetch(`${API_URL}/api/maxxi/companies/${encodeURIComponent(compToDelete.name)}`, { method: 'DELETE' }).catch(() => {})
+        }
+      } catch (e) {}
     }
   }
 
@@ -455,13 +531,34 @@ export default function MaxxiPharmaPage() {
       updated = [...parties, { ...party, id: party.id || `party_${Date.now()}` }]
     }
     saveParties(updated)
+
+    try {
+      const deleted = JSON.parse(localStorage.getItem('maxxi_deleted_parties') || '[]')
+      const filtered = deleted.filter((d: string) => d !== party.id && d !== party.name)
+      localStorage.setItem('maxxi_deleted_parties', JSON.stringify(filtered))
+    } catch (e) {}
+
     setIsPartyModalOpen(false)
     setEditingParty(null)
   }
 
   const handleDeleteParty = (id: string) => {
     if (confirm('Delete this party / buyer profile?')) {
-      saveParties(parties.filter((p) => p.id !== id))
+      const partyToDelete = parties.find((p) => p.id === id)
+      const updated = parties.filter((p) => p.id !== id)
+      saveParties(updated)
+
+      try {
+        const deleted = JSON.parse(localStorage.getItem('maxxi_deleted_parties') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (partyToDelete?.name && !deleted.includes(partyToDelete.name)) deleted.push(partyToDelete.name)
+        localStorage.setItem('maxxi_deleted_parties', JSON.stringify(deleted))
+
+        fetch(`${API_URL}/api/maxxi/parties/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
+        if (partyToDelete?.name) {
+          fetch(`${API_URL}/api/maxxi/parties/${encodeURIComponent(partyToDelete.name)}`, { method: 'DELETE' }).catch(() => {})
+        }
+      } catch (e) {}
     }
   }
 
@@ -478,6 +575,13 @@ export default function MaxxiPharmaPage() {
       updated = [...catalog, { ...item, id: item.id || `cat_${Date.now()}` }]
     }
     saveCatalog(updated)
+
+    try {
+      const deleted = JSON.parse(localStorage.getItem('maxxi_deleted_catalog') || '[]')
+      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name)
+      localStorage.setItem('maxxi_deleted_catalog', JSON.stringify(filtered))
+    } catch (e) {}
+
     setIsCatalogModalOpen(false)
     setEditingCatalogItem(null)
 
@@ -556,9 +660,19 @@ export default function MaxxiPharmaPage() {
 
   const handleDeleteCatalogItem = async (id: string) => {
     if (confirm('Delete this catalog product item?')) {
+      const itemToDelete = catalog.find((cat) => cat.id === id)
       saveCatalog(catalog.filter((cat) => cat.id !== id))
+
       try {
-        await fetch(`${API_URL}/api/maxxi/catalog/${id}`, { method: 'DELETE' })
+        const deleted = JSON.parse(localStorage.getItem('maxxi_deleted_catalog') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (itemToDelete?.name && !deleted.includes(itemToDelete.name)) deleted.push(itemToDelete.name)
+        localStorage.setItem('maxxi_deleted_catalog', JSON.stringify(deleted))
+
+        await fetch(`${API_URL}/api/maxxi/catalog/${encodeURIComponent(id)}`, { method: 'DELETE' })
+        if (itemToDelete?.name) {
+          await fetch(`${API_URL}/api/maxxi/catalog/${encodeURIComponent(itemToDelete.name)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (err) {
         console.warn('Could not delete catalog product from database:', err)
       }

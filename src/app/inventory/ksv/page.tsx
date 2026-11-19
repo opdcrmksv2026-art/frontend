@@ -123,6 +123,19 @@ export default function KsvPage() {
   // Load Initial Data from localStorage or clean defaults
   useEffect(() => {
     try {
+      const deletedParties = new Set(
+        (JSON.parse(localStorage.getItem('ksv_deleted_parties') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+      const deletedCompanies = new Set(
+        (JSON.parse(localStorage.getItem('ksv_deleted_companies') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+      const deletedCatalog = new Set(
+        (JSON.parse(localStorage.getItem('ksv_deleted_catalog') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+      const deletedInvoices = new Set(
+        (JSON.parse(localStorage.getItem('ksv_deleted_invoices') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+
       const storedCompanies = localStorage.getItem('ksv_app_companies_v2')
       const storedParties = localStorage.getItem('ksv_app_parties')
       const storedCatalog = localStorage.getItem('ksv_app_catalog')
@@ -131,22 +144,29 @@ export default function KsvPage() {
       const storedMfgLogs = localStorage.getItem('ksv_app_manufacturing')
       const storedTransfers = localStorage.getItem('ksv_app_stock_transfers')
 
-      setCompanies(storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_KSV_COMPANIES)
+      let initialCompanies = storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_KSV_COMPANIES
+      initialCompanies = (initialCompanies || []).filter((c: any) => {
+        const cId = (c.id || '').toLowerCase().trim()
+        const cName = (c.name || '').toLowerCase().trim()
+        return !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
+      })
+      setCompanies(initialCompanies)
 
-      // Migration: Ensure MAXXI PHARMA exists in parties if it was missed in older localStorage
       let parsedParties = storedParties ? JSON.parse(storedParties) : DEFAULT_KSV_PARTIES
-      if (!parsedParties.some((p: any) => p.id === 'party_maxxi')) {
-        const maxxi = DEFAULT_KSV_PARTIES.find(p => p.id === 'party_maxxi')
-        if (maxxi) {
-          parsedParties.push(maxxi)
-          localStorage.setItem('ksv_app_parties', JSON.stringify(parsedParties))
-        }
-      }
+      parsedParties = (parsedParties || []).filter((p: any) => {
+        const pId = (p.id || '').toLowerCase().trim()
+        const pName = (p.name || '').toLowerCase().trim()
+        return !deletedParties.has(pId) && !deletedParties.has(pName)
+      })
       setParties(parsedParties)
 
       // Migration: Ensure all finished goods from manufacturing logs are in the catalog
       let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : []
-      parsedCatalog = parsedCatalog.filter((c: any) => !c.id.startsWith('cat_ksv_'))
+      parsedCatalog = parsedCatalog.filter((c: any) => {
+        const id = (c.id || '').toLowerCase().trim()
+        const name = (c.name || '').toLowerCase().trim()
+        return !c.id.startsWith('cat_ksv_') && !deletedCatalog.has(id) && !deletedCatalog.has(name)
+      })
       if (storedMfgLogs) {
         const parsedLogs = JSON.parse(storedMfgLogs)
         let catalogChanged = false
@@ -218,8 +238,13 @@ export default function KsvPage() {
             dbCompanies: any[] | null
           ) => {
             if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
-              setCatalog(dbCatalog)
-              localStorage.setItem('ksv_app_catalog', JSON.stringify(dbCatalog))
+              const cleanCatalog = dbCatalog.filter((item) => {
+                const id = (item.id || '').toLowerCase().trim()
+                const name = (item.name || '').toLowerCase().trim()
+                return !deletedCatalog.has(id) && !deletedCatalog.has(name)
+              })
+              setCatalog(cleanCatalog)
+              localStorage.setItem('ksv_app_catalog', JSON.stringify(cleanCatalog))
             } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {
               // Parallel initial database sync
               await Promise.allSettled(
@@ -243,24 +268,33 @@ export default function KsvPage() {
             }
 
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
-              setInvoices(dbInvoices)
-              localStorage.setItem('ksv_app_invoices', JSON.stringify(dbInvoices))
+              const cleanInvoices = dbInvoices.filter((inv: any) => {
+                const id = (inv.id || '').toLowerCase().trim()
+                const invNo = (inv.invoiceNo || '').toLowerCase().trim()
+                return !deletedInvoices.has(id) && !deletedInvoices.has(invNo)
+              })
+              setInvoices(cleanInvoices)
+              localStorage.setItem('ksv_app_invoices', JSON.stringify(cleanInvoices))
             }
 
             if (Array.isArray(dbParties) && dbParties.length > 0) {
-              const merged = [...dbParties]
-              DEFAULT_KSV_PARTIES.forEach(dp => {
-                if (!merged.some(p => p.name.trim().toLowerCase() === dp.name.trim().toLowerCase())) {
-                  merged.push(dp)
-                }
+              const cleanParties = dbParties.filter(p => {
+                const pId = (p.id || '').toLowerCase().trim()
+                const pName = (p.name || '').toLowerCase().trim()
+                return !deletedParties.has(pId) && !deletedParties.has(pName)
               })
-              setParties(merged)
-              localStorage.setItem('ksv_app_parties', JSON.stringify(merged))
+              setParties(cleanParties)
+              localStorage.setItem('ksv_app_parties', JSON.stringify(cleanParties))
             }
 
             if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
-              setCompanies(dbCompanies)
-              localStorage.setItem('ksv_app_companies_v2', JSON.stringify(dbCompanies))
+              const cleanCompanies = dbCompanies.filter(c => {
+                const cId = (c.id || '').toLowerCase().trim()
+                const cName = (c.name || '').toLowerCase().trim()
+                return !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
+              })
+              setCompanies(cleanCompanies)
+              localStorage.setItem('ksv_app_companies_v2', JSON.stringify(cleanCompanies))
             }
           }
 
@@ -514,10 +548,20 @@ export default function KsvPage() {
 
   const handleDeleteInvoice = (id: string) => {
     if (confirm('Are you sure you want to delete this invoice from KSV ledger?')) {
-      const updated = invoices.filter((inv) => inv.id !== id)
+      const invToDelete = invoices.find((inv) => inv.id === id || inv.invoiceNo === id)
+      const updated = invoices.filter((inv) => inv.id !== id && inv.invoiceNo !== id)
       saveInvoices(updated)
+
       try {
-        fetch(`${API_URL}/api/ksv/invoices/${id}`, { method: 'DELETE' }).catch(() => {})
+        const deleted = JSON.parse(localStorage.getItem('ksv_deleted_invoices') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (invToDelete?.invoiceNo && !deleted.includes(invToDelete.invoiceNo)) deleted.push(invToDelete.invoiceNo)
+        localStorage.setItem('ksv_deleted_invoices', JSON.stringify(deleted))
+
+        fetch(`${API_URL}/api/ksv/invoices/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
+        if (invToDelete?.invoiceNo) {
+          fetch(`${API_URL}/api/ksv/invoices/${encodeURIComponent(invToDelete.invoiceNo)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (e) {}
     }
   }
@@ -544,6 +588,13 @@ export default function KsvPage() {
       updated = [...companies, { ...company, id: company.id || `comp_${Date.now()}` }]
     }
     saveCompanies(updated)
+
+    try {
+      const deleted = JSON.parse(localStorage.getItem('ksv_deleted_companies') || '[]')
+      const filtered = deleted.filter((d: string) => d !== company.id && d !== company.name)
+      localStorage.setItem('ksv_deleted_companies', JSON.stringify(filtered))
+    } catch (e) {}
+
     setIsCompanyModalOpen(false)
     setEditingCompany(null)
     try {
@@ -565,9 +616,20 @@ export default function KsvPage() {
 
   const handleDeleteCompany = (id: string) => {
     if (confirm('Delete this company profile?')) {
-      saveCompanies(companies.filter((c) => c.id !== id))
+      const compToDelete = companies.find((c) => c.id === id)
+      const updated = companies.filter((c) => c.id !== id)
+      saveCompanies(updated)
+
       try {
-        fetch(`${API_URL}/api/ksv/companies/${id}`, { method: 'DELETE' }).catch(() => {})
+        const deleted = JSON.parse(localStorage.getItem('ksv_deleted_companies') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (compToDelete?.name && !deleted.includes(compToDelete.name)) deleted.push(compToDelete.name)
+        localStorage.setItem('ksv_deleted_companies', JSON.stringify(deleted))
+
+        fetch(`${API_URL}/api/ksv/companies/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
+        if (compToDelete?.name) {
+          fetch(`${API_URL}/api/ksv/companies/${encodeURIComponent(compToDelete.name)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (e) {}
     }
   }
@@ -581,6 +643,13 @@ export default function KsvPage() {
       updated = [...parties, { ...party, id: party.id || `party_${Date.now()}` }]
     }
     saveParties(updated)
+
+    try {
+      const deleted = JSON.parse(localStorage.getItem('ksv_deleted_parties') || '[]')
+      const filtered = deleted.filter((d: string) => d !== party.id && d !== party.name)
+      localStorage.setItem('ksv_deleted_parties', JSON.stringify(filtered))
+    } catch (e) {}
+
     setIsPartyModalOpen(false)
     setEditingParty(null)
     try {
@@ -602,9 +671,20 @@ export default function KsvPage() {
 
   const handleDeleteParty = (id: string) => {
     if (confirm('Delete this party / buyer profile?')) {
-      saveParties(parties.filter((p) => p.id !== id))
+      const partyToDelete = parties.find((p) => p.id === id)
+      const updated = parties.filter((p) => p.id !== id)
+      saveParties(updated)
+
       try {
-        fetch(`${API_URL}/api/ksv/parties/${id}`, { method: 'DELETE' }).catch(() => {})
+        const deleted = JSON.parse(localStorage.getItem('ksv_deleted_parties') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (partyToDelete?.name && !deleted.includes(partyToDelete.name)) deleted.push(partyToDelete.name)
+        localStorage.setItem('ksv_deleted_parties', JSON.stringify(deleted))
+
+        fetch(`${API_URL}/api/ksv/parties/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
+        if (partyToDelete?.name) {
+          fetch(`${API_URL}/api/ksv/parties/${encodeURIComponent(partyToDelete.name)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (e) {}
     }
   }
@@ -622,6 +702,13 @@ export default function KsvPage() {
       updated = [...catalog, { ...item, id: item.id || `cat_${Date.now()}` }]
     }
     saveCatalog(updated)
+
+    try {
+      const deleted = JSON.parse(localStorage.getItem('ksv_deleted_catalog') || '[]')
+      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name)
+      localStorage.setItem('ksv_deleted_catalog', JSON.stringify(filtered))
+    } catch (e) {}
+
     setIsCatalogModalOpen(false)
     setEditingCatalogItem(null)
 
@@ -673,9 +760,19 @@ export default function KsvPage() {
 
   const handleDeleteCatalogItem = async (id: string) => {
     if (confirm('Delete this catalog product item?')) {
+      const itemToDelete = catalog.find((c) => c.id === id)
       saveCatalog(catalog.filter((cat) => cat.id !== id))
+
       try {
-        await fetch(`${API_URL}/api/ksv/catalog/${id}`, { method: 'DELETE' })
+        const deleted = JSON.parse(localStorage.getItem('ksv_deleted_catalog') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (itemToDelete?.name && !deleted.includes(itemToDelete.name)) deleted.push(itemToDelete.name)
+        localStorage.setItem('ksv_deleted_catalog', JSON.stringify(deleted))
+
+        await fetch(`${API_URL}/api/ksv/catalog/${encodeURIComponent(id)}`, { method: 'DELETE' })
+        if (itemToDelete?.name) {
+          await fetch(`${API_URL}/api/ksv/catalog/${encodeURIComponent(itemToDelete.name)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (err) {
         console.warn('Could not delete catalog product from database:', err)
       }

@@ -120,6 +120,19 @@ export default function KiyavaPage() {
   // Load Initial Data from localStorage or clean defaults
   useEffect(() => {
     try {
+      const deletedParties = new Set(
+        (JSON.parse(localStorage.getItem('kiyava_deleted_parties') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+      const deletedCompanies = new Set(
+        (JSON.parse(localStorage.getItem('kiyava_deleted_companies') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+      const deletedCatalog = new Set(
+        (JSON.parse(localStorage.getItem('kiyava_deleted_catalog') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+      const deletedInvoices = new Set(
+        (JSON.parse(localStorage.getItem('kiyava_deleted_invoices') || '[]') as string[]).map(s => s.toLowerCase().trim())
+      )
+
       const storedCompanies = localStorage.getItem('ksv_kiyava_companies')
       const storedParties = localStorage.getItem('ksv_kiyava_parties')
       const storedCatalog = localStorage.getItem('ksv_kiyava_catalog')
@@ -129,17 +142,29 @@ export default function KiyavaPage() {
       const storedTransfers = localStorage.getItem('ksv_kiyava_stock_transfers')
 
       let parsedCompanies: CompanyProfile[] = storedCompanies ? JSON.parse(storedCompanies) : DEFAULT_COMPANIES
-      parsedCompanies = parsedCompanies.filter((c) => c.name.toUpperCase().includes('KIYAVA') || c.isDefault)
+      parsedCompanies = (parsedCompanies || []).filter((c) => {
+        const cId = (c.id || '').toLowerCase().trim()
+        const cName = (c.name || '').toLowerCase().trim()
+        return (c.name.toUpperCase().includes('KIYAVA') || c.isDefault) && !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
+      })
       if (parsedCompanies.length === 0) parsedCompanies = DEFAULT_COMPANIES
 
       setCompanies(parsedCompanies)
-      setParties(storedParties ? JSON.parse(storedParties) : DEFAULT_PARTIES)
+
+      let initialParties: PartyProfile[] = storedParties ? JSON.parse(storedParties) : DEFAULT_PARTIES
+      initialParties = (initialParties || []).filter((p: any) => {
+        const pId = (p.id || '').toLowerCase().trim()
+        const pName = (p.name || '').toLowerCase().trim()
+        return !deletedParties.has(pId) && !deletedParties.has(pName)
+      })
+      setParties(initialParties)
       
       // Only show user-added catalog items (clean by default)
       let parsedCatalog: CatalogItem[] = storedCatalog ? JSON.parse(storedCatalog) : []
       const dummySet = new Set((DUMMY_CATALOG_NAMES || []).map((n: string) => n.toLowerCase()))
       parsedCatalog = parsedCatalog.filter(
-        (c: any) => c.name && !dummySet.has(c.name.trim().toLowerCase()) && !c.id?.startsWith('cat_')
+        (c: any) => c.name && !dummySet.has(c.name.trim().toLowerCase()) && !c.id?.startsWith('cat_') &&
+        !deletedCatalog.has((c.id || '').toLowerCase().trim()) && !deletedCatalog.has((c.name || '').toLowerCase().trim())
       )
 
       if (storedMfgLogs) {
@@ -167,7 +192,13 @@ export default function KiyavaPage() {
       setCatalog(parsedCatalog)
       localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(parsedCatalog))
 
-      setInvoices(storedInvoices ? JSON.parse(storedInvoices) : SEEDED_INVOICES)
+      let initialInvoices: KiyavaInvoice[] = storedInvoices ? JSON.parse(storedInvoices) : SEEDED_INVOICES
+      initialInvoices = (initialInvoices || []).filter((inv: any) => {
+        const id = (inv.id || '').toLowerCase().trim()
+        const invNo = (inv.invoiceNo || '').toLowerCase().trim()
+        return !deletedInvoices.has(id) && !deletedInvoices.has(invNo)
+      })
+      setInvoices(initialInvoices)
       setOpeningStock(storedOpeningStock ? JSON.parse(storedOpeningStock) : [])
       setManufacturingLogs(storedMfgLogs ? JSON.parse(storedMfgLogs) : [])
       setStockTransfers(storedTransfers ? JSON.parse(storedTransfers) : [])
@@ -187,29 +218,38 @@ export default function KiyavaPage() {
           ) => {
             if (Array.isArray(dbCatalog)) {
               const cleanDbCatalog = dbCatalog.filter(
-                (c: any) => c.name && !dummySet.has(c.name.trim().toLowerCase()) && !c.id?.startsWith('cat_')
+                (c: any) => c.name && !dummySet.has(c.name.trim().toLowerCase()) && !c.id?.startsWith('cat_') &&
+                !deletedCatalog.has((c.id || '').toLowerCase().trim()) && !deletedCatalog.has((c.name || '').toLowerCase().trim())
               )
               setCatalog(cleanDbCatalog)
               localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(cleanDbCatalog))
             }
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
-              setInvoices(dbInvoices)
-              localStorage.setItem('ksv_kiyava_invoices', JSON.stringify(dbInvoices))
+              const cleanDbInvoices = dbInvoices.filter((inv: any) => {
+                const id = (inv.id || '').toLowerCase().trim()
+                const invNo = (inv.invoiceNo || '').toLowerCase().trim()
+                return !deletedInvoices.has(id) && !deletedInvoices.has(invNo)
+              })
+              setInvoices(cleanDbInvoices)
+              localStorage.setItem('ksv_kiyava_invoices', JSON.stringify(cleanDbInvoices))
             }
             if (Array.isArray(dbParties) && dbParties.length > 0) {
-              // Ensure default parties (KARAN SINGH VAIDH, NBH, MAXXI) are never lost
-              const merged = [...dbParties]
-              DEFAULT_PARTIES.forEach(dp => {
-                if (!merged.some(p => p.name.trim().toLowerCase() === dp.name.trim().toLowerCase())) {
-                  merged.push(dp)
-                }
+              const cleanParties = dbParties.filter(p => {
+                const pId = (p.id || '').toLowerCase().trim()
+                const pName = (p.name || '').toLowerCase().trim()
+                return !deletedParties.has(pId) && !deletedParties.has(pName)
               })
-              setParties(merged)
-              localStorage.setItem('ksv_kiyava_parties', JSON.stringify(merged))
+              setParties(cleanParties)
+              localStorage.setItem('ksv_kiyava_parties', JSON.stringify(cleanParties))
             }
             if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
-              setCompanies(dbCompanies)
-              localStorage.setItem('ksv_kiyava_companies', JSON.stringify(dbCompanies))
+              const cleanCompanies = dbCompanies.filter(c => {
+                const cId = (c.id || '').toLowerCase().trim()
+                const cName = (c.name || '').toLowerCase().trim()
+                return !deletedCompanies.has(cId) && !deletedCompanies.has(cName)
+              })
+              setCompanies(cleanCompanies)
+              localStorage.setItem('ksv_kiyava_companies', JSON.stringify(cleanCompanies))
             }
             if (Array.isArray(dbMfg) && dbMfg.length > 0) {
               setManufacturingLogs(dbMfg)
@@ -718,10 +758,20 @@ export default function KiyavaPage() {
 
   const handleDeleteInvoice = (id: string) => {
     if (confirm('Are you sure you want to delete this invoice from Kiyava ledger?')) {
-      const updated = invoices.filter((inv) => inv.id !== id)
+      const invToDelete = invoices.find((inv) => inv.id === id || inv.invoiceNo === id)
+      const updated = invoices.filter((inv) => inv.id !== id && inv.invoiceNo !== id)
       saveInvoices(updated)
+
       try {
-        fetch(`${API_URL}/api/kiyava/invoices/${id}`, { method: 'DELETE' }).catch(() => {})
+        const deleted = JSON.parse(localStorage.getItem('kiyava_deleted_invoices') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (invToDelete?.invoiceNo && !deleted.includes(invToDelete.invoiceNo)) deleted.push(invToDelete.invoiceNo)
+        localStorage.setItem('kiyava_deleted_invoices', JSON.stringify(deleted))
+
+        fetch(`${API_URL}/api/kiyava/invoices/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
+        if (invToDelete?.invoiceNo) {
+          fetch(`${API_URL}/api/kiyava/invoices/${encodeURIComponent(invToDelete.invoiceNo)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (e) {}
     }
   }
@@ -747,6 +797,13 @@ export default function KiyavaPage() {
       ? companies.map((c) => (c.id === company.id ? company : c))
       : [...companies, company]
     saveCompanies(updated)
+
+    try {
+      const deleted = JSON.parse(localStorage.getItem('kiyava_deleted_companies') || '[]')
+      const filtered = deleted.filter((d: string) => d !== company.id && d !== company.name)
+      localStorage.setItem('kiyava_deleted_companies', JSON.stringify(filtered))
+    } catch (e) {}
+
     try {
       if (exists) {
         fetch(`${API_URL}/api/kiyava/companies/${company.id}`, {
@@ -770,10 +827,20 @@ export default function KiyavaPage() {
       return
     }
     if (confirm('Delete this company profile?')) {
+      const compToDelete = companies.find((c) => c.id === id)
       const updated = companies.filter((c) => c.id !== id)
       saveCompanies(updated)
+
       try {
-        fetch(`${API_URL}/api/kiyava/companies/${id}`, { method: 'DELETE' }).catch(() => {})
+        const deleted = JSON.parse(localStorage.getItem('kiyava_deleted_companies') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (compToDelete?.name && !deleted.includes(compToDelete.name)) deleted.push(compToDelete.name)
+        localStorage.setItem('kiyava_deleted_companies', JSON.stringify(deleted))
+
+        fetch(`${API_URL}/api/kiyava/companies/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
+        if (compToDelete?.name) {
+          fetch(`${API_URL}/api/kiyava/companies/${encodeURIComponent(compToDelete.name)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (e) {}
     }
   }
@@ -785,6 +852,13 @@ export default function KiyavaPage() {
       ? parties.map((p) => (p.id === party.id ? party : p))
       : [...parties, party]
     saveParties(updated)
+
+    try {
+      const deleted = JSON.parse(localStorage.getItem('kiyava_deleted_parties') || '[]')
+      const filtered = deleted.filter((d: string) => d !== party.id && d !== party.name)
+      localStorage.setItem('kiyava_deleted_parties', JSON.stringify(filtered))
+    } catch (e) {}
+
     try {
       if (exists) {
         fetch(`${API_URL}/api/kiyava/parties/${party.id}`, {
@@ -804,10 +878,20 @@ export default function KiyavaPage() {
 
   const handleDeleteParty = (id: string) => {
     if (confirm('Delete this buyer / party?')) {
+      const partyToDelete = parties.find((p) => p.id === id)
       const updated = parties.filter((p) => p.id !== id)
       saveParties(updated)
+
       try {
-        fetch(`${API_URL}/api/kiyava/parties/${id}`, { method: 'DELETE' }).catch(() => {})
+        const deleted = JSON.parse(localStorage.getItem('kiyava_deleted_parties') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (partyToDelete?.name && !deleted.includes(partyToDelete.name)) deleted.push(partyToDelete.name)
+        localStorage.setItem('kiyava_deleted_parties', JSON.stringify(deleted))
+
+        fetch(`${API_URL}/api/kiyava/parties/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
+        if (partyToDelete?.name) {
+          fetch(`${API_URL}/api/kiyava/parties/${encodeURIComponent(partyToDelete.name)}`, { method: 'DELETE' }).catch(() => {})
+        }
       } catch (e) {}
     }
   }
@@ -822,6 +906,13 @@ export default function KiyavaPage() {
       ? catalog.map((c) => (c.id === item.id ? item : c))
       : [...catalog, item]
     saveCatalog(updated)
+
+    try {
+      const deleted = JSON.parse(localStorage.getItem('kiyava_deleted_catalog') || '[]')
+      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name)
+      localStorage.setItem('kiyava_deleted_catalog', JSON.stringify(filtered))
+    } catch (e) {}
+
     setIsCatalogModalOpen(false)
     setEditingCatalogItem(null)
 
@@ -897,8 +988,14 @@ export default function KiyavaPage() {
     if (confirm(`Delete "${name || 'this item'}" from catalog?`)) {
       const updated = catalog.filter((c) => c.id !== id && (!name || c.name !== name))
       saveCatalog(updated)
+
       try {
-        await fetch(`${API_URL}/api/kiyava/catalog/${id}`, { method: 'DELETE' })
+        const deleted = JSON.parse(localStorage.getItem('kiyava_deleted_catalog') || '[]')
+        if (id && !deleted.includes(id)) deleted.push(id)
+        if (name && !deleted.includes(name)) deleted.push(name)
+        localStorage.setItem('kiyava_deleted_catalog', JSON.stringify(deleted))
+
+        await fetch(`${API_URL}/api/kiyava/catalog/${encodeURIComponent(id)}`, { method: 'DELETE' })
         if (name) {
           await fetch(`${API_URL}/api/kiyava/catalog/${encodeURIComponent(name)}`, { method: 'DELETE' }).catch(() => {})
         }
