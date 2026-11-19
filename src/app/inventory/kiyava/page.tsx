@@ -211,9 +211,15 @@ export default function KiyavaPage() {
             dbMfg: any[] | null
           ) => {
             if (Array.isArray(dbCatalog)) {
-              const cleanDbCatalog = dbCatalog.filter(
-                (c: any) => c.name && !deletedCatalog.has((c.id || '').toLowerCase().trim())
-              )
+              const seenDb = new Set<string>()
+              const cleanDbCatalog: CatalogItem[] = []
+              for (const c of dbCatalog) {
+                const key = (c.name || '').trim().toLowerCase()
+                const id = (c.id || '').toLowerCase().trim()
+                if (!key || seenDb.has(key) || deletedCatalog.has(id)) continue
+                seenDb.add(key)
+                cleanDbCatalog.push({ ...c, name: c.name.trim() })
+              }
               setCatalog(cleanDbCatalog)
               localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(cleanDbCatalog))
             }

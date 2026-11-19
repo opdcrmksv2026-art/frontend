@@ -162,10 +162,16 @@ export default function KsvPage() {
 
       // Migration: Ensure all finished goods from manufacturing logs are in the catalog
       let parsedCatalog = storedCatalog ? JSON.parse(storedCatalog) : []
-      parsedCatalog = parsedCatalog.filter((c: any) => {
+      const seenStored = new Set<string>()
+      const dedupedStored: CatalogItem[] = []
+      for (const c of parsedCatalog) {
+        const key = (c.name || '').trim().toLowerCase()
         const id = (c.id || '').toLowerCase().trim()
-        return !deletedCatalog.has(id)
-      })
+        if (!key || seenStored.has(key) || deletedCatalog.has(id)) continue
+        seenStored.add(key)
+        dedupedStored.push({ ...c, name: c.name.trim() })
+      }
+      parsedCatalog = dedupedStored
       if (storedMfgLogs) {
         const parsedLogs = JSON.parse(storedMfgLogs)
         let catalogChanged = false
@@ -237,10 +243,15 @@ export default function KsvPage() {
             dbCompanies: any[] | null
           ) => {
             if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
-              const cleanCatalog = dbCatalog.filter((item) => {
+              const seenDb = new Set<string>()
+              const cleanCatalog: CatalogItem[] = []
+              for (const item of dbCatalog) {
+                const key = (item.name || '').trim().toLowerCase()
                 const id = (item.id || '').toLowerCase().trim()
-                return !deletedCatalog.has(id)
-              })
+                if (!key || seenDb.has(key) || deletedCatalog.has(id)) continue
+                seenDb.add(key)
+                cleanCatalog.push({ ...item, name: item.name.trim() })
+              }
               setCatalog(cleanCatalog)
               localStorage.setItem('ksv_app_catalog', JSON.stringify(cleanCatalog))
             } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {

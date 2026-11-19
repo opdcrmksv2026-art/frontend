@@ -232,11 +232,15 @@ export default function MaxxiPharmaPage() {
             dbCompanies: any[] | null
           ) => {
             if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
-              const cleanCatalog = dbCatalog.filter((item) => {
+              const seenDb = new Set<string>()
+              const cleanCatalog: CatalogItem[] = []
+              for (const item of dbCatalog) {
+                const key = (item.name || '').trim().toLowerCase()
                 const id = (item.id || '').toLowerCase().trim()
-                const name = (item.name || '').toLowerCase().trim()
-                return !id.startsWith('cat_mx_') && !id.startsWith('cat_sync_') && !deletedCatalog.has(id) && !deletedCatalog.has(name)
-              })
+                if (!key || seenDb.has(key) || deletedCatalog.has(id)) continue
+                seenDb.add(key)
+                cleanCatalog.push({ ...item, name: item.name.trim() })
+              }
               setCatalog(cleanCatalog)
               localStorage.setItem('maxxi_app_catalog', JSON.stringify(cleanCatalog))
             } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {

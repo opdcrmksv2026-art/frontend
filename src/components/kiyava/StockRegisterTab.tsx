@@ -34,7 +34,7 @@ export default function StockRegisterTab({
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
 
-  // Helper for flexible product name matching
+  // Helper for product name matching (exact normalized match)
   const isItemMatch = (desc?: string, catName?: string, catId?: string, rowId?: string) => {
     if (rowId && catId && rowId === catId) return true
     if (!desc || !catName) return false
@@ -42,12 +42,25 @@ export default function StockRegisterTab({
     const d = clean(desc)
     const c = clean(catName)
     if (!d || !c) return false
-    return d === c || d.includes(c) || c.includes(d)
+    return d === c
   }
+
+  // Deduplicate catalog items by normalized name to prevent duplicate live stock rows
+  const uniqueCatalog = useMemo(() => {
+    const seen = new Set<string>()
+    const result: CatalogItem[] = []
+    for (const item of catalog) {
+      const key = (item.name || '').trim().toLowerCase()
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      result.push({ ...item, name: item.name.trim() })
+    }
+    return result
+  }, [catalog])
 
   // Calculate live stock
   const stockData = useMemo(() => {
-    return catalog.map(item => {
+    return uniqueCatalog.map(item => {
       // 1. Opening
       const openingEntry = openingStock.find(s => s.itemId === item.id || isItemMatch(s.itemName, item.name, item.id, s.itemId))
       const openingQty = openingEntry ? openingEntry.quantity : 0
