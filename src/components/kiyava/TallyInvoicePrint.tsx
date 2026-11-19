@@ -15,37 +15,72 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
   const [zoomLevel, setZoomLevel] = useState<number>(100)
   const [copiedLink, setCopiedLink] = useState(false)
 
-  // Detect whether this invoice represents a PURCHASE from a vendor (like Maxxi Pharma or Kiyava)
-  // or a transaction where Karan Singh Vaidh is the purchasing firm.
-  // In either case, KARAN SINGH VAIDH is always at the top banner, and the vendor is in Party / Billed To!
-  const isKsvBuyer =
-    invoice.type === 'PURCHASE' ||
-    (Boolean(invoice.buyer?.name?.toUpperCase().includes('KARAN') || invoice.buyer?.name?.toUpperCase().includes('KSV')) &&
-     Boolean(!invoice.company?.name?.toUpperCase().includes('KARAN') && !invoice.company?.name?.toUpperCase().includes('KSV')))
+  // Determine if this is a Purchase Voucher of Karan Singh Vaidh (e.g. KSV purchasing from Maxxi or Kiyava)
+  // ONLY for genuine PURCHASE invoices where KSV is the purchaser.
+  // SALE invoices must NEVER be inverted: Seller is at the top banner, Buyer is in Party / Billed To!
+  const isKsvPurchaseVoucher =
+    invoice.type === 'PURCHASE' &&
+    (Boolean(invoice.buyer?.name?.toUpperCase().includes('KARAN') || invoice.buyer?.name?.toUpperCase().includes('KSV')) ||
+     Boolean(invoice.company?.name?.toUpperCase().includes('KARAN') || invoice.company?.name?.toUpperCase().includes('KSV')))
 
-  // Top Header Company Profile (KARAN SINGH VAIDH for KSV purchases & sales)
-  const headerCompany = isKsvBuyer
-    ? {
-        name: 'KARAN SINGH VAIDH',
-        tagline: 'Specialized Medical Care & Ayurvedic OPD Clinic',
-        phone: '98160 12345',
-        gstin: invoice.buyer?.gstin || '02DFBPS6121B2Z2',
-        addressLine1: invoice.buyer?.addressLine1 || 'VILL- RADIYANA, PO SUBATHU',
-        addressLine2: invoice.buyer?.addressLine2 || 'TEH & DISTT - SOLAN',
-        city: invoice.buyer?.city || 'Solan',
-        state: invoice.buyer?.state || 'Himachal Pradesh',
-        stateCode: invoice.buyer?.stateCode || '02',
-        pincode: invoice.buyer?.pincode || '173206',
-        bankName: 'HDFC Bank',
-        branch: 'Solan Branch',
-        accountNo: '50200049281729',
-        ifscCode: 'HDFC0001423'
+  // Top Header Company Profile
+  let headerCompany: any
+  if (isKsvPurchaseVoucher) {
+    headerCompany = {
+      name: 'KARAN SINGH VAIDH',
+      tagline: 'Specialized Medical Care & Ayurvedic OPD Clinic',
+      phone: '98160 12345',
+      gstin: '02DFBPS6121B2Z2',
+      addressLine1: 'VILL- RADIYANA, PO SUBATHU',
+      addressLine2: 'TEH & DISTT - SOLAN',
+      city: 'Solan',
+      state: 'Himachal Pradesh',
+      stateCode: '02',
+      pincode: '173206',
+      bankName: 'HDFC Bank',
+      branch: 'Solan Branch',
+      accountNo: '50200049281729',
+      ifscCode: 'HDFC0001423'
+    }
+  } else {
+    const compName = (invoice.company?.name || '').toUpperCase()
+    if (compName.includes('KIYAVA')) {
+      headerCompany = {
+        name: 'KIYAVA',
+        tagline: invoice.company?.tagline || 'Herbal & Ayurvedic Raw Material Supplies',
+        phone: invoice.company?.phone || '78076 22577',
+        gstin: invoice.company?.gstin || '02DFBPS6121B1Z3',
+        addressLine1: invoice.company?.addressLine1 || 'Upper Thari, Near M.G. Steel Hardware',
+        addressLine2: invoice.company?.addressLine2 || 'Subathu Main Road, Subathu Chowk',
+        city: invoice.company?.city || 'Sabathu, Solan',
+        state: invoice.company?.state || 'Himachal Pradesh',
+        stateCode: invoice.company?.stateCode || '02',
+        pincode: invoice.company?.pincode || '173206',
+        bankName: invoice.company?.bankName || 'State Bank of India',
+        branch: invoice.company?.branch || 'Subathu Branch, Solan',
+        accountNo: invoice.company?.accountNo || '38920194821',
+        ifscCode: invoice.company?.ifscCode || 'SBIN0001234'
       }
-    : {
-        name:
-          invoice.company?.name && !invoice.company.name.includes('KSV HEALTHCARE')
-            ? invoice.company.name.replace(' (KSV)', '')
-            : 'KARAN SINGH VAIDH',
+    } else if (compName.includes('MAXXI')) {
+      headerCompany = {
+        name: 'MAXXI PHARMA PVT. LTD.',
+        tagline: invoice.company?.tagline || 'Pharmaceutical Manufacturing & Healthcare Formulations',
+        phone: invoice.company?.phone || '01792-234890 / 98160 54321',
+        gstin: invoice.company?.gstin || '02AAACM8821F1Z9',
+        addressLine1: invoice.company?.addressLine1 || 'Plot No. 45, Industrial Area Phase 1',
+        addressLine2: invoice.company?.addressLine2 || 'Near ESI Hospital, Solan',
+        city: invoice.company?.city || 'Solan',
+        state: invoice.company?.state || 'Himachal Pradesh',
+        stateCode: invoice.company?.stateCode || '02',
+        pincode: invoice.company?.pincode || '173212',
+        bankName: invoice.company?.bankName || 'ICICI Bank',
+        branch: invoice.company?.branch || 'Mall Road, Solan',
+        accountNo: invoice.company?.accountNo || '034105009812',
+        ifscCode: invoice.company?.ifscCode || 'ICIC0000341'
+      }
+    } else {
+      headerCompany = {
+        name: invoice.company?.name ? invoice.company.name.replace(' (KSV)', '') : 'KARAN SINGH VAIDH',
         tagline: invoice.company?.tagline || 'Specialized Medical Care & Ayurvedic OPD Clinic',
         phone: invoice.company?.phone || '98160 12345',
         gstin: invoice.company?.gstin || '02DFBPS6121B2Z2',
@@ -60,21 +95,42 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
         accountNo: invoice.company?.accountNo || '50200049281729',
         ifscCode: invoice.company?.ifscCode || 'HDFC0001423'
       }
+    }
+  }
 
-  // Party / Billed To Profile (Supplier / Vendor like Maxxi in purchases, or Buyer in sales)
-  const billedParty = isKsvBuyer
-    ? {
-        name: invoice.company?.name || 'MAXXI PHARMA PVT. LTD.',
-        addressLine1: invoice.company?.addressLine1 || 'Plot No. 45, Industrial Area Phase 1',
-        addressLine2: invoice.company?.addressLine2 || 'Near ESI Hospital, Solan',
-        city: invoice.company?.city || 'Solan',
-        state: invoice.company?.state || 'Himachal Pradesh',
-        stateCode: invoice.company?.stateCode || '02',
-        pincode: invoice.company?.pincode || '173212',
-        phone: invoice.company?.phone || '01792-234890 / 98160 54321',
-        gstin: invoice.company?.gstin || '02AAACM8821F1Z9'
+  // Party / Billed To Profile (Supplier in purchase vouchers, or Buyer in sales)
+  let billedParty: any
+  if (isKsvPurchaseVoucher) {
+    const vendorObj = (invoice.company?.name?.toUpperCase().includes('KARAN') || invoice.company?.name?.toUpperCase().includes('KSV'))
+      ? invoice.buyer
+      : invoice.company
+    billedParty = {
+      name: vendorObj?.name || 'MAXXI PHARMA PVT. LTD.',
+      addressLine1: vendorObj?.addressLine1 || 'Plot No. 45, Industrial Area Phase 1',
+      addressLine2: vendorObj?.addressLine2 || 'Near ESI Hospital, Solan',
+      city: vendorObj?.city || 'Solan',
+      state: vendorObj?.state || 'Himachal Pradesh',
+      stateCode: vendorObj?.stateCode || '02',
+      pincode: vendorObj?.pincode || '173212',
+      phone: vendorObj?.phone || '01792-234890 / 98160 54321',
+      gstin: vendorObj?.gstin || '02AAACM8821F1Z9'
+    }
+  } else {
+    const buyerName = invoice.buyer?.name || ''
+    if (buyerName.toUpperCase().includes('KARAN') || buyerName.toUpperCase().includes('KSV')) {
+      billedParty = {
+        name: 'KARAN SINGH VAIDH (KSV)',
+        addressLine1: invoice.buyer?.addressLine1 || 'VILL- RADIYANA, PO SUBATHU',
+        addressLine2: invoice.buyer?.addressLine2 || 'TEH & DISTT - SOLAN',
+        city: invoice.buyer?.city || 'Solan',
+        state: invoice.buyer?.state || 'Himachal Pradesh',
+        stateCode: invoice.buyer?.stateCode || '02',
+        pincode: invoice.buyer?.pincode || '173206',
+        phone: invoice.buyer?.phone || '78076 22577',
+        gstin: invoice.buyer?.gstin || '02DFBPS6121B2Z2'
       }
-    : {
+    } else {
+      billedParty = {
         name: invoice.buyer?.name,
         addressLine1: invoice.buyer?.addressLine1,
         addressLine2: invoice.buyer?.addressLine2,
@@ -85,6 +141,8 @@ export default function TallyInvoicePrint({ invoice, onClose }: TallyInvoicePrin
         phone: invoice.buyer?.phone,
         gstin: invoice.buyer?.gstin
       }
+    }
+  }
 
   const handlePrint = () => {
     window.scrollTo(0, 0)
