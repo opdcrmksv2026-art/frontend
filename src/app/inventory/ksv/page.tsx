@@ -118,7 +118,7 @@ export default function KsvPage() {
   const [partySearchQuery, setPartySearchQuery] = useState('')
   const [factorySearchQuery, setFactorySearchQuery] = useState('')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
-  const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE' | 'ALL'>('SALE')
+  const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE' | 'ALL'>('ALL')
 
   // Load Initial Data from localStorage or clean defaults
   useEffect(() => {
@@ -193,7 +193,7 @@ export default function KsvPage() {
       if (storedInvoices) {
         try {
           const parsed = JSON.parse(storedInvoices)
-          const clean = (parsed || []).filter((inv: any) => !inv.id?.startsWith('inv_ksv_pur_') && inv.invoiceNo !== 'KYV/2026/089')
+          const clean = (parsed || []).filter((inv: any) => inv.invoiceNo !== 'KYV/2026/089')
           setInvoices(clean)
           localStorage.setItem('ksv_app_invoices', JSON.stringify(clean))
         } catch {
@@ -266,12 +266,8 @@ export default function KsvPage() {
             }
 
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
-              const cleanInvoices = dbInvoices.filter((inv: any) => {
-                const id = (inv.id || '').toLowerCase().trim()
-                return !deletedInvoices.has(id)
-              })
-              setInvoices(cleanInvoices)
-              localStorage.setItem('ksv_app_invoices', JSON.stringify(cleanInvoices))
+              setInvoices(dbInvoices)
+              localStorage.setItem('ksv_app_invoices', JSON.stringify(dbInvoices))
             }
 
             if (Array.isArray(dbParties) && dbParties.length > 0) {
@@ -1295,11 +1291,23 @@ export default function KsvPage() {
       {/* 4. TAB CONTENT: 1. INVOICES & PURCHASES LEDGER */}
       {activeTab === 'invoices' && (
         <div className="space-y-4 animate-in fade-in duration-300">
-          {/* Sub-Tab Toggle: Sale Summary | Purchase Summary | All Invoices */}
+          {/* Sub-Tab Toggle: All Invoices | Sale Summary | Purchase Summary */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex flex-wrap items-center gap-2">
             <button
+              onClick={() => setInvoiceSummaryType('ALL')}
+              className={`flex-1 min-w-[130px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'ALL'
+                ? 'bg-slate-900 text-white shadow-lg shadow-slate-300'
+                : 'text-slate-500 hover:bg-slate-50'
+                }`}
+            >
+              📋 All Invoices
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {invoices.length}
+              </span>
+            </button>
+            <button
               onClick={() => setInvoiceSummaryType('SALE')}
-              className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'SALE'
+              className={`flex-1 min-w-[130px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'SALE'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
                 : 'text-slate-500 hover:bg-slate-50'
                 }`}
@@ -1311,7 +1319,7 @@ export default function KsvPage() {
             </button>
             <button
               onClick={() => setInvoiceSummaryType('PURCHASE')}
-              className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'PURCHASE'
+              className={`flex-1 min-w-[130px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'PURCHASE'
                 ? 'bg-orange-500 text-white shadow-lg shadow-orange-200'
                 : 'text-slate-500 hover:bg-slate-50'
                 }`}
