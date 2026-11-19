@@ -88,6 +88,13 @@ export default function KiyavaInvoiceForm({
   }, [parties, selectedPartyId])
 
   useEffect(() => {
+    if (!selectedCompanyId && companies.length > 0) {
+      const preferred = companies.find((c) => c.isDefault) || companies.find((c) => c.name.toUpperCase().includes('KIYAVA')) || companies[0]
+      if (preferred) setSelectedCompanyId(preferred.id)
+    }
+  }, [companies, selectedCompanyId])
+
+  useEffect(() => {
     const fetchPatients = async () => {
       if (!partySearchQuery || partySearchQuery.length < 2) {
         setPatientResults([])
@@ -368,10 +375,21 @@ export default function KiyavaInvoiceForm({
   // Submit Invoice
   const handleFormSubmit = (e: React.FormEvent, shouldPrint: boolean = false) => {
     e.preventDefault()
-    if (!currentCompany || !currentBuyer) return
+    if (!currentCompany) {
+      alert('⚠️ Company / Seller is required. Please select a company.')
+      return
+    }
+    if (!currentBuyer) {
+      alert('⚠️ Party / Buyer is required. Please select or add a buyer.')
+      return
+    }
 
     // Filter out completely empty items if any
     const validItems = items.filter((it) => it.description.trim() || it.amount > 0)
+    if (validItems.length === 0) {
+      alert('⚠️ Please add at least one product item to the bill before saving.')
+      return
+    }
     const itemsToSave = (validItems.length > 0 ? validItems : items).map((it) => ({
       ...it,
       quantity: Number(it.quantity) || 0,

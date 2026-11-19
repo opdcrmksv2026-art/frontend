@@ -1803,7 +1803,16 @@ export default function KiyavaPage() {
       {/* 4. TAB CONTENT: 6. OPENING STOCK */}
       {activeTab === 'opening-stock' && (() => {
         // Build stock register: per product aggregate
-        const stockRegister = catalog.map((item) => {
+        const seenStockItems = new Set<string>()
+        const uniqueStockCatalog: CatalogItem[] = []
+        for (const it of catalog) {
+          const key = (it.name || '').trim().toLowerCase()
+          if (!key || seenStockItems.has(key)) continue
+          seenStockItems.add(key)
+          uniqueStockCatalog.push({ ...it, name: it.name.trim() })
+        }
+
+        const stockRegister = uniqueStockCatalog.map((item) => {
           const openingEntry = openingStock.find((s) => s.itemId === item.id)
           const openingQty = openingEntry?.quantity || Number(item.quantity) || 0
           const unit = openingEntry?.unit ?? item.defaultUnit

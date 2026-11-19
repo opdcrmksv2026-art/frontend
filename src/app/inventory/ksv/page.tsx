@@ -1877,7 +1877,17 @@ export default function KsvPage() {
       {/* 4. TAB CONTENT: 6. STOCK REGISTER & AUTOMATIC INVENTORY ADJUSTMENT */}
       {activeTab === 'opening-stock' && (() => {
         // Build full stock register with auto manufacturing and Store/Factory transfer adjustments
-        const stockRegister = catalog.map((item) => {
+        // Deduplicate catalog items by normalized name to eliminate duplicate live stock rows
+        const seenStockItems = new Set<string>()
+        const uniqueStockCatalog: CatalogItem[] = []
+        for (const it of catalog) {
+          const key = (it.name || '').trim().toLowerCase()
+          if (!key || seenStockItems.has(key)) continue
+          seenStockItems.add(key)
+          uniqueStockCatalog.push({ ...it, name: it.name.trim() })
+        }
+
+        const stockRegister = uniqueStockCatalog.map((item) => {
           const breakdown = getItemStockBreakdown(item.id, item.name, item.defaultUnit, item.quantity)
           return { item, ...breakdown }
         }).filter((row) => row.openingQty > 0 || row.purchasedQty > 0 || row.soldQty > 0 || row.manufacturedQty > 0 || row.consumedQty > 0 || row.transferredToFactoryQty !== 0)
