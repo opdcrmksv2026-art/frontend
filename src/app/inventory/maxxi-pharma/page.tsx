@@ -242,8 +242,14 @@ export default function MaxxiPharmaPage() {
             }
 
             if (Array.isArray(dbParties) && dbParties.length > 0) {
-              setParties(dbParties)
-              localStorage.setItem('maxxi_app_parties', JSON.stringify(dbParties))
+              const merged = [...dbParties]
+              DEFAULT_MAXXI_PARTIES.forEach(dp => {
+                if (!merged.some(p => p.name.trim().toLowerCase() === dp.name.trim().toLowerCase())) {
+                  merged.push(dp)
+                }
+              })
+              setParties(merged)
+              localStorage.setItem('maxxi_app_parties', JSON.stringify(merged))
             }
 
             if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {

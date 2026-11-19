@@ -59,13 +59,33 @@ export default function KiyavaInvoiceForm({
   )
 
   // 2. Buyer / Party
+  const defaultParty = 
+    parties.find((p) => p.name.toUpperCase().includes('KARAN')) || 
+    parties.find((p) => !p.name.toUpperCase().includes('KIYAVA')) || 
+    parties[0]
+
+  const initialParty = initialInvoice?.buyer
+    ? parties.find(
+        (p) =>
+          p.id === initialInvoice.buyer.id ||
+          p.name.toLowerCase() === initialInvoice.buyer.name.toLowerCase()
+      ) || initialInvoice.buyer
+    : defaultParty
+
   const [selectedPartyId, setSelectedPartyId] = useState<string>(
-    initialInvoice?.buyer.id || parties[0]?.id || ''
+    initialParty?.id || defaultParty?.id || ''
   )
   const [partySearchQuery, setPartySearchQuery] = useState('')
   const [isPartySearchOpen, setIsPartySearchOpen] = useState(false)
   const [patientResults, setPatientResults] = useState<any[]>([])
   const partySearchRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!selectedPartyId && parties.length > 0) {
+      const preferred = parties.find((p) => p.name.toUpperCase().includes('KARAN')) || parties[0]
+      if (preferred) setSelectedPartyId(preferred.id)
+    }
+  }, [parties, selectedPartyId])
 
   useEffect(() => {
     const fetchPatients = async () => {
@@ -148,7 +168,12 @@ export default function KiyavaInvoiceForm({
 
   // Active Company & Party
   const currentCompany = companies.find((c) => c.id === selectedCompanyId) || companies[0]
-  const currentBuyer = parties.find((p) => p.id === selectedPartyId) || parties[0]
+  const currentBuyer =
+    parties.find((p) => p.id === selectedPartyId) ||
+    parties.find((p) => initialInvoice?.buyer && (p.id === initialInvoice.buyer.id || p.name.toLowerCase() === initialInvoice.buyer.name.toLowerCase())) ||
+    (initialInvoice?.buyer && initialInvoice.buyer.name ? initialInvoice.buyer : null) ||
+    parties.find((p) => p.name.toUpperCase().includes('KARAN')) ||
+    parties[0]
 
   // Inter-state detection
   const isInterState =
@@ -538,9 +563,17 @@ export default function KiyavaInvoiceForm({
                           setIsPartySearchOpen(false)
                           setPartySearchQuery('')
                         }}
-                        className="px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer rounded-lg mb-0.5"
+                        className={`px-3 py-2.5 text-xs font-bold cursor-pointer rounded-lg mb-0.5 flex justify-between items-center transition-colors ${
+                          selectedPartyId === p.id ? 'bg-blue-100 text-blue-800' : 'text-slate-700 hover:bg-blue-50 hover:text-blue-700'
+                        }`}
                       >
-                        {p.name} <span className="text-slate-400 font-medium ml-1">({p.city || p.state})</span>
+                        <div>
+                          <span>{p.name}</span>
+                          <span className="text-slate-400 font-medium ml-1">({p.city || p.state})</span>
+                        </div>
+                        {selectedPartyId === p.id && (
+                          <span className="text-[10px] font-black bg-blue-200 text-blue-900 px-2 py-0.5 rounded">SELECTED</span>
+                        )}
                       </div>
                   ))}
 

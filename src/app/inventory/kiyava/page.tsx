@@ -197,8 +197,15 @@ export default function KiyavaPage() {
               localStorage.setItem('ksv_kiyava_invoices', JSON.stringify(dbInvoices))
             }
             if (Array.isArray(dbParties) && dbParties.length > 0) {
-              setParties(dbParties)
-              localStorage.setItem('ksv_kiyava_parties', JSON.stringify(dbParties))
+              // Ensure default parties (KARAN SINGH VAIDH, NBH, MAXXI) are never lost
+              const merged = [...dbParties]
+              DEFAULT_PARTIES.forEach(dp => {
+                if (!merged.some(p => p.name.trim().toLowerCase() === dp.name.trim().toLowerCase())) {
+                  merged.push(dp)
+                }
+              })
+              setParties(merged)
+              localStorage.setItem('ksv_kiyava_parties', JSON.stringify(merged))
             }
             if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
               setCompanies(dbCompanies)
