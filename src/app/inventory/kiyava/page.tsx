@@ -607,23 +607,70 @@ export default function KiyavaPage() {
     } catch (e) {}
 
     // Auto-sync to KSV as PURCHASE if Kiyava is selling to KSV
-    const buyerNameStr = invoice.buyer.name.toLowerCase()
+    const buyerNameStr = (invoice.buyer?.name || '').toLowerCase()
     if ((invoice.type || 'SALE') === 'SALE' && (buyerNameStr.includes('ksv') || buyerNameStr.includes('karan singh vaidh'))) {
       try {
+        const ksvPurchaseId = `pur_ksv_${invoice.id || invoice.invoiceNo}`
+        const ksvPurchaseInvoice: KiyavaInvoice = {
+          ...JSON.parse(JSON.stringify(invoice)),
+          id: ksvPurchaseId,
+          type: 'PURCHASE',
+          // Company (KSV receiving entity)
+          company: {
+            id: 'comp_ksv',
+            name: 'KARAN SINGH VAIDH (KSV)',
+            tagline: 'Ayurvedic Treatment & Clinical Center',
+            addressLine1: 'VILL- RADIYANA, PO SUBATHU',
+            addressLine2: 'TEH & DISTT - SOLAN',
+            city: 'Solan',
+            state: 'Himachal Pradesh',
+            stateCode: '02',
+            pincode: '173206',
+            gstin: '02DFBPS6121B2Z2',
+            pan: 'DFBPS6121B',
+            email: 'karansinghvaidh@gmail.com',
+            phone: '98160 12345',
+            bankName: 'HDFC Bank',
+            branch: 'Solan Branch',
+            accountNo: '50200049281729',
+            ifscCode: 'HDFC0001423',
+            isDefault: true,
+          },
+          // Supplier (Kiyava)
+          buyer: {
+            id: 'party_kiyava',
+            name: 'KIYAVA',
+            contactPerson: 'Karan Vaidh / Store Manager',
+            addressLine1: 'Upper Thari, Near M.G. Steel Hardware',
+            addressLine2: 'Subathu Main Road, Subathu Chowk',
+            city: 'Sabathu, Solan',
+            state: 'Himachal Pradesh',
+            stateCode: '02',
+            pincode: '173206',
+            gstin: '02DFBPS6121B1Z3',
+            phone: '78076 22577',
+            email: 'karansinghvaidh@gmail.com',
+            transport: invoice.transport || 'Chandra Mangal Tpt Co.',
+            station: 'Sabathu (SOLAN)'
+          }
+        }
+
         const ksvStored = localStorage.getItem('ksv_app_invoices')
         const ksvInvoices = ksvStored ? JSON.parse(ksvStored) : []
-        
-        const ksvPurchaseInvoice = JSON.parse(JSON.stringify(invoice))
-        ksvPurchaseInvoice.type = 'PURCHASE'
-        
-        const existingIndex = ksvInvoices.findIndex((inv: any) => inv.id === invoice.id)
+        const existingIndex = ksvInvoices.findIndex((inv: any) => inv.id === ksvPurchaseId || (inv.invoiceNo === invoice.invoiceNo && inv.type === 'PURCHASE'))
         if (existingIndex >= 0) {
           ksvInvoices[existingIndex] = ksvPurchaseInvoice
         } else {
           ksvInvoices.unshift(ksvPurchaseInvoice)
         }
-        
         localStorage.setItem('ksv_app_invoices', JSON.stringify(ksvInvoices))
+
+        // Save to MongoDB database for KSV
+        fetch(`${API_URL}/api/ksv/invoices`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ksvPurchaseInvoice)
+        }).catch(() => {})
 
         // Also sync products to KSV catalog so they appear in Live Stock
         const ksvCatalogStored = localStorage.getItem('ksv_app_catalog')
@@ -632,7 +679,7 @@ export default function KiyavaPage() {
         let catalogChanged = false
         invoice.items.forEach(item => {
           if (!ksvCatalog.some((c: any) => c.name.toLowerCase() === item.description.toLowerCase())) {
-            ksvCatalog.push({
+            const newCatItem = {
               id: `cat_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`,
               name: item.description,
               hsnCode: item.hsnSac || '',
@@ -640,9 +687,19 @@ export default function KiyavaPage() {
               defaultRate: item.rate || 0,
               defaultTaxRate: item.taxRate || 0,
               category: 'herb',
-              description: 'Auto-added from Kiyava purchase'
-            })
+              description: 'Auto-added from Kiyava purchase',
+              quantity: Number(item.quantity) || 0
+            }
+            ksvCatalog.push(newCatItem)
             catalogChanged = true
+
+            fetch(`${API_URL}/api/ksv/catalog`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newCatItem)
+            }).catch(() => {})
+          }
+        })
           }
         })
         

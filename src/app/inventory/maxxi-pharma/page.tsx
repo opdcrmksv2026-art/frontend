@@ -174,9 +174,8 @@ export default function MaxxiPharmaPage() {
         }
       }
       parsedInvoices = (parsedInvoices || []).filter((inv) => {
-        const id = inv.id || ''
         const invNo = inv.invoiceNo || ''
-        const isDummy = id.startsWith('inv_maxxi_pur_') || invNo === 'MXP/2026/012'
+        const isDummy = invNo === 'MXP/2026/012'
         return !isDummy
       })
       setInvoices(parsedInvoices)
@@ -231,14 +230,21 @@ export default function MaxxiPharmaPage() {
               )
             }
 
-            if (Array.isArray(dbInvoices)) {
-              const cleanInvoices = dbInvoices.filter((inv) => {
-                const id = inv.id || ''
-                const invNo = inv.invoiceNo || ''
-                return !id.startsWith('inv_maxxi_pur_') && invNo !== 'MXP/2026/012'
-              })
+            if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
+              const cleanInvoices = dbInvoices.filter((inv) => inv.invoiceNo !== 'MXP/2026/012')
               setInvoices(cleanInvoices)
               localStorage.setItem('maxxi_app_invoices', JSON.stringify(cleanInvoices))
+            } else if (Array.isArray(dbInvoices) && dbInvoices.length === 0 && parsedInvoices.length > 0) {
+              // If DB is clean but user entered invoices in localStorage, persist them up to MongoDB!
+              Promise.allSettled(
+                parsedInvoices.map((inv) =>
+                  fetch(`${API_URL}/api/maxxi/invoices`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(inv)
+                  })
+                )
+              )
             }
 
             if (Array.isArray(dbParties) && dbParties.length > 0) {

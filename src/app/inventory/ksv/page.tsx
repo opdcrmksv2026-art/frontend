@@ -383,32 +383,80 @@ export default function KsvPage() {
     } catch (e) {}
 
     // Auto-sync to Maxxi Pharma as PURCHASE if KSV is selling to Maxxi
-    const buyerNameStr = invoice.buyer.name.toLowerCase()
+    const buyerNameStr = (invoice.buyer?.name || '').toLowerCase()
     if ((invoice.type || 'SALE') === 'SALE' && (buyerNameStr.includes('maxxi') || buyerNameStr.includes('maxi'))) {
       try {
+        const maxxiPurchaseId = `pur_maxxi_${invoice.id || invoice.invoiceNo}`
+        const maxxiPurchaseInvoice: KiyavaInvoice = {
+          ...JSON.parse(JSON.stringify(invoice)),
+          id: maxxiPurchaseId,
+          type: 'PURCHASE',
+          // Company (Receiving Buyer entity for Maxxi)
+          company: {
+            id: 'comp_maxxi',
+            name: 'MAXXI PHARMA PVT. LTD.',
+            tagline: 'Pharmaceutical Manufacturing & Healthcare Formulations',
+            addressLine1: 'Plot No. 45, Industrial Area Phase 1',
+            addressLine2: 'Near ESI Hospital, Solan',
+            city: 'Solan',
+            state: 'Himachal Pradesh',
+            stateCode: '02',
+            pincode: '173212',
+            gstin: '02AAACM8821F1Z9',
+            pan: 'AAACM8821F',
+            email: 'info@maxxipharma.com',
+            phone: '01792-234890 / 98160 54321',
+            bankName: 'ICICI Bank',
+            branch: 'Mall Road, Solan',
+            accountNo: '034105009812',
+            ifscCode: 'ICIC0000341',
+            isDefault: true,
+          },
+          // Supplier (Party from whom Maxxi is purchasing)
+          buyer: {
+            id: 'party_ksv',
+            name: 'KARAN SINGH VAIDH (KSV)',
+            contactPerson: 'Dr. Karan Singh Vaidh',
+            addressLine1: 'VILL- RADIYANA, PO SUBATHU',
+            addressLine2: 'TEH & DISTT - SOLAN',
+            city: 'Solan',
+            state: 'Himachal Pradesh',
+            stateCode: '02',
+            pincode: '173206',
+            gstin: '02DFBPS6121B2Z2',
+            phone: '98160 12345',
+            email: 'karansinghvaidh@gmail.com',
+            transport: invoice.transport || 'Direct Counter Delivery',
+            station: 'Solan'
+          }
+        }
+
+        // 1. Update localStorage
         const maxxiStored = localStorage.getItem('maxxi_app_invoices')
         const maxxiInvoices = maxxiStored ? JSON.parse(maxxiStored) : []
-
-        const maxxiPurchaseInvoice = JSON.parse(JSON.stringify(invoice))
-        maxxiPurchaseInvoice.type = 'PURCHASE'
-
-        const existingIndex = maxxiInvoices.findIndex((inv: any) => inv.id === invoice.id)
+        const existingIndex = maxxiInvoices.findIndex((inv: any) => inv.id === maxxiPurchaseId || (inv.invoiceNo === invoice.invoiceNo && inv.type === 'PURCHASE'))
         if (existingIndex >= 0) {
           maxxiInvoices[existingIndex] = maxxiPurchaseInvoice
         } else {
           maxxiInvoices.unshift(maxxiPurchaseInvoice)
         }
-
         localStorage.setItem('maxxi_app_invoices', JSON.stringify(maxxiInvoices))
 
-        // Also sync products to Maxxi catalog so they appear in Live Stock
+        // 2. CRITICAL: Save to MongoDB Atlas (/api/maxxi/invoices) so it is permanent!
+        fetch(`${API_URL}/api/maxxi/invoices`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(maxxiPurchaseInvoice)
+        }).catch((err) => console.warn('Failed to sync purchase to Maxxi DB:', err))
+
+        // 3. Also sync products to Maxxi catalog so they appear in Live Stock
         const maxxiCatalogStored = localStorage.getItem('maxxi_app_catalog')
         const maxxiCatalog = maxxiCatalogStored ? JSON.parse(maxxiCatalogStored) : []
 
         let catalogChanged = false
         invoice.items.forEach(item => {
           if (!maxxiCatalog.some((c: any) => c.name.toLowerCase() === item.description.toLowerCase())) {
-            maxxiCatalog.push({
+            const newCatItem = {
               id: `cat_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`,
               name: item.description,
               hsnCode: item.hsnSac || '',
@@ -416,9 +464,18 @@ export default function KsvPage() {
               defaultRate: item.rate || 0,
               defaultTaxRate: item.taxRate || 0,
               category: 'medicine',
-              description: 'Auto-added from KSV purchase'
-            })
+              description: 'Auto-added from KSV purchase',
+              quantity: Number(item.quantity) || 0
+            }
+            maxxiCatalog.push(newCatItem)
             catalogChanged = true
+
+            // Sync to Maxxi catalog in MongoDB
+            fetch(`${API_URL}/api/maxxi/catalog`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newCatItem)
+            }).catch(() => {})
           }
         })
 
