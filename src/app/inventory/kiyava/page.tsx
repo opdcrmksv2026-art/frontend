@@ -622,39 +622,19 @@ export default function KiyavaPage() {
     const isEditing = invoices.some((inv) => inv.id === invoice.id && !inv.id.startsWith('inv_'))
     setEditingInvoice(null)
 
-    let savedInvoice: KiyavaInvoice = { ...invoice }
-
-    // 1. Persist directly to Kiyava MongoDB database
-    try {
-      if (isEditing) {
-        const res = await fetch(`${API_URL}/api/kiyava/invoices/${invoice.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(invoice)
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
-        }
-      } else {
-        const res = await fetch(`${API_URL}/api/kiyava/invoices`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(invoice)
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
-        }
-      }
-    } catch (e) {
-      console.warn('Could not save invoice to Kiyava database:', e)
-    }
-
-    const updatedInvoices = [savedInvoice, ...invoices.filter((inv) => inv.id !== invoice.id && inv.id !== savedInvoice.id)]
+    // 1. INSTANT LOCAL UPDATE (0ms delay for user!)
+    const initialSaved: KiyavaInvoice = { ...invoice }
+    const updatedInvoices = [initialSaved, ...invoices.filter((inv) => inv.id !== invoice.id && inv.invoiceNo !== invoice.invoiceNo)]
     saveInvoices(updatedInvoices)
 
-    // 2. Auto-sync to KSV as PURCHASE if Kiyava is selling to KSV
+    // Instantly switch view or open print modal
+    if (shouldPrint) {
+      setSelectedInvoiceForPrint(initialSaved)
+    } else {
+      setActiveTab('invoices')
+    }
+
+    // 2. Auto-sync to KSV local storage so it shows immediately if opened without refresh
     const buyerNameStr = (invoice.buyer?.name || '').toLowerCase()
     if ((invoice.type || 'SALE') === 'SALE' && (buyerNameStr.includes('ksv') || buyerNameStr.includes('karan singh vaidh') || buyerNameStr.includes('karan'))) {
       try {
@@ -701,7 +681,6 @@ export default function KiyavaPage() {
           }
         }
 
-        // Update KSV local storage so it shows immediately if opened without refresh
         const ksvStored = localStorage.getItem('ksv_app_invoices')
         const ksvInvoices = ksvStored ? JSON.parse(ksvStored) : []
         const updatedKsv = [ksvPurchaseInvoice, ...ksvInvoices.filter((inv: any) => String(inv.invoiceNo) !== String(invoice.invoiceNo) || inv.type !== 'PURCHASE')]
@@ -711,10 +690,23 @@ export default function KiyavaPage() {
       }
     }
 
-    if (shouldPrint) {
-      setSelectedInvoiceForPrint(savedInvoice)
-    } else {
-      setActiveTab('invoices')
+    // 3. Asynchronously persist to MongoDB Atlas database in the background
+    try {
+      const endpoint = isEditing ? `${API_URL}/api/kiyava/invoices/${invoice.id}` : `${API_URL}/api/kiyava/invoices`
+      const method = isEditing ? 'PUT' : 'POST'
+      const res = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(invoice)
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.id) {
+          setInvoices((prev) => [data, ...prev.filter((inv) => inv.id !== invoice.id && inv.id !== data.id && inv.invoiceNo !== data.invoiceNo)])
+        }
+      }
+    } catch (e) {
+      console.warn('Could not save invoice to Kiyava database in background:', e)
     }
   }
 

@@ -484,40 +484,35 @@ export default function KsvPage() {
       }
     }
 
-    let savedInvoice: KiyavaInvoice = { ...invoice }
-    // Persist to MongoDB database
-    try {
-      if (exists) {
-        const res = await fetch(`${API_URL}/api/ksv/invoices/${invoice.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(invoice)
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
-        }
-      } else {
-        const res = await fetch(`${API_URL}/api/ksv/invoices`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(invoice)
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data && data.id) savedInvoice = { ...savedInvoice, ...data }
-        }
-      }
-    } catch (e) {}
-
-    const updated = [savedInvoice, ...invoices.filter((inv) => inv.id !== invoice.id && inv.id !== savedInvoice.id)]
+    // 1. INSTANT LOCAL UPDATE (0ms delay for user!)
+    const initialSaved: KiyavaInvoice = { ...invoice }
+    const updated = [initialSaved, ...invoices.filter((inv) => inv.id !== invoice.id && inv.invoiceNo !== invoice.invoiceNo)]
     saveInvoices(updated)
 
     if (shouldPrint) {
-      setSelectedInvoiceForPrint(savedInvoice)
+      setSelectedInvoiceForPrint(initialSaved)
     } else {
       setActiveTab('invoices')
       setInvoiceSummaryType((invoice.type || 'SALE') as any)
+    }
+
+    // 2. Persist to MongoDB database in the background
+    try {
+      const endpoint = exists ? `${API_URL}/api/ksv/invoices/${invoice.id}` : `${API_URL}/api/ksv/invoices`
+      const method = exists ? 'PUT' : 'POST'
+      const res = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(invoice)
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.id) {
+          setInvoices((prev) => [data, ...prev.filter((inv) => inv.id !== invoice.id && inv.id !== data.id && inv.invoiceNo !== data.invoiceNo)])
+        }
+      }
+    } catch (e) {
+      console.warn('Could not save invoice to KSV database in background:', e)
     }
   }
 
