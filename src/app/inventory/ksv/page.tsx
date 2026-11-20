@@ -199,7 +199,15 @@ export default function KsvPage() {
       if (storedInvoices) {
         try {
           const parsed = JSON.parse(storedInvoices)
-          const clean = (parsed || []).filter((inv: any) => inv.invoiceNo !== 'KYV/2026/089')
+          const seen = new Set<string>()
+          const clean: KiyavaInvoice[] = []
+          for (const inv of (parsed || [])) {
+            if (inv.invoiceNo === 'KYV/2026/089') continue
+            const key = `${String(inv.invoiceNo || '').trim()}___${String(inv.type || 'SALE').trim()}`
+            if (seen.has(key)) continue
+            seen.add(key)
+            clean.push(inv)
+          }
           setInvoices(clean)
           localStorage.setItem('ksv_app_invoices', JSON.stringify(clean))
         } catch {
@@ -277,8 +285,16 @@ export default function KsvPage() {
             }
 
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
-              setInvoices(dbInvoices)
-              localStorage.setItem('ksv_app_invoices', JSON.stringify(dbInvoices))
+              const seenDbInv = new Set<string>()
+              const cleanDbInvoices: KiyavaInvoice[] = []
+              for (const inv of dbInvoices) {
+                const key = `${String(inv.invoiceNo || '').trim()}___${String(inv.type || 'SALE').trim()}`
+                if (seenDbInv.has(key)) continue
+                seenDbInv.add(key)
+                cleanDbInvoices.push(inv)
+              }
+              setInvoices(cleanDbInvoices)
+              localStorage.setItem('ksv_app_invoices', JSON.stringify(cleanDbInvoices))
             }
 
             if (Array.isArray(dbParties) && dbParties.length > 0) {
@@ -361,8 +377,16 @@ export default function KsvPage() {
   }
 
   const saveInvoices = (newInvoices: KiyavaInvoice[]) => {
-    setInvoices(newInvoices)
-    localStorage.setItem('ksv_app_invoices', JSON.stringify(newInvoices))
+    const seen = new Set<string>()
+    const cleanInvoices: KiyavaInvoice[] = []
+    for (const inv of newInvoices) {
+      const key = `${String(inv.invoiceNo || '').trim()}___${String(inv.type || 'SALE').trim()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      cleanInvoices.push(inv)
+    }
+    setInvoices(cleanInvoices)
+    localStorage.setItem('ksv_app_invoices', JSON.stringify(cleanInvoices))
   }
 
   const saveStockTransfers = (newTransfers: StockTransferLog[]) => {
@@ -455,47 +479,6 @@ export default function KsvPage() {
           maxxiInvoices.unshift(maxxiPurchaseInvoice)
         }
         localStorage.setItem('maxxi_app_invoices', JSON.stringify(maxxiInvoices))
-
-        // 2. CRITICAL: Save to MongoDB Atlas (/api/maxxi/invoices) so it is permanent!
-        await fetch(`${API_URL}/api/maxxi/invoices`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(maxxiPurchaseInvoice)
-        }).catch((err) => console.warn('Failed to sync purchase to Maxxi DB:', err))
-
-        // 3. Also sync products to Maxxi catalog so they appear in Live Stock
-        const maxxiCatalogStored = localStorage.getItem('maxxi_app_catalog')
-        const maxxiCatalog = maxxiCatalogStored ? JSON.parse(maxxiCatalogStored) : []
-
-        let catalogChanged = false
-        for (const item of invoice.items) {
-          if (!maxxiCatalog.some((c: any) => c.name.toLowerCase() === item.description.toLowerCase())) {
-            const newCatItem = {
-              id: `cat_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-              name: item.description,
-              hsnCode: item.hsnSac || '',
-              defaultUnit: item.unit || 'PCS',
-              defaultRate: item.rate || 0,
-              defaultTaxRate: item.taxRate || 0,
-              category: 'medicine',
-              description: 'Auto-added from KSV purchase',
-              quantity: Number(item.quantity) || 0
-            }
-            maxxiCatalog.push(newCatItem)
-            catalogChanged = true
-
-            // Sync to Maxxi catalog in MongoDB
-            await fetch(`${API_URL}/api/maxxi/catalog`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(newCatItem)
-            }).catch(() => {})
-          }
-        }
-
-        if (catalogChanged) {
-          localStorage.setItem('maxxi_app_catalog', JSON.stringify(maxxiCatalog))
-        }
       } catch (e) {
         console.error('Failed to sync invoice to Maxxi Pharma:', e)
       }
@@ -1450,8 +1433,12 @@ export default function KsvPage() {
                           </div>
                         </td>
                         <td className="p-3 font-mono font-bold text-slate-800">{inv.invoiceNo}</td>
-                        <td className="p-3 font-semibold text-slate-900">{inv.company.name}</td>
-                        <td className="p-3 text-slate-700 font-semibold">{inv.buyer.name}</td>
+                        <td className="p-3 font-semibold text-slate-900">
+                          {inv.type === 'PURCHASE' ? (inv.buyer?.name || 'KIYAVA') : (inv.company?.name || 'KARAN SINGH VAIDH (KSV)')}
+                        </td>
+                        <td className="p-3 text-slate-700 font-semibold">
+                          {inv.type === 'PURCHASE' ? (inv.company?.name || 'KARAN SINGH VAIDH (KSV)') : (inv.buyer?.name || '-')}
+                        </td>
                         <td className="p-3 text-right font-mono">{inv.items.length}</td>
                         <td className="p-3 text-right font-mono text-slate-600">
                           ₹{inv.totalTaxAmount?.toLocaleString('en-IN') || 0}

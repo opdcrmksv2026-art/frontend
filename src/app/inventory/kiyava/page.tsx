@@ -701,37 +701,11 @@ export default function KiyavaPage() {
           }
         }
 
-        // Save directly to KSV MongoDB Database
-        const ksvRes = await fetch(`${API_URL}/api/ksv/invoices`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(ksvPurchaseInvoice)
-        })
-
-        // Also update KSV local storage so it shows immediately if opened
+        // Update KSV local storage so it shows immediately if opened without refresh
         const ksvStored = localStorage.getItem('ksv_app_invoices')
         const ksvInvoices = ksvStored ? JSON.parse(ksvStored) : []
-        const ksvSaved = ksvRes.ok ? await ksvRes.json() : ksvPurchaseInvoice
-        const updatedKsv = [ksvSaved, ...ksvInvoices.filter((inv: any) => inv.invoiceNo !== invoice.invoiceNo || inv.type !== 'PURCHASE')]
+        const updatedKsv = [ksvPurchaseInvoice, ...ksvInvoices.filter((inv: any) => String(inv.invoiceNo) !== String(invoice.invoiceNo) || inv.type !== 'PURCHASE')]
         localStorage.setItem('ksv_app_invoices', JSON.stringify(updatedKsv))
-
-        // Also sync products to KSV catalog in MongoDB
-        for (const item of invoice.items) {
-          await fetch(`${API_URL}/api/ksv/catalog`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: item.description,
-              hsnCode: item.hsnSac || '',
-              defaultUnit: item.unit || 'kg',
-              defaultRate: Number(item.rate) || 0,
-              defaultTaxRate: Number(item.taxRate) || 0,
-              category: 'herb',
-              description: 'Auto-added from Kiyava purchase',
-              quantity: Number(item.quantity) || 0
-            })
-          }).catch(() => {})
-        }
       } catch (e) {
         console.error('Failed to auto-sync purchase to KSV', e)
       }
