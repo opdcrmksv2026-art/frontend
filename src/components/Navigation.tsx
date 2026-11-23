@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Search, Menu, X, LayoutDashboard, Users, FileText,
-  Pill, Package, ChevronDown, Hexagon, ExternalLink,
+  Package, ChevronDown, Hexagon, ExternalLink,
   type LucideIcon
 } from 'lucide-react'
 
@@ -52,7 +52,6 @@ const navigationGroups: NavGroup[] = [
           // { name: 'Refunds', href: '/billing/refunds' }
         ]
       },
-      { name: 'Medicine Orders', href: '/orders', icon: Pill },
       {
         name: 'Inventory',
         icon: Package,
