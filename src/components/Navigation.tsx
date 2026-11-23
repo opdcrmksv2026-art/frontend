@@ -8,7 +8,7 @@ import {
   Search, Menu, X, LayoutDashboard, Users, FileText,
   Pill, Package, Factory, Stethoscope, Briefcase, MessagesSquare,
   Settings, Send, ChevronDown, Hexagon, UserPlus, LogOut,
-  PhoneCall, MessageCircle,
+  PhoneCall, MessageCircle, ExternalLink,
   type LucideIcon
 } from 'lucide-react'
 
@@ -16,9 +16,10 @@ import {
 type NavItem = {
   name: string
   href?: string
+  target?: string
   icon: LucideIcon
   badge?: { text: string; color: string }
-  subItems?: { name: string; href: string; badge?: { text: string; color: string } }[]
+  subItems?: { name: string; href: string; target?: string; badge?: { text: string; color: string } }[]
 }
 
 type NavGroup = {
@@ -58,9 +59,9 @@ const navigationGroups: NavGroup[] = [
         name: 'Inventory',
         icon: Package,
         subItems: [
-          { name: 'Kiyava', href: '/inventory/kiyava' },
-          { name: 'Karan Singh Vaidh (KSV)', href: '/inventory/ksv' },
-          { name: 'Maxxi Pharma', href: '/inventory/maxxi-pharma' }
+          { name: 'Kiyava', href: '/inventory/kiyava', target: '_blank' },
+          { name: 'Karan Singh Vaidh (KSV)', href: '/inventory/ksv', target: '_blank' },
+          { name: 'Maxxi Pharma', href: '/inventory/maxxi-pharma', target: '_blank' }
         ]
       }
     ]
@@ -327,9 +328,13 @@ export default function Navigation() {
                                   <Link
                                     key={subItem.name}
                                     href={subItem.href}
-                                    prefetch={true}
+                                    target={subItem.target}
+                                    rel={subItem.target === '_blank' ? 'noopener noreferrer' : undefined}
+                                    prefetch={subItem.target === '_blank' ? false : true}
                                     onMouseEnter={() => {
-                                      try { router.prefetch(subItem.href) } catch (e) {}
+                                      if (subItem.target !== '_blank') {
+                                        try { router.prefetch(subItem.href) } catch (e) {}
+                                      }
                                     }}
                                     onClick={() => setIsOpen(false)}
                                     className={`flex items-center justify-between px-3 py-2 text-sm font-medium transition-all rounded-xl relative group ${isSubActive ? 'text-blue-400 bg-white/5' : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
@@ -339,11 +344,13 @@ export default function Navigation() {
                                       <div className={`w-[5px] h-[5px] rounded-full transition-colors ${isSubActive ? 'bg-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.8)]' : 'bg-transparent group-hover:bg-slate-600'}`} />
                                       {subItem.name}
                                     </div>
-                                    {subItem.badge && (
+                                    {subItem.target === '_blank' ? (
+                                      <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 opacity-60 group-hover:opacity-100 transition-all shrink-0" />
+                                    ) : subItem.badge ? (
                                       <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full ${subItem.badge.color}`}>
                                         {subItem.badge.text}
                                       </span>
-                                    )}
+                                    ) : null}
                                   </Link>
                                 )
                               })}
