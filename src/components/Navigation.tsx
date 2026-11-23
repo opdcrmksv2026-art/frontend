@@ -6,8 +6,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Search, Menu, X, LayoutDashboard, Users, FileText,
-  Pill, Package, ChevronDown, Hexagon, LogOut,
-  PhoneCall, MessageCircle, ExternalLink,
+  Pill, Package, ChevronDown, Hexagon, ExternalLink,
   type LucideIcon
 } from 'lucide-react'
 
@@ -343,56 +342,6 @@ export default function Navigation() {
 
 
         </div>
-
-        {/* 4. Support Helpline */}
-        <div className="p-3 relative z-10 shrink-0 border-t border-white/10 bg-black/30 backdrop-blur-md">
-          {/* Call Vikas (Support Helpline) */}
-          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-slate-900/60 border border-emerald-500/30 shadow-lg shadow-emerald-950/20">
-            <div className="flex items-center justify-between mb-2 px-0.5">
-              <div className="flex items-center gap-1.5">
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-300">Call Vikas for Support</span>
-              </div>
-              <button
-                onClick={() => {
-                  if (confirm("Kya aap Logout karna chahte hain?")) {
-                    localStorage.removeItem("ksv_user_auth")
-                    window.location.reload()
-                  }
-                }}
-                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all border border-transparent hover:border-rose-500/20 cursor-pointer"
-                title="Logout from Portal"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <a
-                href="tel:7018610136"
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-950/30 active:scale-95 group"
-                title="Direct Call Vikas for Support: 7018610136"
-              >
-                <PhoneCall className="w-3.5 h-3.5 text-emerald-100 group-hover:scale-110 transition-transform" />
-                <span className="tracking-wide font-mono font-bold text-sm">7018610136</span>
-              </a>
-              <a
-                href="https://wa.me/917018610136?text=Hello%20Vikas%20bhai%2C%20mujhe%20KSV%20CRM%20portal%20mein%20support%20chahiye"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-white rounded-xl transition-all border border-emerald-500/40 flex items-center justify-center cursor-pointer active:scale-95"
-                title="WhatsApp Vikas (7018610136)"
-              >
-                <MessageCircle className="w-4 h-4" />
-              </a>
-            </div>
-          </div>
-        </div>
-
-
 
       </aside>
     </>
