@@ -407,14 +407,8 @@ export default function Navigation() {
                 <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0B1220] rounded-full" />
               </div>
               <div>
-                <p className="text-xs font-bold text-white leading-tight">Dr. Vikas</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[10px] text-emerald-400 font-medium">Chief Doctor</span>
-                  <span className="text-slate-600 text-[9px]">•</span>
-                  <a href="tel:7018610136" className="text-[10px] text-slate-400 hover:text-emerald-300 transition-colors font-mono font-medium">
-                    7018610136
-                  </a>
-                </div>
+                <p className="text-sm font-bold text-white leading-tight">Dr. Vikas</p>
+                <p className="text-[11px] text-emerald-400 font-medium">Chief Doctor</p>
               </div>
             </div>
             <button
