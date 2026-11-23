@@ -8,6 +8,7 @@ import {
   Search, Menu, X, LayoutDashboard, Users, FileText,
   Pill, Package, Factory, Stethoscope, Briefcase, MessagesSquare,
   Settings, Send, ChevronDown, Hexagon, UserPlus, LogOut,
+  PhoneCall, MessageCircle,
   type LucideIcon
 } from 'lucide-react'
 
@@ -360,17 +361,60 @@ export default function Navigation() {
 
         </div>
 
-        {/* 4. User Profile & Logout */}
-        <div className="p-4 relative z-10 shrink-0 border-t border-white/5 bg-black/20 backdrop-blur-md">
-          <div className="flex items-center justify-between p-2 rounded-2xl bg-white/5 border border-white/5">
-            <div className="flex items-center gap-3">
+        {/* 4. Support Helpline & User Profile */}
+        <div className="p-3 relative z-10 shrink-0 border-t border-white/10 bg-black/30 backdrop-blur-md space-y-2">
+          {/* Call Vikas (Support Helpline) */}
+          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-slate-900/60 border border-emerald-500/30 shadow-lg shadow-emerald-950/20">
+            <div className="flex items-center justify-between mb-1.5 px-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">Call Vikas for Support</span>
+              </div>
+              <span className="text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
+                24/7
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <a
+                href="tel:7018610136"
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-950/30 active:scale-95 group"
+                title="Direct Call Vikas for Support: 7018610136"
+              >
+                <PhoneCall className="w-3.5 h-3.5 text-emerald-100 group-hover:scale-110 transition-transform" />
+                <span className="tracking-wide font-mono font-bold">7018610136</span>
+              </a>
+              <a
+                href="https://wa.me/917018610136?text=Hello%20Vikas%20bhai%2C%20mujhe%20KSV%20CRM%20portal%20mein%20support%20chahiye"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-white rounded-xl transition-all border border-emerald-500/40 flex items-center justify-center cursor-pointer active:scale-95"
+                title="WhatsApp Vikas (7018610136)"
+              >
+                <MessageCircle className="w-4 h-4" />
+              </a>
+            </div>
+          </div>
+
+          {/* User Profile & Logout */}
+          <div className="flex items-center justify-between p-2 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+            <div className="flex items-center gap-2.5">
               <div className="relative">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4" alt="Dr. Admin" className="w-10 h-10 rounded-full border-2 border-emerald-500/40" />
-                <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0B1220] rounded-full" />
+                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4" alt="Dr. Admin" className="w-9 h-9 rounded-full border-2 border-emerald-500/40" />
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0B1220] rounded-full" />
               </div>
               <div>
-                <p className="text-sm font-bold text-white leading-tight">Dr. Vikas</p>
-                <p className="text-[11px] text-emerald-400 font-medium">Chief Doctor</p>
+                <p className="text-xs font-bold text-white leading-tight">Dr. Vikas</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] text-emerald-400 font-medium">Chief Doctor</span>
+                  <span className="text-slate-600 text-[9px]">•</span>
+                  <a href="tel:7018610136" className="text-[10px] text-slate-400 hover:text-emerald-300 transition-colors font-mono font-medium">
+                    7018610136
+                  </a>
+                </div>
               </div>
             </div>
             <button
