@@ -6,8 +6,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Search, Menu, X, LayoutDashboard, Users, FileText,
-  Pill, Package, Factory, Stethoscope, Briefcase, MessagesSquare,
-  Settings, Send, ChevronDown, Hexagon, UserPlus, LogOut,
+  Pill, Package, ChevronDown, Hexagon, LogOut,
   PhoneCall, MessageCircle, ExternalLink,
   type LucideIcon
 } from 'lucide-react'
@@ -64,29 +63,6 @@ const navigationGroups: NavGroup[] = [
           { name: 'Maxxi Pharma', href: '/inventory/maxxi-pharma', target: '_blank' }
         ]
       }
-    ]
-  },
-  {
-    label: "Operations",
-    items: [
-      { name: 'Diseases', href: '/diseases', icon: Stethoscope },
-      { name: 'Medicine Kits', href: '/kits', icon: Briefcase }
-    ]
-  },
-  {
-    label: "CRM",
-    items: [
-      { name: 'Agents', href: '/agents', icon: Users },
-      { name: 'Patient Referrals', href: '/patients/referrals', icon: UserPlus },
-      { name: 'WhatsApp', href: '/whatsapp', icon: MessagesSquare, badge: { text: '18', color: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/20' } },
-      { name: 'Reports', href: '/reports', icon: FileText }
-    ]
-  },
-  {
-    label: "System",
-    items: [
-      { name: 'Users', href: '/users', icon: Users },
-      { name: 'Settings', href: '/settings', icon: Settings }
     ]
   }
 ]
