@@ -25,12 +25,14 @@ import {
   Banknote,
   Smartphone,
   Wallet,
-  Edit
+  Edit,
+  FileText
 } from "lucide-react"
 
 import { calculateGSTInvoice, findDiscountForTargetPayable, getStateCode, STATE_GST_CODES } from "@/utils/gstCalculator"
 import { numberToIndianWords } from "@/lib/tallyNumberToWords"
 import { API_URL } from "@/lib/apiConfig"
+import { ALL_DEFAULT_MEDICINES } from "@/lib/allMedicinesCatalog"
 
 interface TreatmentProduct {
   name: string
@@ -132,9 +134,13 @@ export default function CreateInvoicePage() {
   // Step-by-Step State
   const [currentStep, setCurrentStep] = useState(1)
 
-  // Catalog for autocomplete
-  const [catalog, setCatalog] = useState<any[]>([])
+  // Catalog for autocomplete (preloaded with 166 full medicines)
+  const [catalog, setCatalog] = useState<any[]>(ALL_DEFAULT_MEDICINES)
   const [activeTreatmentId, setActiveTreatmentId] = useState<string | null>(null)
+
+  // Manual / Custom Invoice Number state
+  const [manualInvoiceNo, setManualInvoiceNo] = useState("")
+  const [previewInvoiceNo, setPreviewInvoiceNo] = useState(() => `INV-${Math.floor(100000 + Math.random() * 900000)}`)
 
   // Search & selection states
   const [searchQuery, setSearchQuery] = useState("")
@@ -237,18 +243,132 @@ export default function CreateInvoicePage() {
     fetchPatients()
   }, [API_URL])
 
-  // Load Maxxi catalog for product autocomplete (instant)
+  // Load full catalogs from backend DB (KSV & Maxxi) & localStorage for real-time product autocomplete
   useEffect(() => {
-    import("@/lib/maxxiDefaults")
-      .then(maxxi => {
-        let maxxiCat = localStorage.getItem("maxxi_app_catalog") 
-          ? JSON.parse(localStorage.getItem("maxxi_app_catalog")!) 
-          : maxxi.DEFAULT_MAXXI_CATALOG
+    let isMounted = true
 
-        setCatalog([...(maxxiCat || [])])
+    const loadCatalogs = async () => {
+      const mergedMap = new Map<string, any>()
+
+      // 1. Base static medicines (166 items: STONVAIDHA KSG, ALLERVAIDHA, VIDHUVAIDHA, CHURAN, SYRUP, etc.)
+      ALL_DEFAULT_MEDICINES.forEach((item) => {
+        const key = item.name.toLowerCase().trim()
+        if (key) mergedMap.set(key, item)
       })
-      .catch(err => console.error("Error loading Maxxi catalog:", err))
-  }, [])
+
+      // 2. Read local storage catalogs if available
+      try {
+        const ksvLocal = localStorage.getItem("ksv_app_catalog")
+        if (ksvLocal) {
+          const parsed = JSON.parse(ksvLocal)
+          if (Array.isArray(parsed)) {
+            parsed.forEach((c: any) => {
+              const k = (c.name || "").toLowerCase().trim()
+              if (k && !mergedMap.has(k)) mergedMap.set(k, c)
+            })
+          }
+        }
+        const maxxiLocal = localStorage.getItem("maxxi_app_catalog")
+        if (maxxiLocal) {
+          const parsed = JSON.parse(maxxiLocal)
+          if (Array.isArray(parsed)) {
+            parsed.forEach((c: any) => {
+              const k = (c.name || "").toLowerCase().trim()
+              if (k && !mergedMap.has(k)) mergedMap.set(k, c)
+            })
+          }
+        }
+      } catch (e) {
+        console.warn("Could not read local catalogs:", e)
+      }
+
+      // 3. Fetch live DB catalogs from backend MongoDB
+      try {
+        const [ksvRes, maxxiRes] = await Promise.all([
+          fetch(`${API_URL}/api/ksv/catalog`).catch(() => null),
+          fetch(`${API_URL}/api/maxxi/catalog`).catch(() => null)
+        ])
+        if (ksvRes && ksvRes.ok) {
+          const ksvData = await ksvRes.json()
+          if (Array.isArray(ksvData)) {
+            ksvData.forEach((c: any) => {
+              const k = (c.name || "").toLowerCase().trim()
+              if (k) mergedMap.set(k, { ...c, defaultRate: c.defaultRate || 0 })
+            })
+          }
+        }
+        if (maxxiRes && maxxiRes.ok) {
+          const maxxiData = await maxxiRes.json()
+          if (Array.isArray(maxxiData)) {
+            maxxiData.forEach((c: any) => {
+              const k = (c.name || "").toLowerCase().trim()
+              if (k && !mergedMap.has(k)) mergedMap.set(k, { ...c, defaultRate: c.defaultRate || 0 })
+            })
+          }
+        }
+      } catch (err) {
+        console.warn("Live catalog fetch warning:", err)
+      }
+
+      if (isMounted) {
+        setCatalog(Array.from(mergedMap.values()))
+      }
+    }
+
+    loadCatalogs()
+    return () => { isMounted = false }
+  }, [API_URL])
+
+  // Helper to select an existing catalog product
+  const handleSelectProduct = (treatmentId: string, product: any) => {
+    setTreatments(prev => prev.map(t => {
+      if (t.id === treatmentId) {
+        const newProducts = [
+          ...t.products,
+          {
+            name: product.name,
+            quantity: "1",
+            rate: product.defaultRate || 0,
+            hsnCode: product.hsnCode || "30049011",
+            taxRate: product.defaultTaxRate || 5
+          }
+        ]
+        const newPrice = newProducts.reduce(
+          (sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate),
+          0
+        ).toString()
+        return { ...t, kitName: "", products: newProducts, price: newPrice }
+      }
+      return t
+    }))
+    setActiveTreatmentId(null)
+  }
+
+  // Helper to add custom unlisted medicine on-the-fly
+  const handleAddCustomProduct = (treatmentId: string, customName: string) => {
+    if (!customName.trim()) return
+    setTreatments(prev => prev.map(t => {
+      if (t.id === treatmentId) {
+        const newProducts = [
+          ...t.products,
+          {
+            name: customName.trim(),
+            quantity: "1",
+            rate: 0,
+            hsnCode: "30049011",
+            taxRate: 5
+          }
+        ]
+        const newPrice = newProducts.reduce(
+          (sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate),
+          0
+        ).toString()
+        return { ...t, kitName: "", products: newProducts, price: newPrice }
+      }
+      return t
+    }))
+    setActiveTreatmentId(null)
+  }
 
   // Treatment list manipulators
   const handleAddTreatment = () => {
@@ -474,7 +594,7 @@ export default function CreateInvoicePage() {
     setError("")
     setSuccess("")
 
-    const invoiceNo = `INV-${Math.floor(100000 + Math.random() * 900000)}`
+    const invoiceNo = manualInvoiceNo.trim() || previewInvoiceNo || `INV-${Math.floor(100000 + Math.random() * 900000)}`
     const combinedKitName = treatments.map(t => {
       const prodString = t.products.map(p => `${p.quantity}x ${p.name}`).join(" + ");
       return `${prodString || t.kitName || 'Treatment'} (${t.durationDays}d)`;
@@ -1071,49 +1191,92 @@ export default function CreateInvoicePage() {
                 </div>
 
                 <div className="flex flex-col relative md:col-span-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Search & Add Product</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Search &amp; Add Product / Medicine</label>
+                    <span className="text-[11px] text-blue-600 font-semibold">{catalog.length} Medicines in Database</span>
+                  </div>
                   <input
                     type="text"
                     value={treatment.kitName}
                     onChange={(e) => handleTreatmentChange(treatment.id, "kitName", e.target.value)}
                     onFocus={() => setActiveTreatmentId(treatment.id)}
-                    onBlur={() => setTimeout(() => setActiveTreatmentId(null), 200)}
-                    placeholder="e.g. KSG 80-1, KSGA 12-1..."
+                    onBlur={() => setTimeout(() => setActiveTreatmentId(null), 350)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        const qWords = treatment.kitName.toLowerCase().trim().split(/\s+/).filter(Boolean)
+                        const matches = catalog.filter(c => {
+                          const cName = (c.name || '').toLowerCase()
+                          const cHsn = (c.hsnCode || '').toLowerCase()
+                          return qWords.every(word => cName.includes(word) || cHsn.includes(word))
+                        })
+                        if (matches.length > 0) {
+                          handleSelectProduct(treatment.id, matches[0])
+                        } else if (treatment.kitName.trim()) {
+                          handleAddCustomProduct(treatment.id, treatment.kitName.trim())
+                        }
+                      }
+                    }}
+                    placeholder="Type medicine name (e.g. KSG, KSGA, Allervaidha, Apple Cider, Vidhuvaidha, Churan...)"
                     className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700 placeholder-slate-400"
                   />
 
                   {/* Autocomplete */}
-                  {activeTreatmentId === treatment.id && treatment.kitName.trim() !== '' && (() => {
-                    const matches = catalog.filter(c => c.name.toLowerCase().includes(treatment.kitName.toLowerCase()))
-                      
-                    if (matches.length > 0) {
-                      return (
-                        <div className="absolute z-50 left-0 top-[80px] w-full bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
-                          {matches.map(c => (
-                            <div
-                              key={c.id}
-                              onMouseDown={(e) => {
-                                e.preventDefault()
-                                setTreatments(prev => prev.map(t => {
-                                  if (t.id === treatment.id) {
-                                    const newProducts = [...t.products, { name: c.name, quantity: "1", rate: c.defaultRate || 0, hsnCode: c.hsnCode || '-', taxRate: c.defaultTaxRate || 0 }];
-                                    const newPrice = newProducts.reduce((sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate), 0).toString();
-                                    return { ...t, kitName: "", products: newProducts, price: newPrice };
-                                  }
-                                  return t;
-                                }))
-                                setTimeout(() => setActiveTreatmentId(null), 0)
-                              }}
-                              className="px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer border-b border-slate-100 last:border-0 transition-colors flex justify-between"
-                            >
-                              <span>{c.name}</span>
-                              {c.defaultRate > 0 && <span className="text-slate-400">₹{c.defaultRate}</span>}
+                  {activeTreatmentId === treatment.id && (() => {
+                    const q = treatment.kitName.trim().toLowerCase()
+                    const qWords = q.split(/\s+/).filter(Boolean)
+
+                    const matches = qWords.length === 0
+                      ? catalog.slice(0, 15)
+                      : catalog.filter(c => {
+                          const cName = (c.name || '').toLowerCase()
+                          const cHsn = (c.hsnCode || '').toLowerCase()
+                          return qWords.every(word => cName.includes(word) || cHsn.includes(word))
+                        }).slice(0, 40)
+
+                    return (
+                      <div className="absolute z-50 left-0 top-[80px] w-full bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto custom-scrollbar">
+                        {qWords.length === 0 && (
+                          <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                            Popular / Standard Medicines ({catalog.length} available)
+                          </div>
+                        )}
+
+                        {matches.map(c => (
+                          <div
+                            key={c.id || c.name}
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              handleSelectProduct(treatment.id, c)
+                            }}
+                            className="px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer border-b border-slate-100 last:border-0 transition-colors flex items-center justify-between group"
+                          >
+                            <div>
+                              <span className="group-hover:text-blue-700">{c.name}</span>
+                              {c.hsnCode && <span className="text-[10px] text-slate-400 font-mono ml-2">HSN: {c.hsnCode}</span>}
                             </div>
-                          ))}
-                        </div>
-                      )
-                    }
-                    return null
+                            <div className="flex items-center gap-2">
+                              {c.defaultRate > 0 && <span className="text-emerald-700 font-mono font-extrabold">₹{c.defaultRate}</span>}
+                              <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md font-bold">+ Add</span>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Add custom option if user typed something */}
+                        {treatment.kitName.trim() && (
+                          <div
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              handleAddCustomProduct(treatment.id, treatment.kitName.trim())
+                            }}
+                            className="px-3.5 py-2.5 text-xs font-extrabold text-blue-700 bg-blue-50/80 hover:bg-blue-100 cursor-pointer border-t border-blue-200 flex items-center justify-between transition-colors"
+                          >
+                            <span>+ Add &ldquo;{treatment.kitName.trim()}&rdquo; as custom medicine</span>
+                            <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold">Press Enter</span>
+                          </div>
+                        )}
+                      </div>
+                    )
                   })()}
 
                   {/* Selected Products List */}
@@ -1347,6 +1510,35 @@ export default function CreateInvoicePage() {
                 </div>
               </div>
 
+              {/* Manual Invoice Number (Optional) */}
+              <div className="flex flex-col md:col-span-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    Invoice Number (Add Manually / Optional)
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-medium">Khali chhodne par auto number use hoga</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={manualInvoiceNo}
+                    onChange={(e) => setManualInvoiceNo(e.target.value.toUpperCase())}
+                    placeholder={`e.g. KSV-101, 1420, ya khali chhodein auto ke liye: ${previewInvoiceNo}`}
+                    className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-200 focus:border-blue-500 rounded-2xl outline-none transition-all text-sm font-black text-slate-800 placeholder-slate-400 font-mono uppercase tracking-wide"
+                  />
+                  {manualInvoiceNo.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setManualInvoiceNo("")}
+                      className="absolute right-3.5 top-3.5 text-xs text-rose-500 hover:text-rose-700 font-bold cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Invoice Date */}
               <div className="flex flex-col">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">Invoice Date</label>
@@ -1391,10 +1583,20 @@ export default function CreateInvoicePage() {
             </div>
 
             <div className="space-y-4 text-xs">
-              <div>
-                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Patient Name</p>
-                <p className="text-sm font-bold text-slate-800 mt-0.5">{formData.name || "Anonymous Patient"}</p>
-                {formData.uniqueId && <p className="text-[10px] text-slate-400 font-semibold mt-0.5">ID: {formData.uniqueId}</p>}
+              <div className="flex items-start justify-between gap-2 pb-2 border-b border-slate-100">
+                <div>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Patient Name</p>
+                  <p className="text-sm font-bold text-slate-800 mt-0.5">{formData.name || "Anonymous Patient"}</p>
+                  {formData.uniqueId && <p className="text-[10px] text-slate-400 font-semibold mt-0.5">ID: {formData.uniqueId}</p>}
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Invoice No</p>
+                  <p className="text-xs font-mono font-black text-blue-600 mt-0.5 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-lg inline-block">
+                    {manualInvoiceNo.trim() || previewInvoiceNo}
+                  </p>
+                  {!manualInvoiceNo.trim() && <p className="text-[9px] text-slate-400 font-semibold mt-0.5">(Auto Generated)</p>}
+                  {manualInvoiceNo.trim() && <p className="text-[9px] text-emerald-600 font-semibold mt-0.5">✓ Manual Number</p>}
+                </div>
               </div>
 
               <div className="border-t border-slate-100 pt-3">
