@@ -698,15 +698,15 @@ export function executeStockTransfer(payload: StockTransferPayload): {
     sourceEntity === 'THIRD_PARTY'
       ? 'ksv_kiyava_invoices'
       : sourceEntity === 'KSV'
-      ? 'ksv_app_invoices'
-      : 'maxxi_app_invoices'
+        ? 'ksv_app_invoices'
+        : 'maxxi_app_invoices'
 
   const destInvoiceStorageKey =
     destinationEntity === 'THIRD_PARTY'
       ? 'ksv_kiyava_invoices'
       : destinationEntity === 'KSV'
-      ? 'ksv_app_invoices'
-      : 'maxxi_app_invoices'
+        ? 'ksv_app_invoices'
+        : 'maxxi_app_invoices'
 
   const sourceName = sourceEntity === 'THIRD_PARTY' ? 'KIYAVA' : sourceEntity === 'KSV' ? 'KARAN SINGH VAIDH (KSV)' : 'MAXXI PHARMA PVT. LTD.'
   const destName = destinationEntity === 'THIRD_PARTY' ? 'KIYAVA' : destinationEntity === 'KSV' ? 'KARAN SINGH VAIDH (KSV)' : 'MAXXI PHARMA PVT. LTD.'
@@ -916,15 +916,15 @@ export function executeCustomerSale(payload: CustomerSalePayload): {
     entity === 'THIRD_PARTY'
       ? 'ksv_kiyava_invoices'
       : entity === 'KSV'
-      ? 'ksv_app_invoices'
-      : 'maxxi_app_invoices'
+        ? 'ksv_app_invoices'
+        : 'maxxi_app_invoices'
 
   const entityName =
     entity === 'THIRD_PARTY'
       ? 'KIYAVA'
       : entity === 'KSV'
-      ? 'KARAN SINGH VAIDH (KSV)'
-      : 'MAXXI PHARMA PVT. LTD.'
+        ? 'KARAN SINGH VAIDH (KSV)'
+        : 'MAXXI PHARMA PVT. LTD.'
 
   const saleInvoice: KiyavaInvoice = {
     id: `inv_cust_${Date.now()}`,

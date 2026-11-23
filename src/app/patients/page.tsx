@@ -17,7 +17,12 @@ import {
   List,
   ArrowUpDown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Pencil,
+  Trash2,
+  FileText,
+  X,
+  Check
 } from "lucide-react"
 import { API_URL } from "@/lib/apiConfig"
 
@@ -59,107 +64,154 @@ export default function PatientsListPage() {
   const [sortField, setSortField] = useState<SortField>("createdAt")
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
 
-  // Fast 0ms cache loader
-  const loadFromCache = (): Patient[] => {
-    try {
-      const cached = localStorage.getItem("ksv_cached_patients")
-      const storedOffline = localStorage.getItem("ksv_offline_patients")
-      let list: Patient[] = []
-      if (cached) list = JSON.parse(cached)
+  // Edit Patient State
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editForm, setEditForm] = useState({
+    name: "",
+    uniqueId: "",
+    age: "",
+    gender: "Male",
+    callingNumber: "",
+    whatsappNumber: "",
+    houseNumber: "",
+    city: "",
+    state: "Himachal Pradesh",
+    pincode: ""
+  })
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
 
-      if (storedOffline) {
-        const offlineList: Patient[] = JSON.parse(storedOffline)
-        const map = new Map<string, Patient>()
-        list.forEach(p => map.set(p.uniqueId, p))
-        offlineList.forEach(p => {
-          if (!map.has(p.uniqueId)) {
-            map.set(p.uniqueId, { ...p, id: p.id || `loc_${p.uniqueId}` })
-          }
-        })
-        list = Array.from(map.values())
-      }
-      return list
-    } catch (e) {
-      return []
-    }
-  }
-
+  // Direct Database Fetcher (No Stale LocalStorage Caching)
   const fetchPatients = async (silent = false) => {
-    // If not silent and no patients yet, show loader
     if (!silent && patients.length === 0) setLoading(true)
     setError("")
 
-    // Use 4500ms timeout so MongoDB cold starts succeed while localStorage already rendered in 0ms
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 4500)
-
     try {
-      let patientList: Patient[] = []
-
-      try {
-        const res = await fetch(`${API_URL}/api/patients`, {
-          signal: controller.signal
-        })
-        clearTimeout(timer)
-        if (res.ok) {
-          patientList = await res.json()
-        }
-      } catch (e) {
-        // Backend offline or timed out - silently continue
-      }
-
-      // Merge with offline registered patients
-      try {
-        const storedOffline = localStorage.getItem("ksv_offline_patients")
-        if (storedOffline) {
-          const offlineList: Patient[] = JSON.parse(storedOffline)
-          const map = new Map<string, Patient>()
-          patientList.forEach(p => map.set(p.uniqueId, p))
-          offlineList.forEach(p => {
-            if (!map.has(p.uniqueId)) {
-              map.set(p.uniqueId, { ...p, id: p.id || `loc_${p.uniqueId}` })
-            }
-          })
-          patientList = Array.from(map.values())
-        }
-      } catch (storageErr) {
-        console.warn("Offline patients read error:", storageErr)
-      }
-
-      if (patientList.length > 0) {
-        setPatients(patientList)
-        // Cache to localStorage for instantaneous 0ms subsequent tab clicks
-        try {
-          localStorage.setItem("ksv_cached_patients", JSON.stringify(patientList))
-        } catch (e) {}
+      const res = await fetch(`${API_URL}/api/patients`)
+      if (res.ok) {
+        const rawList: Patient[] = await res.json()
+        const cleanList = (Array.isArray(rawList) ? rawList : []).filter(
+          (p: Patient) =>
+            !p.name?.toLowerCase().includes("system health test patient") &&
+            !p.name?.toLowerCase().includes("test patient") &&
+            !p.uniqueId?.startsWith("auto_check_")
+        )
+        setPatients(cleanList)
+      } else {
+        throw new Error("Failed to load patients from database")
       }
     } catch (err) {
       if (patients.length === 0) {
-        setError(err instanceof Error ? err.message : "Something went wrong")
+        setError(err instanceof Error ? err.message : "Something went wrong loading patients")
       }
     } finally {
-      clearTimeout(timer)
       setLoading(false)
       setIsRefreshing(false)
     }
   }
 
-  // Instant 0ms render on tab switch:
+  // Load purely from database on mount & purge stale localStorage cache
   useEffect(() => {
-    const cachedPatients = loadFromCache()
-    if (cachedPatients.length > 0) {
-      setPatients(cachedPatients)
-      setLoading(false)
-      // Background revalidation
-      fetchPatients(true)
-    } else {
-      fetchPatients(false)
-    }
+    try {
+      localStorage.removeItem("ksv_cached_patients")
+      localStorage.removeItem("ksv_offline_patients")
+    } catch {}
+    fetchPatients(false)
   }, [])
 
   const handleRefresh = () => {
     setIsRefreshing(true)
     fetchPatients(true)
+  }
+
+  const handleOpenEditModal = (p: Patient) => {
+    setEditingPatient(p)
+    setEditForm({
+      name: p.name || "",
+      uniqueId: p.uniqueId || "",
+      age: p.age ? String(p.age) : "",
+      gender: p.gender || "Male",
+      callingNumber: p.callingNumber || "",
+      whatsappNumber: p.whatsappNumber || "",
+      houseNumber: p.houseNumber || "",
+      city: p.city || "",
+      state: p.state || "Himachal Pradesh",
+      pincode: p.pincode || ""
+    })
+    setIsEditModalOpen(true)
+  }
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingPatient) return
+    setIsSavingEdit(true)
+    try {
+      const res = await fetch(`${API_URL}/api/patients/${editingPatient.id || editingPatient.uniqueId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editForm,
+          age: editForm.age ? parseInt(editForm.age, 10) : null
+        })
+      })
+      if (res.ok) {
+        const updated = await res.json().catch(() => null)
+        setPatients(prev =>
+          prev.map(p =>
+            p.id === editingPatient.id || p.uniqueId === editingPatient.uniqueId
+              ? {
+                  ...p,
+                  name: editForm.name,
+                  uniqueId: editForm.uniqueId,
+                  age: editForm.age ? parseInt(editForm.age, 10) : null,
+                  gender: editForm.gender,
+                  callingNumber: editForm.callingNumber,
+                  whatsappNumber: editForm.whatsappNumber,
+                  houseNumber: editForm.houseNumber,
+                  city: editForm.city,
+                  state: editForm.state,
+                  pincode: editForm.pincode,
+                  ...(updated || {})
+                }
+              : p
+          )
+        )
+        setIsEditModalOpen(false)
+        setEditingPatient(null)
+        setActionMessage("Patient details updated in MongoDB database!")
+        setTimeout(() => setActionMessage(null), 3000)
+      } else {
+        alert("Failed to update patient in database")
+      }
+    } catch (err) {
+      console.error("Error updating patient:", err)
+      alert("Error saving patient update")
+    } finally {
+      setIsSavingEdit(false)
+    }
+  }
+
+  const handleDeletePatient = async (p: Patient) => {
+    if (!confirm(`Are you sure you want to delete patient "${p.name}" (${p.uniqueId})? All visits and history will be permanently removed from MongoDB database.`)) {
+      return
+    }
+    // Optimistic UI removal
+    setPatients(prev => prev.filter(item => item.id !== p.id && item.uniqueId !== p.uniqueId))
+    try {
+      const res = await fetch(`${API_URL}/api/patients/${p.id || p.uniqueId}`, {
+        method: "DELETE"
+      })
+      if (!res.ok && res.status !== 204) {
+        fetchPatients(true)
+      } else {
+        setActionMessage(`Patient "${p.name}" successfully deleted from database!`)
+        setTimeout(() => setActionMessage(null), 3000)
+      }
+    } catch (err) {
+      console.error("Error deleting patient:", err)
+      fetchPatients(true)
+    }
   }
 
   // Reset page when search filters change
@@ -419,6 +471,7 @@ export default function PatientsListPage() {
                       <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                     </div>
                   </th>
+                  <th className="px-6 py-4 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-50 text-slate-600 text-sm font-semibold">
@@ -503,6 +556,33 @@ export default function PatientsListPage() {
                           month: "short",
                           year: "numeric"
                         })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <Link
+                            href={`/patients/history?id=${patient.uniqueId}`}
+                            className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-colors inline-flex items-center justify-center"
+                            title="View Patient History / Visits"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(patient)}
+                            className="p-2 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer inline-flex items-center justify-center"
+                            title="Edit Patient Details"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePatient(patient)}
+                            className="p-2 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer inline-flex items-center justify-center"
+                            title="Delete Patient from Database"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -630,6 +710,35 @@ export default function PatientsListPage() {
                   </div>
                 )}
 
+                {/* Actions row */}
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <Link
+                    href={`/patients/history?id=${patient.uniqueId}`}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>History</span>
+                  </Link>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(patient)}
+                      className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
+                      title="Edit Patient Details"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePatient(patient)}
+                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                      title="Delete Patient"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
               </div>
             )
           })}
@@ -685,6 +794,188 @@ export default function PatientsListPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Action Notification Toast */}
+      {actionMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-sm font-bold px-5 py-3 rounded-2xl shadow-2xl border border-slate-800 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{actionMessage}</span>
+        </div>
+      )}
+
+      {/* Edit Patient Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-[2rem] w-full max-w-xl p-6 md:p-8 shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Edit Patient Details</h3>
+                <p className="text-xs text-slate-400 font-medium mt-0.5">Dynamically update patient in MongoDB database</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setIsEditModalOpen(false); setEditingPatient(null); }}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Patient Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.name}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Unique ID (Mobile / Aadhar) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.uniqueId}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, uniqueId: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Age (Years)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    value={editForm.age}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, age: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Gender
+                  </label>
+                  <select
+                    value={editForm.gender}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, gender: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors cursor-pointer"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Calling Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.callingNumber}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, callingNumber: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    WhatsApp Number
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.whatsappNumber}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, whatsappNumber: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    House / Flat / Gali No.
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.houseNumber}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, houseNumber: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    City / Town / Tehsil
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.city}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, city: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.state}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, state: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Pincode
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.pincode}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, pincode: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary focus:bg-white transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setIsEditModalOpen(false); setEditingPatient(null); }}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-emerald-950/20 active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingEdit ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
