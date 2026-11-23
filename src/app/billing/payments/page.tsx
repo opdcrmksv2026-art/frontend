@@ -1860,43 +1860,48 @@ export default function PaymentsPage() {
                       }`}>
                         {selectedBill.opdSection || "SOLAN OPD SALE"}
                       </div>
-                      <div className="text-xs font-black text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg">
+                      <div className="text-xs font-black text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg print:border-slate-800 print:text-black print:bg-white">
                         TOKEN NO: {selectedBill.tokenNo || (selectedBill as any).agentToken || "TK-01"}
                       </div>
-                      <div className="text-sm font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg">
-                        {selectedBill.invoiceNo}
+                      <div className="text-sm font-black text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-lg print:border-slate-800 print:text-black print:bg-white font-mono flex items-center gap-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 print:text-black font-sans">INVOICE NO:</span>
+                        <span>{selectedBill.invoiceNo}</span>
                       </div>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-bold mt-1">Date: {formatReceiptDate(selectedBill.date)}</p>
+                    <p className="text-[11px] text-slate-500 font-bold mt-1">Date: {formatReceiptDate(selectedBill.date)}</p>
                   </div>
                 </div>
 
-                {/* Patient Details */}
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/60 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-semibold text-slate-700">
+                {/* Patient & Invoice Details */}
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/60 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs font-semibold text-slate-700 print:bg-white print:border-slate-400">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Patient Name</span>
-                    <strong className="text-slate-900 text-sm font-extrabold">{selectedBill.patientName}</strong>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Invoice Number</span>
+                    <strong className="text-blue-700 print:text-black text-xs font-black font-mono block">{selectedBill.invoiceNo}</strong>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Patient ID / Mobile</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Patient Name</span>
+                    <strong className="text-slate-900 text-sm font-extrabold block">{selectedBill.patientName}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Patient ID / Mobile</span>
                     <span>{selectedBill.patientId}</span>
                     {(selectedBill.whatsappNumber || selectedBill.callingNumber) && selectedBill.whatsappNumber !== selectedBill.patientId && (
                       <span className="block text-[10px] text-slate-500 mt-0.5">{selectedBill.whatsappNumber ? `WA: ${selectedBill.whatsappNumber}` : `Call: ${selectedBill.callingNumber}`}</span>
                     )}
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Gender</span>
-                    <span className="capitalize">{selectedBill.gender || "Male"}</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Gender</span>
+                    <span className="capitalize block">{selectedBill.gender || "Male"}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Next Checkup Date</span>
-                    <span className="font-extrabold text-emerald-700">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Next Checkup Date</span>
+                    <span className="font-extrabold text-emerald-700 print:text-black block">
                       {formatFollowUpDate(selectedBill.nextFollowUpDate)}
                     </span>
                   </div>
 
                   {/* Customer Address & State Code Row */}
-                  <div className="col-span-2 sm:col-span-4 border-t border-slate-200/60 pt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="col-span-2 sm:col-span-5 border-t border-slate-200/60 pt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
                       <span className="text-[10px] uppercase font-bold text-slate-400 block">Customer Address</span>
                       <p className="text-slate-800 font-bold text-xs mt-0.5">
