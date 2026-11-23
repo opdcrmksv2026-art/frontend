@@ -40,6 +40,8 @@ import {
   Edit,
   TrendingUp,
   Receipt,
+  FileSpreadsheet,
+  Download,
   RotateCcw,
   ShoppingCart,
   ArrowDownLeft,
@@ -1179,6 +1181,135 @@ export default function KsvPage() {
   const saleGst = saleInvoices.reduce((sum, inv) => sum + (inv.totalTaxAmount || 0), 0)
   const purchaseGst = purchaseInvoices.reduce((sum, inv) => sum + (inv.totalTaxAmount || 0), 0)
 
+  // Download Clean Excel (.csv) for KSV Sales or Purchases
+  const handleDownloadExcel = (type: 'SALE' | 'PURCHASE' | 'ALL' = invoiceSummaryType) => {
+    const listToExport = invoices.filter(inv => {
+      if (type === 'ALL') return true
+      return (inv.type || 'SALE') === type
+    })
+
+    if (listToExport.length === 0) {
+      alert(`No ${type === 'ALL' ? 'invoice' : type.toLowerCase()} records found to export.`)
+      return
+    }
+
+    const escStr = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`
+    const escNum = (val: any) => {
+      const num = Number(val)
+      return isNaN(num) ? '0.00' : num.toFixed(2)
+    }
+
+    const headers = [
+      'Sr No',
+      'Invoice Date',
+      'Invoice No',
+      'Invoice Type',
+      type === 'PURCHASE' ? 'Supplier / Seller Company' : 'Buyer / Party Name',
+      'Party GSTIN',
+      'City',
+      'State',
+      'Items & Quantities',
+      'Total Units',
+      'Taxable Subtotal (Rs.)',
+      'CGST (Rs.)',
+      'SGST (Rs.)',
+      'IGST (Rs.)',
+      'Total GST (Rs.)',
+      'Discount (Rs.)',
+      'Grand Total (Rs.)'
+    ]
+
+    const rows: string[] = []
+    rows.push(headers.map(h => `"${h}"`).join(','))
+
+    let sumQty = 0
+    let sumTaxable = 0
+    let sumCgst = 0
+    let sumSgst = 0
+    let sumIgst = 0
+    let sumTotalGst = 0
+    let sumDisc = 0
+    let sumGrand = 0
+
+    listToExport.forEach((inv, idx) => {
+      const party = type === 'PURCHASE' ? (inv.company?.name || inv.buyer?.name || '-') : (inv.buyer?.name || '-')
+      const gstin = type === 'PURCHASE' ? (inv.company?.gstin || inv.buyer?.gstin || '-') : (inv.buyer?.gstin || '-')
+      const city = type === 'PURCHASE' ? (inv.company?.city || inv.buyer?.city || '-') : (inv.buyer?.city || '-')
+      const state = type === 'PURCHASE' ? (inv.company?.state || inv.buyer?.state || '-') : (inv.buyer?.state || '-')
+      const itemsStr = (inv.items || []).map(it => `${it.description || ''} (${it.quantity || 1} ${it.unit || ''})`).join('; ')
+      const totalUnits = (inv.items || []).reduce((s, it) => s + (Number(it.quantity) || 0), 0)
+
+      const taxable = Number(inv.subtotal || 0)
+      const cgst = Number(inv.cgstAmount || 0)
+      const sgst = Number(inv.sgstAmount || 0)
+      const igst = Number(inv.igstAmount || 0)
+      const totalGst = Number(inv.totalTaxAmount || (cgst + sgst + igst))
+      const discount = Number(inv.extraDiscount || 0)
+      const grandTotal = Number(inv.grandTotal || 0)
+
+      sumQty += totalUnits
+      sumTaxable += taxable
+      sumCgst += cgst
+      sumSgst += sgst
+      sumIgst += igst
+      sumTotalGst += totalGst
+      sumDisc += discount
+      sumGrand += grandTotal
+
+      rows.push([
+        idx + 1,
+        escStr(inv.invoiceDate || ''),
+        escStr(inv.invoiceNo || ''),
+        escStr(inv.type || 'SALE'),
+        escStr(party),
+        escStr(gstin),
+        escStr(city),
+        escStr(state),
+        escStr(itemsStr),
+        escNum(totalUnits),
+        escNum(taxable),
+        escNum(cgst),
+        escNum(sgst),
+        escNum(igst),
+        escNum(totalGst),
+        escNum(discount),
+        escNum(grandTotal)
+      ].join(','))
+    })
+
+    // Summary Total Row
+    rows.push([
+      'TOTAL',
+      '',
+      '',
+      '',
+      escStr(`Total Records: ${listToExport.length}`),
+      '',
+      '',
+      '',
+      '',
+      escNum(sumQty),
+      escNum(sumTaxable),
+      escNum(sumCgst),
+      escNum(sumSgst),
+      escNum(sumIgst),
+      escNum(sumTotalGst),
+      escNum(sumDisc),
+      escNum(sumGrand)
+    ].join(','))
+
+    const csvContent = '\uFEFF' + rows.join('\r\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `KSV-${type}-INVOICES-${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   // Filtered Invoices
   const filteredInvoices = invoices.filter((inv) => {
     const matchesSearch =
@@ -1242,15 +1373,52 @@ export default function KsvPage() {
 
       {/* 3. Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-xs font-bold overflow-x-auto custom-scrollbar">
+        {/* SALE INVOICES TAB */}
         <button
-          onClick={() => setActiveTab('invoices')}
-          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'invoices'
-            ? 'bg-slate-900 text-white shadow-md'
-            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
+          onClick={() => {
+            setActiveTab('invoices')
+            setInvoiceSummaryType('SALE')
+          }}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'invoices' && invoiceSummaryType === 'SALE'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5" />
+          Sale Invoices ({saleInvoices.length})
+        </button>
+
+        {/* PURCHASE INVOICES TAB */}
+        <button
+          onClick={() => {
+            setActiveTab('invoices')
+            setInvoiceSummaryType('PURCHASE')
+          }}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'invoices' && invoiceSummaryType === 'PURCHASE'
+              ? 'bg-orange-500 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
         >
           <Receipt className="w-3.5 h-3.5" />
-          Invoice Summary ({invoices.length})
+          Purchase Invoices ({purchaseInvoices.length})
+        </button>
+
+        {/* ALL INVOICES TAB */}
+        <button
+          onClick={() => {
+            setActiveTab('invoices')
+            setInvoiceSummaryType('ALL')
+          }}
+          className={`px-3 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'invoices' && invoiceSummaryType === 'ALL'
+              ? 'bg-slate-900 text-white shadow-md'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5" />
+          All Invoices ({invoices.length})
         </button>
 
         <button
@@ -1360,44 +1528,68 @@ export default function KsvPage() {
       {/* 4. TAB CONTENT: 1. INVOICES & PURCHASES LEDGER */}
       {activeTab === 'invoices' && (
         <div className="space-y-4 animate-in fade-in duration-300">
-          {/* Sub-Tab Toggle: All Invoices | Sale Summary | Purchase Summary */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setInvoiceSummaryType('ALL')}
-              className={`flex-1 min-w-[130px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'ALL'
-                ? 'bg-slate-900 text-white shadow-lg shadow-slate-300'
-                : 'text-slate-500 hover:bg-slate-50'
-                }`}
-            >
-              📋 All Invoices
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                {invoices.length}
-              </span>
-            </button>
-            <button
-              onClick={() => setInvoiceSummaryType('SALE')}
-              className={`flex-1 min-w-[130px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'SALE'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                : 'text-slate-500 hover:bg-slate-50'
-                }`}
-            >
-              📤 Sale Summary
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'SALE' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                {saleInvoices.length}
-              </span>
-            </button>
-            <button
-              onClick={() => setInvoiceSummaryType('PURCHASE')}
-              className={`flex-1 min-w-[130px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'PURCHASE'
-                ? 'bg-orange-500 text-white shadow-lg shadow-orange-200'
-                : 'text-slate-500 hover:bg-slate-50'
-                }`}
-            >
-              📥 Purchase Summary
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'PURCHASE' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                {purchaseInvoices.length}
-              </span>
-            </button>
+          {/* Sub-Tab Toggle: All Invoices | Sale Summary | Purchase Summary + Quick Excel Downloads */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2 flex-1">
+              <button
+                onClick={() => setInvoiceSummaryType('ALL')}
+                className={`min-w-[130px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'ALL'
+                  ? 'bg-slate-900 text-white shadow-lg shadow-slate-300'
+                  : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+              >
+                📋 All Invoices
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                  {invoices.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setInvoiceSummaryType('SALE')}
+                className={`min-w-[130px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'SALE'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                  : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+              >
+                📤 Sale Invoices
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'SALE' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                  {saleInvoices.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setInvoiceSummaryType('PURCHASE')}
+                className={`min-w-[130px] py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${invoiceSummaryType === 'PURCHASE'
+                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-200'
+                  : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+              >
+                📥 Purchase Invoices
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${invoiceSummaryType === 'PURCHASE' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                  {purchaseInvoices.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Quick 1-Click Excel Download Buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleDownloadExcel('SALE')}
+                className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-blue-200 shadow-2xs"
+                title="Download KSV Sales Report in Excel (.csv)"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                Sale Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadExcel('PURCHASE')}
+                className="px-3 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-orange-200 shadow-2xs"
+                title="Download KSV Purchase Report in Excel (.csv)"
+              >
+                <Download className="w-3.5 h-3.5 text-orange-600" />
+                Purchase Excel
+              </button>
+            </div>
           </div>
 
           {/* Stats Row */}
@@ -1445,21 +1637,43 @@ export default function KsvPage() {
               />
             </div>
 
-            {/* Company Filter */}
-            <div className="flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                value={filterCompany}
-                onChange={(e) => setFilterCompany(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            {/* Company Filter & Download Excel */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-slate-400" />
+                <select
+                  value={filterCompany}
+                  onChange={(e) => setFilterCompany(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="ALL">All Companies</option>
+                  {companies.map((comp) => (
+                    <option key={comp.id} value={comp.id}>
+                      {comp.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleDownloadExcel(invoiceSummaryType)}
+                className={`px-3 py-1.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer whitespace-nowrap text-white ${
+                  invoiceSummaryType === 'SALE'
+                    ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+                    : invoiceSummaryType === 'PURCHASE'
+                    ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/20'
+                    : 'bg-slate-900 hover:bg-slate-800 shadow-slate-900/20'
+                }`}
+                title={`Download ${invoiceSummaryType === 'SALE' ? 'Sales' : invoiceSummaryType === 'PURCHASE' ? 'Purchases' : 'All Invoices'} in Excel (.csv)`}
               >
-                <option value="ALL">All Companies</option>
-                {companies.map((comp) => (
-                  <option key={comp.id} value={comp.id}>
-                    {comp.name}
-                  </option>
-                ))}
-              </select>
+                <Download className="w-3.5 h-3.5" />
+                {invoiceSummaryType === 'SALE'
+                  ? 'Download Sale Excel'
+                  : invoiceSummaryType === 'PURCHASE'
+                  ? 'Download Purchase Excel'
+                  : 'Download Invoices Excel'}
+              </button>
             </div>
           </div>
 

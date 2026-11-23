@@ -17,6 +17,7 @@ import { API_URL } from "@/lib/apiConfig"
 interface RealBillRecord {
   date: string
   invoiceNo: string
+  type: "SALE" | "PURCHASE"
   entity: "MAXXI" | "KSV" | "KIYAVA"
   opdSection: string
   customerName: string
@@ -41,6 +42,7 @@ interface RealBillRecord {
 
 export default function Home() {
   const [activeEntityTab, setActiveEntityTab] = useState<"ALL" | "MAXXI" | "KSV" | "KIYAVA">("ALL")
+  const [reportType, setReportType] = useState<"SALE" | "PURCHASE" | "ALL">("SALE")
   const [periodFilter, setPeriodFilter] = useState<"TODAY" | "YESTERDAY" | "THIS_MONTH" | "ALL_TIME">("TODAY")
   const [loading, setLoading] = useState(false)
   const [allRealRecords, setAllRealRecords] = useState<RealBillRecord[]>([])
@@ -126,9 +128,10 @@ export default function Home() {
               }, 0)
             }
 
-            recordsMap.set(invNo, {
+            recordsMap.set(`MAXXI_SALE_${invNo}`, {
               date: bDate,
               invoiceNo: invNo,
+              type: "SALE",
               entity: "MAXXI",
               opdSection: b.opdSection || "SOLAN OPD SALE",
               customerName: b.patientName || "Walk-in Patient",
@@ -155,15 +158,18 @@ export default function Home() {
       }
     } catch (e) {}
 
-    // 2. Read KSV Pharmacy offline sales
+    // 2. Read KSV Pharmacy offline sales & purchases
     try {
       const ksvStored = localStorage.getItem("ksv_app_invoices")
       if (ksvStored) {
         const list = JSON.parse(ksvStored)
         if (Array.isArray(list)) {
-          list.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, idx: number) => {
+          list.forEach((inv: any, idx: number) => {
             const invNo = inv.invoiceNo || `KSV-${idx + 1}`
             if (deletedNos.has(invNo)) return
+            const invType: "SALE" | "PURCHASE" = inv.type === "PURCHASE" ? "PURCHASE" : "SALE"
+            const isPurchase = invType === "PURCHASE"
+            const recKey = `KSV_${invType}_${invNo}`
 
             const invDate = getCleanDateStr(inv.invoiceDate || inv.createdAt) || todayStr
             const gross = Number(inv.subtotal || inv.grandTotal || 0)
@@ -178,12 +184,13 @@ export default function Home() {
             const cash = inv.paymentMode === "Cash" ? grandTotal : 0
             const online = inv.paymentMode !== "Cash" ? grandTotal : 0
 
-            recordsMap.set(invNo, {
+            recordsMap.set(recKey, {
               date: invDate,
               invoiceNo: invNo,
+              type: invType,
               entity: "KSV",
-              opdSection: "KSV PHARMACY",
-              customerName: inv.buyer?.name || "Pharmacy Customer",
+              opdSection: isPurchase ? "KSV PURCHASE" : "KSV PHARMACY",
+              customerName: isPurchase ? (inv.company?.name || inv.buyer?.name || "Supplier / Factory") : (inv.buyer?.name || "Pharmacy Customer"),
               mobile: inv.buyer?.phone || inv.buyer?.gstin || "-",
               city: inv.buyer?.city || "Solan",
               state: inv.buyer?.state || "Himachal Pradesh",
@@ -207,15 +214,18 @@ export default function Home() {
       }
     } catch (e) {}
 
-    // 3. Read Kiyava Subathu offline sales
+    // 3. Read Kiyava Subathu offline sales & purchases
     try {
       const kiyavaStored = localStorage.getItem("ksv_kiyava_invoices")
       if (kiyavaStored) {
         const list = JSON.parse(kiyavaStored)
         if (Array.isArray(list)) {
-          list.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, idx: number) => {
+          list.forEach((inv: any, idx: number) => {
             const invNo = inv.invoiceNo || `KYV-${idx + 1}`
             if (deletedNos.has(invNo)) return
+            const invType: "SALE" | "PURCHASE" = inv.type === "PURCHASE" ? "PURCHASE" : "SALE"
+            const isPurchase = invType === "PURCHASE"
+            const recKey = `KIYAVA_${invType}_${invNo}`
 
             const invDate = getCleanDateStr(inv.invoiceDate || inv.createdAt) || todayStr
             const gross = Number(inv.subtotal || inv.grandTotal || 0)
@@ -230,12 +240,13 @@ export default function Home() {
             const cash = inv.paymentMode === "Cash" ? grandTotal : 0
             const online = inv.paymentMode !== "Cash" ? grandTotal : 0
 
-            recordsMap.set(invNo, {
+            recordsMap.set(recKey, {
               date: invDate,
               invoiceNo: invNo,
+              type: invType,
               entity: "KIYAVA",
-              opdSection: "KIYAVA SUBATHU",
-              customerName: inv.buyer?.name || "Herbal Customer",
+              opdSection: isPurchase ? "KIYAVA PURCHASE" : "KIYAVA SUBATHU",
+              customerName: isPurchase ? (inv.company?.name || "Herb Supplier") : (inv.buyer?.name || "Herbal Customer"),
               mobile: inv.buyer?.phone || inv.buyer?.gstin || "-",
               city: inv.buyer?.city || "Subathu",
               state: inv.buyer?.state || "Himachal Pradesh",
@@ -259,15 +270,18 @@ export default function Home() {
       }
     } catch (e) {}
 
-    // 4. Read Maxxi B2B offline sales
+    // 4. Read Maxxi B2B offline sales & purchases
     try {
       const maxxiStored = localStorage.getItem("maxxi_app_invoices")
       if (maxxiStored) {
         const list = JSON.parse(maxxiStored)
         if (Array.isArray(list)) {
-          list.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, idx: number) => {
+          list.forEach((inv: any, idx: number) => {
             const invNo = inv.invoiceNo || `MXP-${idx + 1}`
             if (deletedNos.has(invNo)) return
+            const invType: "SALE" | "PURCHASE" = inv.type === "PURCHASE" ? "PURCHASE" : "SALE"
+            const isPurchase = invType === "PURCHASE"
+            const recKey = `MAXXI_${invType}_${invNo}`
 
             const invDate = getCleanDateStr(inv.invoiceDate || inv.createdAt) || todayStr
             const gross = Number(inv.subtotal || inv.grandTotal || 0)
@@ -282,11 +296,12 @@ export default function Home() {
             const cash = inv.paymentMode === "Cash" ? grandTotal : 0
             const online = inv.paymentMode !== "Cash" ? grandTotal : 0
 
-            recordsMap.set(invNo, {
+            recordsMap.set(recKey, {
               date: invDate,
               invoiceNo: invNo,
+              type: invType,
               entity: "MAXXI",
-              opdSection: "MAXXI B2B SALE",
+              opdSection: isPurchase ? "MAXXI PURCHASE" : "MAXXI B2B SALE",
               customerName: inv.buyer?.name || "B2B Client",
               mobile: inv.buyer?.phone || inv.buyer?.gstin || "-",
               city: inv.buyer?.city || "Solan",
@@ -339,7 +354,8 @@ export default function Home() {
               if (Array.isArray(visits)) {
                 visits.forEach((h: any, i: number) => {
                   const invNo = h.invoiceNo || `PT-${p.uniqueId || i}`
-                  if (recordsMap.has(invNo) || deletedNos.has(invNo)) return
+                  const recKey = `MAXXI_SALE_${invNo}`
+                  if (recordsMap.has(recKey) || deletedNos.has(invNo)) return
 
                   const amt = Number(h.totalAmount || 0)
                   const cash = Number(h.amountCash || 0)
@@ -350,9 +366,10 @@ export default function Home() {
                   const discount = 0
                   const taxable = amt
 
-                  recordsMap.set(invNo, {
+                  recordsMap.set(recKey, {
                     date: getCleanDateStr(h.date || p.createdAt) || todayStr,
                     invoiceNo: invNo,
+                    type: "SALE",
                     entity: "MAXXI",
                     opdSection: h.opdSection || "SOLAN OPD SALE",
                     customerName: p.name || "OPD Patient",
@@ -385,9 +402,12 @@ export default function Home() {
           try {
             const data = await results[1].value.json()
             const invoices = Array.isArray(data.invoices) ? data.invoices : []
-            invoices.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, i: number) => {
+            invoices.forEach((inv: any, i: number) => {
               const invNo = inv.invoiceNo || `KSV-DB-${i}`
-              if (recordsMap.has(invNo) || deletedNos.has(invNo)) return
+              const invType: "SALE" | "PURCHASE" = inv.type === "PURCHASE" ? "PURCHASE" : "SALE"
+              const isPurchase = invType === "PURCHASE"
+              const recKey = `KSV_${invType}_${invNo}`
+              if (recordsMap.has(recKey) || deletedNos.has(invNo)) return
 
               const gross = Number(inv.subtotal || inv.grandTotal || 0)
               const discount = Number(inv.extraDiscount || 0)
@@ -398,12 +418,13 @@ export default function Home() {
               const cash = inv.paymentMode === "Cash" ? grandTotal : 0
               const online = inv.paymentMode !== "Cash" ? grandTotal : 0
 
-              recordsMap.set(invNo, {
+              recordsMap.set(recKey, {
                 date: getCleanDateStr(inv.invoiceDate || inv.createdAt) || todayStr,
                 invoiceNo: invNo,
+                type: invType,
                 entity: "KSV",
-                opdSection: "KSV PHARMACY",
-                customerName: inv.buyer?.name || "Pharmacy Customer",
+                opdSection: isPurchase ? "KSV PURCHASE" : "KSV PHARMACY",
+                customerName: isPurchase ? (inv.company?.name || inv.buyer?.name || "Kiyava Factory / Supplier") : (inv.buyer?.name || "Pharmacy Customer"),
                 mobile: inv.buyer?.phone || inv.buyer?.gstin || "-",
                 city: inv.buyer?.city || "Solan",
                 state: inv.buyer?.state || "Himachal Pradesh",
@@ -431,9 +452,12 @@ export default function Home() {
           try {
             const data = await results[2].value.json()
             const invoices = Array.isArray(data.invoices) ? data.invoices : []
-            invoices.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, i: number) => {
+            invoices.forEach((inv: any, i: number) => {
               const invNo = inv.invoiceNo || `KYV-DB-${i}`
-              if (recordsMap.has(invNo) || deletedNos.has(invNo)) return
+              const invType: "SALE" | "PURCHASE" = inv.type === "PURCHASE" ? "PURCHASE" : "SALE"
+              const isPurchase = invType === "PURCHASE"
+              const recKey = `KIYAVA_${invType}_${invNo}`
+              if (recordsMap.has(recKey) || deletedNos.has(invNo)) return
 
               const gross = Number(inv.subtotal || inv.grandTotal || 0)
               const discount = Number(inv.extraDiscount || 0)
@@ -444,12 +468,13 @@ export default function Home() {
               const cash = inv.paymentMode === "Cash" ? grandTotal : 0
               const online = inv.paymentMode !== "Cash" ? grandTotal : 0
 
-              recordsMap.set(invNo, {
+              recordsMap.set(recKey, {
                 date: getCleanDateStr(inv.invoiceDate || inv.createdAt) || todayStr,
                 invoiceNo: invNo,
+                type: invType,
                 entity: "KIYAVA",
-                opdSection: "KIYAVA SUBATHU",
-                customerName: inv.buyer?.name || "Herbal Customer",
+                opdSection: isPurchase ? "KIYAVA PURCHASE" : "KIYAVA SUBATHU",
+                customerName: isPurchase ? (inv.company?.name || "Herb Supplier") : (inv.buyer?.name || "Herbal Customer"),
                 mobile: inv.buyer?.phone || inv.buyer?.gstin || "-",
                 city: inv.buyer?.city || "Subathu",
                 state: inv.buyer?.state || "Himachal Pradesh",
@@ -477,9 +502,12 @@ export default function Home() {
           try {
             const data = await results[3].value.json()
             const invoices = Array.isArray(data.invoices) ? data.invoices : []
-            invoices.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, i: number) => {
+            invoices.forEach((inv: any, i: number) => {
               const invNo = inv.invoiceNo || `MXP-DB-${i}`
-              if (recordsMap.has(invNo) || deletedNos.has(invNo)) return
+              const invType: "SALE" | "PURCHASE" = inv.type === "PURCHASE" ? "PURCHASE" : "SALE"
+              const isPurchase = invType === "PURCHASE"
+              const recKey = `MAXXI_${invType}_${invNo}`
+              if (recordsMap.has(recKey) || deletedNos.has(invNo)) return
 
               const gross = Number(inv.subtotal || inv.grandTotal || 0)
               const discount = Number(inv.extraDiscount || 0)
@@ -490,11 +518,12 @@ export default function Home() {
               const cash = inv.paymentMode === "Cash" ? grandTotal : 0
               const online = inv.paymentMode !== "Cash" ? grandTotal : 0
 
-              recordsMap.set(invNo, {
+              recordsMap.set(recKey, {
                 date: getCleanDateStr(inv.invoiceDate || inv.createdAt) || todayStr,
                 invoiceNo: invNo,
+                type: invType,
                 entity: "MAXXI",
-                opdSection: "MAXXI B2B SALE",
+                opdSection: isPurchase ? "MAXXI PURCHASE" : "MAXXI B2B SALE",
                 customerName: inv.buyer?.name || "B2B Client",
                 mobile: inv.buyer?.phone || inv.buyer?.gstin || "-",
                 city: inv.buyer?.city || "Solan",
@@ -529,17 +558,35 @@ export default function Home() {
     loadAllRealSalesData()
   }, [])
 
-  // Filter records by the selected Period (Zero hardcoding - 100% actual real sales)
+  // Filter records by Report Type (SALE vs PURCHASE vs ALL)
+  const typeFilteredRecords = useMemo(() => {
+    if (reportType === "ALL") return allRealRecords
+    return allRealRecords.filter(r => r.type === reportType)
+  }, [allRealRecords, reportType])
+
+  // Filter records by the selected Period
   const periodFilteredRecords = useMemo(() => {
     if (periodFilter === "TODAY") {
-      return allRealRecords.filter(r => r.date === todayStr)
+      return typeFilteredRecords.filter(r => r.date === todayStr)
     } else if (periodFilter === "YESTERDAY") {
-      return allRealRecords.filter(r => r.date === yesterdayStr)
+      return typeFilteredRecords.filter(r => r.date === yesterdayStr)
     } else if (periodFilter === "THIS_MONTH") {
-      return allRealRecords.filter(r => r.date.startsWith(currentMonthStr))
+      return typeFilteredRecords.filter(r => r.date.startsWith(currentMonthStr))
     }
-    return allRealRecords // ALL_TIME
-  }, [allRealRecords, periodFilter, todayStr, yesterdayStr, currentMonthStr])
+    return typeFilteredRecords // ALL_TIME
+  }, [typeFilteredRecords, periodFilter, todayStr, yesterdayStr, currentMonthStr])
+
+  const totalSalesCount = useMemo(() => allRealRecords.filter(r => r.type === "SALE").length, [allRealRecords])
+  const totalPurchaseCount = useMemo(() => allRealRecords.filter(r => r.type === "PURCHASE").length, [allRealRecords])
+
+  const allTimeEntityCounts = useMemo(() => {
+    return {
+      all: typeFilteredRecords.length,
+      maxxi: typeFilteredRecords.filter(r => r.entity === "MAXXI").length,
+      ksv: typeFilteredRecords.filter(r => r.entity === "KSV").length,
+      kiyava: typeFilteredRecords.filter(r => r.entity === "KIYAVA").length
+    }
+  }, [typeFilteredRecords])
 
   // Real, dynamic calculations per entity
   const entityStats = useMemo(() => {
@@ -571,16 +618,16 @@ export default function Home() {
     // If 0 bills match this exact period, offer to export all-time bills for this entity
     if (targetBills.length === 0) {
       const allForEntity = entity === "ALL" 
-        ? allRealRecords 
-        : allRealRecords.filter(b => b.entity === entity)
+        ? typeFilteredRecords 
+        : typeFilteredRecords.filter(b => b.entity === entity)
 
       if (allForEntity.length === 0) {
-        alert(`No real sales records found in system for ${entity}.`)
+        alert(`No ${reportType === "ALL" ? "" : reportType.toLowerCase()} records found in system for ${entity}.`)
         return
       }
 
       const confirmAll = window.confirm(
-        `No sales recorded for ${entity} in ${periodFilter.replace("_", " ")}. Would you like to export all available real sales (${allForEntity.length} bills) instead?`
+        `No ${reportType === "ALL" ? "records" : reportType.toLowerCase() + "s"} recorded for ${entity} in ${periodFilter.replace("_", " ")}. Would you like to export all available real records (${allForEntity.length} bills) instead?`
       )
       if (!confirmAll) return
       targetBills = allForEntity
@@ -712,7 +759,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `REAL-SALES-REPORT-${entity}-${periodFilter}-${todayStr}.csv`
+    link.download = `REAL-${reportType}-REPORT-${entity}-${periodFilter}-${todayStr}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -741,18 +788,55 @@ export default function Home() {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">
-                Live Sales &amp; Revenue Reports
+                Live {reportType === "SALE" ? "Sales & Revenue" : reportType === "PURCHASE" ? "Purchases & Procurement" : "Sales & Purchases"} Reports
               </h2>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             </div>
             <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
-              100% verified real database sales across Maxxi Pharma, KSV Pharmacy &amp; Kiyava Subathu
+              100% verified real database records across Maxxi Pharma, KSV Pharmacy &amp; Kiyava Subathu
             </p>
           </div>
         </div>
 
-        {/* CONTROLS: PERIOD SWITCHER & ENTITY TABS */}
+        {/* CONTROLS: REPORT TYPE TOGGLE + PERIOD SWITCHER */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Report Type Tabs: Sales | Purchases | All */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80 text-xs font-black">
+            <button
+              type="button"
+              onClick={() => setReportType("SALE")}
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                reportType === "SALE"
+                  ? "bg-blue-600 text-white shadow-xs font-black"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              📤 Sales ({totalSalesCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportType("PURCHASE")}
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                reportType === "PURCHASE"
+                  ? "bg-orange-500 text-white shadow-xs font-black"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              📥 Purchases ({totalPurchaseCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportType("ALL")}
+              className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                reportType === "ALL"
+                  ? "bg-slate-900 text-white shadow-xs font-black"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              📋 All ({allRealRecords.length})
+            </button>
+          </div>
+
           {/* Period Filter Buttons: Today | Yesterday | This Month | All Time */}
           <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80 text-xs font-black">
             <button
@@ -806,7 +890,7 @@ export default function Home() {
             type="button"
             onClick={loadAllRealSalesData}
             className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all cursor-pointer"
-            title="Refresh Real Sales"
+            title="Refresh Real Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-blue-600" : ""}`} />
           </button>
@@ -816,7 +900,7 @@ export default function Home() {
             type="button"
             onClick={() => handleDownloadEntityExcel(activeEntityTab)}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 transition-all cursor-pointer"
-            title={`Download ${activeEntityTab} Real Excel Report`}
+            title={`Download ${activeEntityTab} ${reportType} Excel Report`}
           >
             <Download className="w-3.5 h-3.5" />
             Download {activeEntityTab} Excel
@@ -852,7 +936,16 @@ export default function Home() {
                 <span className={`text-[11px] font-bold block mt-0.5 ${
                   activeEntityTab === "ALL" ? "text-slate-300" : "text-slate-400"
                 }`}>
-                  {entityStats.all.billsCount} Real Bills ({periodFilter.replace("_", " ")})
+                  {entityStats.all.billsCount > 0 ? (
+                    `${entityStats.all.billsCount} Real ${reportType === "PURCHASE" ? "Purchases" : "Bills"} (${periodFilter.replace("_", " ")})`
+                  ) : (
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); setPeriodFilter("ALL_TIME"); }}
+                      className="text-amber-500 hover:underline cursor-pointer"
+                    >
+                      0 Today · View {allTimeEntityCounts.all} in All Time
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
@@ -905,7 +998,16 @@ export default function Home() {
                 <span className={`text-[11px] font-bold block mt-0.5 ${
                   activeEntityTab === "MAXXI" ? "text-emerald-200" : "text-slate-400"
                 }`}>
-                  {entityStats.maxxi.billsCount} Real Bills • OPD &amp; B2B
+                  {entityStats.maxxi.billsCount > 0 ? (
+                    `${entityStats.maxxi.billsCount} Real Bills • ${reportType === "PURCHASE" ? "Maxxi Procurement" : "OPD & B2B"}`
+                  ) : (
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); setPeriodFilter("ALL_TIME"); }}
+                      className="text-amber-500 hover:underline cursor-pointer"
+                    >
+                      0 in {periodFilter.toLowerCase()} · View {allTimeEntityCounts.maxxi} in All Time
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
@@ -958,7 +1060,16 @@ export default function Home() {
                 <span className={`text-[11px] font-bold block mt-0.5 ${
                   activeEntityTab === "KSV" ? "text-purple-200" : "text-slate-400"
                 }`}>
-                  {entityStats.ksv.billsCount} Invoices • Pharmacy Store
+                  {entityStats.ksv.billsCount > 0 ? (
+                    `${entityStats.ksv.billsCount} Invoices • ${reportType === "PURCHASE" ? "KSV Procurement" : "Pharmacy Store"}`
+                  ) : (
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); setPeriodFilter("ALL_TIME"); }}
+                      className="text-amber-500 hover:underline cursor-pointer"
+                    >
+                      0 in {periodFilter.toLowerCase()} · View {allTimeEntityCounts.ksv} in All Time
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
@@ -1011,7 +1122,16 @@ export default function Home() {
                 <span className={`text-[11px] font-bold block mt-0.5 ${
                   activeEntityTab === "KIYAVA" ? "text-blue-200" : "text-slate-400"
                 }`}>
-                  {entityStats.kiyava.billsCount} Invoices • Herbal Sale
+                  {entityStats.kiyava.billsCount > 0 ? (
+                    `${entityStats.kiyava.billsCount} Invoices • ${reportType === "PURCHASE" ? "Raw Herb Spend" : "Herbal Sale"}`
+                  ) : (
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); setPeriodFilter("ALL_TIME"); }}
+                      className="text-amber-500 hover:underline cursor-pointer"
+                    >
+                      0 in {periodFilter.toLowerCase()} · View {allTimeEntityCounts.kiyava} in All Time
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
