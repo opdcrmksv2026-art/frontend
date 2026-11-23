@@ -6,7 +6,7 @@ import AuthProvider from '@/components/AuthProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
-  title: 'KSV CRM',
+  title: 'KARAN SINGH VAIDH',
   description: 'Clinic Inventory & OPD CRM System',
   icons: {
     icon: '/favicon.ico',
