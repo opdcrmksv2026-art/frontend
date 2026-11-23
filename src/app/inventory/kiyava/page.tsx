@@ -1147,17 +1147,6 @@ export default function KiyavaPage() {
         </button>
 
         <button
-          onClick={() => setActiveTab('opening-stock')}
-          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'opening-stock'
-              ? 'bg-purple-600 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-        >
-          <FileSpreadsheet className="w-3.5 h-3.5" />
-          Opening Stock
-        </button>
-
-        <button
           onClick={() => setActiveTab('stock-register')}
           className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'stock-register'
               ? 'bg-teal-600 text-white shadow-md'
