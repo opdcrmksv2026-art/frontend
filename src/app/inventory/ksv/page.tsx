@@ -248,7 +248,9 @@ export default function KsvPage() {
             dbCatalog: CatalogItem[] | null,
             dbInvoices: KiyavaInvoice[] | null,
             dbParties: any[] | null,
-            dbCompanies: any[] | null
+            dbCompanies: any[] | null,
+            dbMfg: ManufacturingLog[] | null,
+            dbTransfers: StockTransferLog[] | null
           ) => {
             if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
               const seenDb = new Set<string>()
@@ -316,29 +318,76 @@ export default function KsvPage() {
               setCompanies(cleanCompanies)
               localStorage.setItem('ksv_app_companies_v2', JSON.stringify(cleanCompanies))
             }
+
+            if (Array.isArray(dbMfg) && dbMfg.length > 0) {
+              setManufacturingLogs(dbMfg)
+              localStorage.setItem('ksv_app_manufacturing', JSON.stringify(dbMfg))
+            } else if (Array.isArray(dbMfg) && dbMfg.length === 0 && storedMfgLogs) {
+              try {
+                const localLogs = JSON.parse(storedMfgLogs)
+                if (Array.isArray(localLogs) && localLogs.length > 0) {
+                  localLogs.forEach((l: any) => {
+                    fetch(`${API_URL}/api/ksv/manufacturing`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(l)
+                    }).catch(() => {})
+                  })
+                }
+              } catch {}
+            }
+
+            if (Array.isArray(dbTransfers) && dbTransfers.length > 0) {
+              setStockTransfers(dbTransfers)
+              localStorage.setItem('ksv_app_stock_transfers', JSON.stringify(dbTransfers))
+            } else if (Array.isArray(dbTransfers) && dbTransfers.length === 0 && storedTransfers) {
+              try {
+                const localTransfers = JSON.parse(storedTransfers)
+                if (Array.isArray(localTransfers) && localTransfers.length > 0) {
+                  localTransfers.forEach((tr: any) => {
+                    fetch(`${API_URL}/api/ksv/stock-transfers`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(tr)
+                    }).catch(() => {})
+                  })
+                }
+              } catch {}
+            }
           }
 
           // Try fast single-request bootstrap first, fallback to parallel Promise.all
           const bootRes = await fetch(`${API_URL}/api/ksv/bootstrap`)
           if (bootRes.ok) {
-            const { catalog: dbCatalog, invoices: dbInvoices, parties: dbParties, companies: dbCompanies } = await bootRes.json()
-            await applyData(dbCatalog, dbInvoices, dbParties, dbCompanies)
+            const {
+              catalog: dbCatalog,
+              invoices: dbInvoices,
+              parties: dbParties,
+              companies: dbCompanies,
+              manufacturing: dbMfg,
+              stockTransfers: dbTransfers
+            } = await bootRes.json()
+            await applyData(dbCatalog, dbInvoices, dbParties, dbCompanies, dbMfg, dbTransfers)
             return
           }
 
-          const [catRes, invRes, partiesRes, compRes] = await Promise.all([
+          const [catRes, invRes, partiesRes, compRes, mfgRes, trRes] = await Promise.all([
             fetch(`${API_URL}/api/ksv/catalog`),
             fetch(`${API_URL}/api/ksv/invoices`),
             fetch(`${API_URL}/api/ksv/parties`),
-            fetch(`${API_URL}/api/ksv/companies`)
+            fetch(`${API_URL}/api/ksv/companies`),
+            fetch(`${API_URL}/api/ksv/manufacturing`),
+            fetch(`${API_URL}/api/ksv/stock-transfers`)
           ])
-          const [dbCatalog, dbInvoices, dbParties, dbCompanies] = await Promise.all([
+          const [dbCatalog, dbInvoices, dbParties, dbCompanies, dbMfg, dbTransfers] = await Promise.all([
             catRes.ok ? catRes.json() : null,
             invRes.ok ? invRes.json() : null,
             partiesRes.ok ? partiesRes.json() : null,
-            compRes.ok ? compRes.json() : null
+            compRes.ok ? compRes.json() : null,
+            mfgRes.ok ? mfgRes.json() : null,
+            trRes.ok ? trRes.json() : null
           ])
-          await applyData(dbCatalog, dbInvoices, dbParties, dbCompanies)
+          await applyData(dbCatalog, dbInvoices, dbParties, dbCompanies, dbMfg, dbTransfers)
         } catch (dbErr) {
           console.warn('Backend database fetch offline or network error, continuing with local storage:', dbErr)
         }
@@ -861,6 +910,13 @@ export default function KsvPage() {
     saveManufacturingLogs(updated)
     setEditingManufacturingLog(null)
 
+    // Sync to backend database
+    fetch(`${API_URL}/api/ksv/manufacturing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(log)
+    }).catch(err => console.warn('Could not save manufacturing log to database:', err))
+
     // Sync transfer from Factory to KSV Store inside the Manufacturing Modal
     const transferredToStore = log.transferredToStoreQty ?? log.transferredToFactoryQty
     if (!exists && transferredToStore && transferredToStore > 0) {
@@ -878,28 +934,39 @@ export default function KsvPage() {
         createdAt: new Date().toISOString()
       }
       saveStockTransfers([newTransfer, ...stockTransfers])
+      fetch(`${API_URL}/api/ksv/stock-transfers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTransfer)
+      }).catch(err => console.warn('Could not save stock transfer to database:', err))
     } else if (exists && transferredToStore !== undefined) {
       const batchTransfers = stockTransfers.filter((tr) => tr.batchId === log.id)
       const targetQty = Number(transferredToStore) || 0
       if (batchTransfers.length === 1) {
         if (targetQty > 0) {
+          const updatedTransferItem = {
+            ...batchTransfers[0],
+            date: log.date,
+            batchNo: log.batchNo || '',
+            itemId: log.finishedGoodItemId,
+            itemName: log.finishedGoodName,
+            quantity: targetQty,
+            unit: log.unit || 'PCS',
+            direction: 'FACTORY_TO_STORE' as const
+          }
           const updatedTransfers = stockTransfers.map((tr) =>
-            tr.id === batchTransfers[0].id
-              ? {
-                  ...tr,
-                  date: log.date,
-                  batchNo: log.batchNo || '',
-                  itemId: log.finishedGoodItemId,
-                  itemName: log.finishedGoodName,
-                  quantity: targetQty,
-                  unit: log.unit || 'PCS',
-                  direction: 'FACTORY_TO_STORE' as const
-                }
-              : tr
+            tr.id === batchTransfers[0].id ? updatedTransferItem : tr
           )
           saveStockTransfers(updatedTransfers)
+          fetch(`${API_URL}/api/ksv/stock-transfers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedTransferItem)
+          }).catch(err => console.warn('Could not save stock transfer to database:', err))
         } else {
           saveStockTransfers(stockTransfers.filter((tr) => tr.id !== batchTransfers[0].id))
+          fetch(`${API_URL}/api/ksv/stock-transfers/${batchTransfers[0].id}`, { method: 'DELETE' })
+            .catch(err => console.warn('Could not delete stock transfer from database:', err))
         }
       } else if (batchTransfers.length === 0 && targetQty > 0) {
         const newTransfer: StockTransferLog = {
@@ -916,6 +983,11 @@ export default function KsvPage() {
           createdAt: new Date().toISOString()
         }
         saveStockTransfers([newTransfer, ...stockTransfers])
+        fetch(`${API_URL}/api/ksv/stock-transfers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newTransfer)
+        }).catch(err => console.warn('Could not save stock transfer to database:', err))
       }
     }
 
@@ -942,6 +1014,8 @@ export default function KsvPage() {
     if (confirm('Delete this manufacturing entry? Stock will be updated accordingly.')) {
       const updated = manufacturingLogs.filter((l) => l.id !== id)
       saveManufacturingLogs(updated)
+      fetch(`${API_URL}/api/ksv/manufacturing/${id}`, { method: 'DELETE' })
+        .catch(err => console.warn('Could not delete manufacturing log from database:', err))
       // Also clean up any stock transfers linked to this batch
       const updatedTransfers = stockTransfers.filter((tr) => tr.batchId !== id)
       if (updatedTransfers.length !== stockTransfers.length) {
@@ -1032,23 +1106,33 @@ export default function KsvPage() {
     }
 
     if (editingTransferId) {
-      const updatedTransfers = stockTransfers.map((tr) =>
-        tr.id === editingTransferId
-          ? {
-              ...tr,
-              date: transferForm.date || new Date().toISOString().split('T')[0],
-              batchId: transferForm.batchId || undefined,
-              batchNo: transferForm.batchNo || undefined,
-              itemId: transferForm.itemId || tr.itemId || `item_${Date.now()}`,
-              itemName: transferForm.itemName.trim(),
-              quantity: Number(transferForm.quantity) || 0,
-              unit: transferForm.unit || 'PCS',
-              direction: transferForm.direction,
-              notes: transferForm.notes
-            }
-          : tr
-      )
+      let savedItem: StockTransferLog | null = null
+      const updatedTransfers = stockTransfers.map((tr) => {
+        if (tr.id === editingTransferId) {
+          savedItem = {
+            ...tr,
+            date: transferForm.date || new Date().toISOString().split('T')[0],
+            batchId: transferForm.batchId || undefined,
+            batchNo: transferForm.batchNo || undefined,
+            itemId: transferForm.itemId || tr.itemId || `item_${Date.now()}`,
+            itemName: transferForm.itemName.trim(),
+            quantity: Number(transferForm.quantity) || 0,
+            unit: transferForm.unit || 'PCS',
+            direction: transferForm.direction,
+            notes: transferForm.notes
+          }
+          return savedItem
+        }
+        return tr
+      })
       saveStockTransfers(updatedTransfers)
+      if (savedItem) {
+        fetch(`${API_URL}/api/ksv/stock-transfers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(savedItem)
+        }).catch(err => console.warn('Could not save stock transfer to database:', err))
+      }
     } else {
       const newTransfer: StockTransferLog = {
         id: `tr_${Date.now()}`,
@@ -1064,6 +1148,11 @@ export default function KsvPage() {
         createdAt: new Date().toISOString()
       }
       saveStockTransfers([newTransfer, ...stockTransfers])
+      fetch(`${API_URL}/api/ksv/stock-transfers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTransfer)
+      }).catch(err => console.warn('Could not save stock transfer to database:', err))
     }
 
     setEditingTransferId(null)
@@ -1073,6 +1162,8 @@ export default function KsvPage() {
   const handleDeleteStockTransfer = (id: string) => {
     if (confirm('Reverse / delete this stock transfer entry?')) {
       saveStockTransfers(stockTransfers.filter((tr) => tr.id !== id))
+      fetch(`${API_URL}/api/ksv/stock-transfers/${id}`, { method: 'DELETE' })
+        .catch(err => console.warn('Could not delete stock transfer from database:', err))
     }
   }
 
