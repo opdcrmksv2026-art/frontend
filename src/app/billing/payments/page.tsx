@@ -110,11 +110,10 @@ export default function PaymentsPage() {
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("")
-  const [paymentFilter, setPaymentFilter] = useState("ALL") // ALL, SOLAN, SABATHU, COD, ONLINE_SALE, KSV, KIYAVA, CASH, SPLIT
+  const [paymentFilter, setPaymentFilter] = useState("ALL") // ALL, SOLAN, SABATHU, COD, ONLINE_SALE, CASH, SPLIT
   const [reportMode, setReportMode] = useState<"DAILY" | "MONTHLY">("DAILY") // DAILY or MONTHLY
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split("T")[0])
   const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7)) // "ALL" or "YYYY-MM"
-  const [selectedEntity, setSelectedEntity] = useState<"ALL" | "MAXXI" | "KSV" | "KIYAVA">("ALL")
   const [showProductSummary, setShowProductSummary] = useState(false)
 
   // Printable Receipt Modal State
@@ -263,162 +262,6 @@ export default function PaymentsPage() {
         }
       })
 
-      // 3. Load KSV Pharmacy Sales Invoices
-      try {
-        const ksvStored = localStorage.getItem("ksv_app_invoices")
-        if (ksvStored) {
-          const ksvList = JSON.parse(ksvStored)
-          if (Array.isArray(ksvList)) {
-            ksvList.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, idx: number) => {
-              const invNo = inv.invoiceNo || `KSV-${idx + 1}`
-              if (!mergedMap.has(invNo) && !trashNos.has(invNo) && !permanentlyDeleted.has(invNo)) {
-                mergedMap.set(invNo, {
-                  id: inv.id || `ksv_${invNo}`,
-                  invoiceNo: invNo,
-                  entity: "KSV",
-                  opdSection: "KSV PHARMACY",
-                  date: inv.invoiceDate || (inv.createdAt ? inv.createdAt.split("T")[0] : new Date().toISOString().split("T")[0]),
-                  patientName: inv.buyer?.name || "Direct Buyer",
-                  patientId: inv.buyer?.gstin || "KSV-BUYER",
-                  city: inv.buyer?.city || "Solan",
-                  state: inv.buyer?.state || "Himachal Pradesh",
-                  combinedKitName: (inv.items || []).map((it: any) => `${it.description || it.name} (${it.quantity} ${it.unit || 'NOS'})`).join(", ") || "Formulations",
-                  treatments: (inv.items || []).map((it: any, i: number) => ({
-                    id: String(i + 1),
-                    disease: "Formulation Sale",
-                    kitName: it.description || it.name,
-                    quantity: it.quantity,
-                    price: (it.amount || it.totalAmount || 0).toString(),
-                    products: [{
-                      name: it.description || it.name,
-                      hsnCode: it.hsnSac || it.hsnCode || "3004",
-                      quantity: String(it.quantity || "1"),
-                      rate: it.rate || 0,
-                      taxRate: it.taxRate || 0
-                    }]
-                  })),
-                  billingType: inv.isInterState ? "GST (IGST)" : "GST (CGST+SGST)",
-                  priceVal: inv.subtotal || inv.grandTotal || 0,
-                  discountVal: inv.extraDiscount || 0,
-                  gstVal: inv.totalTaxAmount || 0,
-                  totalDueVal: inv.grandTotal || 0,
-                  cashVal: inv.paymentMode === "Cash" ? (inv.grandTotal || 0) : 0,
-                  onlineVal: inv.paymentMode !== "Cash" ? (inv.grandTotal || 0) : 0,
-                  totalPaidVal: inv.grandTotal || 0,
-                  whatsappNumber: inv.buyer?.phone || ""
-                })
-              }
-            })
-          }
-        }
-      } catch (e) {
-        console.warn("Could not parse KSV invoices:", e)
-      }
-
-      // 4. Load Kiyava Subathu Sales Invoices
-      try {
-        const kiyavaStored = localStorage.getItem("ksv_kiyava_invoices")
-        if (kiyavaStored) {
-          const kiyavaList = JSON.parse(kiyavaStored)
-          if (Array.isArray(kiyavaList)) {
-            kiyavaList.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, idx: number) => {
-              const invNo = inv.invoiceNo || `KYV-${idx + 1}`
-              if (!mergedMap.has(invNo) && !trashNos.has(invNo) && !permanentlyDeleted.has(invNo)) {
-                mergedMap.set(invNo, {
-                  id: inv.id || `kyv_${invNo}`,
-                  invoiceNo: invNo,
-                  entity: "KIYAVA",
-                  opdSection: "KIYAVA SUBATHU",
-                  date: inv.invoiceDate || (inv.createdAt ? inv.createdAt.split("T")[0] : new Date().toISOString().split("T")[0]),
-                  patientName: inv.buyer?.name || "Herbal Buyer",
-                  patientId: inv.buyer?.gstin || "KYV-BUYER",
-                  city: inv.buyer?.city || "Subathu",
-                  state: inv.buyer?.state || "Himachal Pradesh",
-                  combinedKitName: (inv.items || []).map((it: any) => `${it.description || it.name} (${it.quantity} ${it.unit || 'kg'})`).join(", ") || "Herbs & Extracts",
-                  treatments: (inv.items || []).map((it: any, i: number) => ({
-                    id: String(i + 1),
-                    disease: "Herbal Procurement",
-                    kitName: it.description || it.name,
-                    quantity: it.quantity,
-                    price: (it.amount || it.totalAmount || 0).toString(),
-                    products: [{
-                      name: it.description || it.name,
-                      hsnCode: it.hsnSac || it.hsnCode || "1211",
-                      quantity: String(it.quantity || "1"),
-                      rate: it.rate || 0,
-                      taxRate: it.taxRate || 0
-                    }]
-                  })),
-                  billingType: inv.isInterState ? "GST (IGST)" : "GST (CGST+SGST)",
-                  priceVal: inv.subtotal || inv.grandTotal || 0,
-                  discountVal: inv.extraDiscount || 0,
-                  gstVal: inv.totalTaxAmount || 0,
-                  totalDueVal: inv.grandTotal || 0,
-                  cashVal: inv.paymentMode === "Cash" ? (inv.grandTotal || 0) : 0,
-                  onlineVal: inv.paymentMode !== "Cash" ? (inv.grandTotal || 0) : 0,
-                  totalPaidVal: inv.grandTotal || 0,
-                  whatsappNumber: inv.buyer?.phone || ""
-                })
-              }
-            })
-          }
-        }
-      } catch (e) {
-        console.warn("Could not parse Kiyava invoices:", e)
-      }
-
-      // 5. Load Maxxi Pharma B2B Invoices
-      try {
-        const maxxiStored = localStorage.getItem("maxxi_app_invoices")
-        if (maxxiStored) {
-          const maxxiList = JSON.parse(maxxiStored)
-          if (Array.isArray(maxxiList)) {
-            maxxiList.filter((inv: any) => (inv.type || "SALE") === "SALE").forEach((inv: any, idx: number) => {
-              const invNo = inv.invoiceNo || `MXP-${idx + 1}`
-              if (!mergedMap.has(invNo) && !trashNos.has(invNo) && !permanentlyDeleted.has(invNo)) {
-                mergedMap.set(invNo, {
-                  id: inv.id || `mxp_${invNo}`,
-                  invoiceNo: invNo,
-                  entity: "MAXXI",
-                  opdSection: "MAXXI B2B SALE",
-                  date: inv.invoiceDate || (inv.createdAt ? inv.createdAt.split("T")[0] : new Date().toISOString().split("T")[0]),
-                  patientName: inv.buyer?.name || "Chemist / Distributor",
-                  patientId: inv.buyer?.gstin || "MX-BUYER",
-                  city: inv.buyer?.city || "Solan",
-                  state: inv.buyer?.state || "Himachal Pradesh",
-                  combinedKitName: (inv.items || []).map((it: any) => `${it.description || it.name} (${it.quantity})`).join(", ") || "Finished Medicines",
-                  treatments: (inv.items || []).map((it: any, i: number) => ({
-                    id: String(i + 1),
-                    disease: "Pharma Distribution",
-                    kitName: it.description || it.name,
-                    quantity: it.quantity,
-                    price: (it.amount || it.totalAmount || 0).toString(),
-                    products: [{
-                      name: it.description || it.name,
-                      hsnCode: it.hsnSac || it.hsnCode || "3004",
-                      quantity: String(it.quantity || "1"),
-                      rate: it.rate || 0,
-                      taxRate: it.taxRate || 0
-                    }]
-                  })),
-                  billingType: inv.isInterState ? "GST (IGST)" : "GST (CGST+SGST)",
-                  priceVal: inv.subtotal || inv.grandTotal || 0,
-                  discountVal: inv.extraDiscount || 0,
-                  gstVal: inv.totalTaxAmount || 0,
-                  totalDueVal: inv.grandTotal || 0,
-                  cashVal: inv.paymentMode === "Cash" ? (inv.grandTotal || 0) : 0,
-                  onlineVal: inv.paymentMode !== "Cash" ? (inv.grandTotal || 0) : 0,
-                  totalPaidVal: inv.grandTotal || 0,
-                  whatsappNumber: inv.buyer?.phone || ""
-                })
-              }
-            })
-          }
-        }
-      } catch (e) {
-        console.warn("Could not parse Maxxi invoices:", e)
-      }
-
       const sorted = Array.from(mergedMap.values())
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
@@ -458,15 +301,8 @@ export default function PaymentsPage() {
     return ""
   }
 
-  // Records filtered by selected period (DAILY or MONTHLY) and entity
+  // Records filtered by selected period (DAILY or MONTHLY)
   const periodFilteredRecords = records.filter(r => {
-    // 1. Entity filter
-    if (selectedEntity !== "ALL") {
-      const ent = r.entity || "MAXXI"
-      if (ent !== selectedEntity) return false
-    }
-
-    // 2. Period filter
     if (reportMode === "DAILY") {
       if (!selectedDate) return true
       return getRecordDateStr(r.date) === selectedDate
@@ -476,7 +312,7 @@ export default function PaymentsPage() {
     }
   })
 
-  // Calculated Stats (respecting selected period and entity)
+  // Calculated Stats (respecting selected period)
   const totalRevenue = periodFilteredRecords.reduce((sum, r) => sum + (r.totalPaidVal || 0), 0)
   const cashRevenue = periodFilteredRecords.reduce((sum, r) => sum + (r.cashVal || 0), 0)
   const onlineRevenue = periodFilteredRecords.reduce((sum, r) => sum + (r.onlineVal || 0), 0)
@@ -487,9 +323,6 @@ export default function PaymentsPage() {
   const sabathuRecords = periodFilteredRecords.filter(r => r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES")
   const codRecords = periodFilteredRecords.filter(r => r.opdSection === "COD SALE" || r.opdSection === "COD & ONLINE SALE")
   const onlineSaleRecords = periodFilteredRecords.filter(r => r.opdSection === "ONLINE SALE")
-  const ksvRecords = periodFilteredRecords.filter(r => r.entity === "KSV" || r.opdSection === "KSV PHARMACY")
-  const kiyavaRecords = periodFilteredRecords.filter(r => r.entity === "KIYAVA" || r.opdSection === "KIYAVA SUBATHU")
-  const maxxiRecords = periodFilteredRecords.filter(r => (r.entity || "MAXXI") === "MAXXI")
 
   const getUnitsSoldInRecord = (r: PaymentRecord) => {
     if (r.treatments && Array.isArray(r.treatments)) {
@@ -534,22 +367,6 @@ export default function PaymentsPage() {
     cash: onlineSaleRecords.reduce((s, r) => s + (r.cashVal || 0), 0),
     online: onlineSaleRecords.reduce((s, r) => s + (r.onlineVal || 0), 0),
     total: onlineSaleRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
-  }
-
-  const ksvStats = {
-    bills: ksvRecords.length,
-    units: ksvRecords.reduce((s, r) => s + getUnitsSoldInRecord(r), 0),
-    cash: ksvRecords.reduce((s, r) => s + (r.cashVal || 0), 0),
-    online: ksvRecords.reduce((s, r) => s + (r.onlineVal || 0), 0),
-    total: ksvRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
-  }
-
-  const kiyavaStats = {
-    bills: kiyavaRecords.length,
-    units: kiyavaRecords.reduce((s, r) => s + getUnitsSoldInRecord(r), 0),
-    cash: kiyavaRecords.reduce((s, r) => s + (r.cashVal || 0), 0),
-    online: kiyavaRecords.reduce((s, r) => s + (r.onlineVal || 0), 0),
-    total: kiyavaRecords.reduce((s, r) => s + (r.totalPaidVal || 0), 0)
   }
 
   // Product-wise Quantity & Revenue Breakdown (Solan OPD vs Sabathu OPD vs COD Sale vs Online Sale)
@@ -678,68 +495,12 @@ export default function PaymentsPage() {
     if (paymentFilter === "SABATHU") return r.opdSection === "SABATHU OPD SALE" || r.opdSection === "SABATHU OPD SALES"
     if (paymentFilter === "COD") return r.opdSection === "COD SALE" || r.opdSection === "COD & ONLINE SALE"
     if (paymentFilter === "ONLINE_SALE") return r.opdSection === "ONLINE SALE"
-    if (paymentFilter === "KSV") return r.entity === "KSV" || r.opdSection === "KSV PHARMACY"
-    if (paymentFilter === "KIYAVA") return r.entity === "KIYAVA" || r.opdSection === "KIYAVA SUBATHU"
 
     return true
   })
 
-  // Export Daily / Month-End Report to Excel (.csv with UTF-8 BOM for Microsoft Excel)
-  const handleExportExcel = (scope: "ALL" | "SOLAN" | "SABATHU" | "COD" | "ONLINE_SALE" | "KSV" | "KIYAVA" | "MAXXI" = "ALL") => {
-    const targetRecords =
-      scope === "SOLAN"
-        ? solanRecords
-        : scope === "SABATHU"
-        ? sabathuRecords
-        : scope === "COD"
-        ? codRecords
-        : scope === "ONLINE_SALE"
-        ? onlineSaleRecords
-        : scope === "KSV"
-        ? ksvRecords
-        : scope === "KIYAVA"
-        ? kiyavaRecords
-        : scope === "MAXXI"
-        ? maxxiRecords
-        : filteredRecords
-
-    if (targetRecords.length === 0) {
-      alert("No invoice records found for the selected period / section to export.")
-      return
-    }
-
-    const esc = (val: any) => {
-      const str = String(val ?? "").replace(/"/g, '""')
-      return `"${str}"`
-    }
-
-    const periodLabel = reportMode === "DAILY" ? `Daily Date: ${selectedDate}` : `Month: ${selectedMonth}`
-    const entityLabel =
-      selectedEntity === "ALL"
-        ? "KIYAVA / KSV / MAXXI"
-        : selectedEntity === "KSV"
-        ? "KSV PHARMACY"
-        : selectedEntity === "KIYAVA"
-        ? "KIYAVA SUBATHU"
-        : "MAXXI PHARMA"
-    const reportTypeTitle = reportMode === "DAILY" ? "DAILY SALES REPORT" : "MONTH-END SALES REPORT"
-    const scopeLabel =
-      scope === "SOLAN"
-        ? "SOLAN-OPD-SALE"
-        : scope === "SABATHU"
-        ? "SABATHU-OPD-SALE"
-        : scope === "COD"
-        ? "COD-SALE"
-        : scope === "ONLINE_SALE"
-        ? "ONLINE-SALE"
-        : scope === "KSV"
-        ? "KSV-PHARMACY"
-        : scope === "KIYAVA"
-        ? "KIYAVA-SUBATHU"
-        : "ALL-SECTIONS"
-
   // Export Clean, Column-Aligned Daily / Month-End Sales Register to Excel (.csv)
-  const handleExportExcel = (scope: "ALL" | "SOLAN" | "SABATHU" | "COD" | "ONLINE_SALE" | "KSV" | "KIYAVA" | "MAXXI" = "ALL") => {
+  const handleExportExcel = (scope: "ALL" | "SOLAN" | "SABATHU" | "COD" | "ONLINE_SALE" = "ALL") => {
     const targetRecords =
       scope === "SOLAN"
         ? solanRecords
@@ -749,12 +510,6 @@ export default function PaymentsPage() {
         ? codRecords
         : scope === "ONLINE_SALE"
         ? onlineSaleRecords
-        : scope === "KSV"
-        ? ksvRecords
-        : scope === "KIYAVA"
-        ? kiyavaRecords
-        : scope === "MAXXI"
-        ? maxxiRecords
         : filteredRecords
 
     if (targetRecords.length === 0) {
@@ -769,14 +524,7 @@ export default function PaymentsPage() {
     }
 
     const periodLabel = reportMode === "DAILY" ? `Daily-${selectedDate}` : `Month-${selectedMonth}`
-    const entityLabel =
-      selectedEntity === "ALL"
-        ? "KIYAVA-KSV-MAXXI"
-        : selectedEntity === "KSV"
-        ? "KSV-PHARMACY"
-        : selectedEntity === "KIYAVA"
-        ? "KIYAVA-SUBATHU"
-        : "MAXXI-PHARMA"
+    const entityLabel = "CUSTOMER-BILLS"
     const reportTypeTitle = reportMode === "DAILY" ? "DAILY-SALES-REPORT" : "MONTH-END-SALES-REGISTER"
     const scopeLabel =
       scope === "SOLAN"
@@ -787,10 +535,6 @@ export default function PaymentsPage() {
         ? "COD-SALE"
         : scope === "ONLINE_SALE"
         ? "ONLINE-SALE"
-        : scope === "KSV"
-        ? "KSV-PHARMACY"
-        : scope === "KIYAVA"
-        ? "KIYAVA-SUBATHU"
         : "ALL-SECTIONS"
 
     const headers = [
@@ -1048,7 +792,6 @@ export default function PaymentsPage() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-  }
   }
 
   // Filtered trash records
@@ -1366,8 +1109,8 @@ export default function PaymentsPage() {
             </div>
             <p className="text-[11px] text-slate-400 font-medium mt-1">
               {reportMode === "DAILY" 
-                ? `Daily revenue & GST breakdown across Kiyava Subathu, KSV Pharmacy, and Maxxi Pharma for ${selectedDate || "selected date"}`
-                : `Monthly consolidated sales register & product quantity breakdown for ${selectedMonth === "ALL" ? "All Months" : selectedMonth}`}
+                ? `Customer & patient billing revenue breakdown for ${selectedDate || "selected date"}`
+                : `Monthly consolidated patient billing register & product quantity breakdown for ${selectedMonth === "ALL" ? "All Months" : selectedMonth}`}
             </p>
           </div>
 
@@ -1473,59 +1216,8 @@ export default function PaymentsPage() {
           </div>
         </div>
 
-        {/* Entity Selector Pills (Kiyava, KSV, Maxxi, All) */}
-        <div className="flex flex-wrap items-center gap-1.5 pb-2">
-          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
-            Entity Filter:
-          </span>
-          <button
-            type="button"
-            onClick={() => setSelectedEntity("ALL")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-              selectedEntity === "ALL"
-                ? "bg-slate-900 text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            All Entities (Kiyava + KSV + Maxxi)
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedEntity("MAXXI")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-              selectedEntity === "MAXXI"
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
-            }`}
-          >
-            Maxxi Pharma (Solan/Sabathu OPD + B2B)
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedEntity("KSV")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-              selectedEntity === "KSV"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-purple-50 hover:text-purple-700"
-            }`}
-          >
-            KSV Pharmacy
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedEntity("KIYAVA")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-              selectedEntity === "KIYAVA"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700"
-            }`}
-          >
-            Kiyava Subathu
-          </button>
-        </div>
-
-        {/* Section & Entity Comparison Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        {/* Section Comparison Cards Grid (Solan OPD, Sabathu OPD, COD Sale, Online Sale) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* 1. Solan OPD Sale Card */}
           <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5">
             <div className="flex items-start justify-between gap-1.5">
@@ -1661,74 +1353,6 @@ export default function PaymentsPage() {
               </div>
             </div>
           </div>
-
-          {/* 5. KSV Pharmacy Card */}
-          <div className="bg-purple-50/60 border border-purple-100 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5">
-            <div className="flex items-start justify-between gap-1.5">
-              <div>
-                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
-                  KSV PHARMACY
-                </span>
-                <h3 className="text-lg font-black text-purple-900 mt-1.5 font-mono">
-                  ₹{ksvStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleExportExcel("KSV")}
-                className="p-1.5 bg-white hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-xs"
-                title="Download KSV Pharmacy Excel"
-              >
-                <Download className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-purple-200/60 text-[11px]">
-              <div>
-                <span className="text-[9px] text-purple-800/80 font-bold uppercase block">Invoices / Qty</span>
-                <strong className="font-black text-slate-800 font-mono">{ksvStats.bills} / {ksvStats.units}</strong>
-              </div>
-              <div>
-                <span className="text-[9px] text-purple-800/80 font-bold uppercase block">Cash / Online</span>
-                <span className="font-mono text-[10px] font-bold text-slate-700 block">
-                  ₹{ksvStats.cash.toLocaleString("en-IN")} / ₹{ksvStats.online.toLocaleString("en-IN")}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 6. Kiyava Subathu Card */}
-          <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5">
-            <div className="flex items-start justify-between gap-1.5">
-              <div>
-                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                  KIYAVA SUBATHU
-                </span>
-                <h3 className="text-lg font-black text-blue-900 mt-1.5 font-mono">
-                  ₹{kiyavaStats.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleExportExcel("KIYAVA")}
-                className="p-1.5 bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-xs"
-                title="Download Kiyava Subathu Excel"
-              >
-                <Download className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-blue-200/60 text-[11px]">
-              <div>
-                <span className="text-[9px] text-blue-800/80 font-bold uppercase block">Invoices / Qty</span>
-                <strong className="font-black text-slate-800 font-mono">{kiyavaStats.bills} / {kiyavaStats.units}</strong>
-              </div>
-              <div>
-                <span className="text-[9px] text-blue-800/80 font-bold uppercase block">Cash / Online</span>
-                <span className="font-mono text-[10px] font-bold text-slate-700 block">
-                  ₹{kiyavaStats.cash.toLocaleString("en-IN")} / ₹{kiyavaStats.online.toLocaleString("en-IN")}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Collapsible Product-Wise Sales Breakdown Table */}
@@ -1846,20 +1470,6 @@ export default function PaymentsPage() {
                 }`}
             >
               Online Sale
-            </button>
-            <button
-              onClick={() => setPaymentFilter("KSV")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "KSV" ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                }`}
-            >
-              KSV Pharmacy
-            </button>
-            <button
-              onClick={() => setPaymentFilter("KIYAVA")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${paymentFilter === "KIYAVA" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                }`}
-            >
-              Kiyava Subathu
             </button>
             <button
               onClick={() => setPaymentFilter("CASH")}
