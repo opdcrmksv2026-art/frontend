@@ -353,9 +353,9 @@ export default function Home() {
               const visits = p.orders || p.history || []
               if (Array.isArray(visits)) {
                 visits.forEach((h: any, i: number) => {
-                  const invNo = h.invoiceNo || `PT-${p.uniqueId || i}`
+                  const invNo = h.invoiceNo || (h.id ? `PT-${String(h.id).slice(-8)}` : `PT-${p.uniqueId || 'OPD'}-${i + 1}`)
                   const recKey = `MAXXI_SALE_${invNo}`
-                  if (recordsMap.has(recKey) || deletedNos.has(invNo)) return
+                  if (recordsMap.has(recKey) || (h.invoiceNo && recordsMap.has(`MAXXI_SALE_${h.invoiceNo}`)) || deletedNos.has(invNo)) return
 
                   const amt = Number(h.totalAmount || 0)
                   const cash = Number(h.amountCash || 0)
