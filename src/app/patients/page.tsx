@@ -91,11 +91,14 @@ export default function PatientsListPage() {
       const res = await fetch(`${API_URL}/api/patients`)
       if (res.ok) {
         const rawList: Patient[] = await res.json()
+        const localDeleted = new Set(JSON.parse(localStorage.getItem("ksv_deleted_patients") || "[]"))
         const cleanList = (Array.isArray(rawList) ? rawList : []).filter(
           (p: Patient) =>
             !p.name?.toLowerCase().includes("system health test patient") &&
             !p.name?.toLowerCase().includes("test patient") &&
-            !p.uniqueId?.startsWith("auto_check_")
+            !p.uniqueId?.startsWith("auto_check_") &&
+            !localDeleted.has(p.id) &&
+            !localDeleted.has(p.uniqueId)
         )
         setPatients(cleanList)
       } else {
@@ -198,8 +201,18 @@ export default function PatientsListPage() {
     }
     // Optimistic UI removal
     setPatients(prev => prev.filter(item => item.id !== p.id && item.uniqueId !== p.uniqueId))
+
+    // Record in local deleted set to ensure they never reappear on refresh
     try {
-      const res = await fetch(`${API_URL}/api/patients/${p.id || p.uniqueId}`, {
+      const localDeleted = JSON.parse(localStorage.getItem("ksv_deleted_patients") || "[]")
+      if (p.id) localDeleted.push(p.id)
+      if (p.uniqueId) localDeleted.push(p.uniqueId)
+      localStorage.setItem("ksv_deleted_patients", JSON.stringify(localDeleted))
+    } catch {}
+
+    try {
+      const targetId = p.uniqueId || p.id
+      const res = await fetch(`${API_URL}/api/patients/${encodeURIComponent(targetId)}`, {
         method: "DELETE"
       })
       if (!res.ok && res.status !== 204) {
