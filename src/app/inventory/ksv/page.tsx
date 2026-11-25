@@ -254,22 +254,34 @@ export default function KsvPage() {
             dbMfg: ManufacturingLog[] | null,
             dbTransfers: StockTransferLog[] | null
           ) => {
-            if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
+            if (Array.isArray(dbCatalog)) {
               const seenDb = new Set<string>()
               const cleanCatalog: CatalogItem[] = []
               for (const item of dbCatalog) {
                 const key = (item.name || '').trim().toLowerCase()
                 const id = (item.id || '').toLowerCase().trim()
-                if (!key || seenDb.has(key) || deletedCatalog.has(id)) continue
+                if (!key || seenDb.has(key) || deletedCatalog.has(id) || deletedCatalog.has(key)) continue
                 seenDb.add(key)
                 cleanCatalog.push({ ...item, name: item.name.trim() })
               }
+              // Preserve locally added products so they are never lost on page refresh
+              const currentLocal: CatalogItem[] = JSON.parse(localStorage.getItem('ksv_app_catalog') || '[]')
+              const unsyncedItems: CatalogItem[] = []
+              for (const loc of currentLocal) {
+                const locKey = (loc.name || '').trim().toLowerCase()
+                const locId = (loc.id || '').toLowerCase().trim()
+                if (locKey && !seenDb.has(locKey) && !deletedCatalog.has(locId) && !deletedCatalog.has(locKey)) {
+                  seenDb.add(locKey)
+                  cleanCatalog.push(loc)
+                  unsyncedItems.push(loc)
+                }
+              }
               setCatalog(cleanCatalog)
               localStorage.setItem('ksv_app_catalog', JSON.stringify(cleanCatalog))
-            } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {
-              // Parallel initial database sync
-              await Promise.allSettled(
-                parsedCatalog.map((it: any) =>
+
+              // Auto-sync unsynced local items to MongoDB in background
+              if (unsyncedItems.length > 0) {
+                unsyncedItems.forEach(it => {
                   fetch(`${API_URL}/api/ksv/catalog`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -283,9 +295,9 @@ export default function KsvPage() {
                       category: it.category || 'medicine',
                       quantity: Number(it.quantity) || 0
                     })
-                  })
-                )
-              )
+                  }).catch(() => {})
+                })
+              }
             }
 
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
@@ -726,7 +738,7 @@ export default function KsvPage() {
 
     try {
       const deleted = JSON.parse(localStorage.getItem('ksv_deleted_catalog') || '[]')
-      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name)
+      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name && d !== (item.name || '').toLowerCase().trim())
       localStorage.setItem('ksv_deleted_catalog', JSON.stringify(filtered))
     } catch (e) {}
 
@@ -736,7 +748,7 @@ export default function KsvPage() {
     // 2. Persist to MongoDB database via Prisma backend
     try {
       const payload = {
-        name: item.name,
+        name: item.name.trim(),
         hsnCode: item.hsnCode || '',
         defaultUnit: item.defaultUnit || 'PCS',
         defaultRate: Number(item.defaultRate) || 0,
@@ -768,7 +780,7 @@ export default function KsvPage() {
           const savedData = await res.json()
           if (savedData && savedData.id) {
             const finalList = updated.map((c) =>
-              c.name === item.name && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
+              c.name.trim().toLowerCase() === item.name.trim().toLowerCase() && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
             )
             saveCatalog(finalList)
           }

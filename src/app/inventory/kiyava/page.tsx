@@ -217,12 +217,45 @@ export default function KiyavaPage() {
               for (const c of dbCatalog) {
                 const key = (c.name || '').trim().toLowerCase()
                 const id = (c.id || '').toLowerCase().trim()
-                if (!key || seenDb.has(key) || deletedCatalog.has(id)) continue
+                if (!key || seenDb.has(key) || deletedCatalog.has(id) || deletedCatalog.has(key)) continue
                 seenDb.add(key)
                 cleanDbCatalog.push({ ...c, name: c.name.trim() })
               }
+              // Preserve locally added products so they are never lost on page refresh
+              const currentLocal: CatalogItem[] = JSON.parse(localStorage.getItem('ksv_kiyava_catalog') || '[]')
+              const unsyncedItems: CatalogItem[] = []
+              for (const loc of currentLocal) {
+                const locKey = (loc.name || '').trim().toLowerCase()
+                const locId = (loc.id || '').toLowerCase().trim()
+                if (locKey && !seenDb.has(locKey) && !deletedCatalog.has(locId) && !deletedCatalog.has(locKey)) {
+                  seenDb.add(locKey)
+                  cleanDbCatalog.push(loc)
+                  unsyncedItems.push(loc)
+                }
+              }
               setCatalog(cleanDbCatalog)
               localStorage.setItem('ksv_kiyava_catalog', JSON.stringify(cleanDbCatalog))
+
+              // Auto-sync unsynced local items to MongoDB in background
+              if (unsyncedItems.length > 0) {
+                unsyncedItems.forEach(it => {
+                  fetch(`${API_URL}/api/kiyava/catalog`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: it.name,
+                      hsnCode: it.hsnCode || '',
+                      defaultUnit: it.defaultUnit || 'kg',
+                      defaultRate: Number(it.defaultRate) || 0,
+                      defaultTaxRate: Number(it.defaultTaxRate) || 0,
+                      description: it.description || '',
+                      category: it.category || 'herb',
+                      quantity: Number(it.quantity) || 0,
+                      packing: it.packing || ''
+                    })
+                  }).catch(() => {})
+                })
+              }
             }
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
               const cleanDbInvoices = dbInvoices.filter((inv: any) => {
@@ -864,7 +897,7 @@ export default function KiyavaPage() {
 
     try {
       const deleted = JSON.parse(localStorage.getItem('kiyava_deleted_catalog') || '[]')
-      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name)
+      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name && d !== (item.name || '').toLowerCase().trim())
       localStorage.setItem('kiyava_deleted_catalog', JSON.stringify(filtered))
     } catch (e) {}
 
@@ -874,7 +907,7 @@ export default function KiyavaPage() {
     // 2. Persist to MongoDB database via Prisma backend
     try {
       const payload = {
-        name: item.name,
+        name: item.name.trim(),
         hsnCode: item.hsnCode || '',
         defaultUnit: item.defaultUnit || 'kg',
         defaultRate: Number(item.defaultRate) || 0,
@@ -907,7 +940,7 @@ export default function KiyavaPage() {
           const savedData = await res.json()
           if (savedData && savedData.id) {
             const finalList = updated.map((c) =>
-              c.name === item.name && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
+              c.name.trim().toLowerCase() === item.name.trim().toLowerCase() && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
             )
             saveCatalog(finalList)
           }

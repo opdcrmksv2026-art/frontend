@@ -346,13 +346,36 @@ export default function CreateInvoicePage() {
 
   // Helper to add custom unlisted medicine on-the-fly
   const handleAddCustomProduct = (treatmentId: string, customName: string) => {
-    if (!customName.trim()) return
+    const cleanName = customName.trim()
+    if (!cleanName) return
+
+    // Auto-persist into KSV database catalog so it is remembered permanently for all future bills
+    fetch(`${API_URL}/api/ksv/catalog`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: cleanName,
+        hsnCode: '30049011',
+        defaultUnit: 'NOS',
+        defaultRate: 0,
+        defaultTaxRate: 5,
+        category: 'medicine',
+        description: 'Auto-added from OPD Billing',
+        quantity: 0
+      })
+    }).catch(() => {})
+
+    setCatalog(prev => {
+      if (prev.some(c => (c.name || '').toLowerCase() === cleanName.toLowerCase())) return prev
+      return [...prev, { name: cleanName, hsnCode: '30049011', defaultRate: 0, defaultTaxRate: 5 }]
+    })
+
     setTreatments(prev => prev.map(t => {
       if (t.id === treatmentId) {
         const newProducts = [
           ...t.products,
           {
-            name: customName.trim(),
+            name: cleanName,
             quantity: "1",
             rate: 0,
             hsnCode: "30049011",

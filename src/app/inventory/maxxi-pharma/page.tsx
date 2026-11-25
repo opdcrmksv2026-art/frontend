@@ -231,21 +231,34 @@ export default function MaxxiPharmaPage() {
             dbParties: any[] | null,
             dbCompanies: any[] | null
           ) => {
-            if (Array.isArray(dbCatalog) && dbCatalog.length > 0) {
+            if (Array.isArray(dbCatalog)) {
               const seenDb = new Set<string>()
               const cleanCatalog: CatalogItem[] = []
               for (const item of dbCatalog) {
                 const key = (item.name || '').trim().toLowerCase()
                 const id = (item.id || '').toLowerCase().trim()
-                if (!key || seenDb.has(key) || deletedCatalog.has(id)) continue
+                if (!key || seenDb.has(key) || deletedCatalog.has(id) || deletedCatalog.has(key)) continue
                 seenDb.add(key)
                 cleanCatalog.push({ ...item, name: item.name.trim() })
               }
+              // Preserve locally added products so they are never lost on page refresh
+              const currentLocal: CatalogItem[] = JSON.parse(localStorage.getItem('maxxi_app_catalog') || '[]')
+              const unsyncedItems: CatalogItem[] = []
+              for (const loc of currentLocal) {
+                const locKey = (loc.name || '').trim().toLowerCase()
+                const locId = (loc.id || '').toLowerCase().trim()
+                if (locKey && !seenDb.has(locKey) && !deletedCatalog.has(locId) && !deletedCatalog.has(locKey)) {
+                  seenDb.add(locKey)
+                  cleanCatalog.push(loc)
+                  unsyncedItems.push(loc)
+                }
+              }
               setCatalog(cleanCatalog)
               localStorage.setItem('maxxi_app_catalog', JSON.stringify(cleanCatalog))
-            } else if (Array.isArray(dbCatalog) && dbCatalog.length === 0 && parsedCatalog.length > 0) {
-              await Promise.allSettled(
-                parsedCatalog.map((it: any) =>
+
+              // Auto-sync unsynced local items to MongoDB in background
+              if (unsyncedItems.length > 0) {
+                unsyncedItems.forEach(it => {
                   fetch(`${API_URL}/api/maxxi/catalog`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -259,9 +272,9 @@ export default function MaxxiPharmaPage() {
                       category: it.category || 'medicine',
                       quantity: Number(it.quantity) || 0
                     })
-                  })
-                )
-              )
+                  }).catch(() => {})
+                })
+              }
             }
 
             if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
@@ -585,7 +598,7 @@ export default function MaxxiPharmaPage() {
 
     try {
       const deleted = JSON.parse(localStorage.getItem('maxxi_deleted_catalog') || '[]')
-      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name)
+      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name && d !== (item.name || '').toLowerCase().trim())
       localStorage.setItem('maxxi_deleted_catalog', JSON.stringify(filtered))
     } catch (e) {}
 
@@ -595,7 +608,7 @@ export default function MaxxiPharmaPage() {
     // 2. Persist to Backend Database (MongoDB via Prisma)
     try {
       const payload = {
-        name: item.name,
+        name: item.name.trim(),
         hsnCode: item.hsnCode || '',
         defaultUnit: item.defaultUnit || 'NOS',
         defaultRate: Number(item.defaultRate) || 0,
@@ -630,7 +643,7 @@ export default function MaxxiPharmaPage() {
           if (savedData && savedData.id) {
             // Replace temporary ID with MongoDB ObjectID
             const finalList = updated.map((c) =>
-              c.name === item.name && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
+              c.name.trim().toLowerCase() === item.name.trim().toLowerCase() && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
             )
             saveCatalog(finalList)
           }
