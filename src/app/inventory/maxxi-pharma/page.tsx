@@ -22,6 +22,7 @@ import PartyModal from '@/components/kiyava/PartyModal'
 import CatalogModal from '@/components/kiyava/CatalogModal'
 import OpeningStockModal from '@/components/kiyava/OpeningStockModal'
 import StockRegisterTab from '@/components/kiyava/StockRegisterTab'
+import MaxxiGodownTab from '@/components/kiyava/MaxxiGodownTab'
 import {
   FileText,
   Plus,
@@ -40,7 +41,8 @@ import {
   CheckCircle2,
   Activity,
   FileSpreadsheet,
-  TrendingUp
+  TrendingUp,
+  Warehouse
 } from 'lucide-react'
 
 import { API_URL } from '@/lib/apiConfig'
@@ -869,6 +871,17 @@ export default function MaxxiPharmaPage() {
           <TrendingUp className="w-3.5 h-3.5" />
           Live Stock
         </button>
+
+        <button
+          onClick={() => setActiveTab('godown')}
+          className={`px-4 py-2 rounded-xl font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeTab === 'godown'
+            ? 'bg-emerald-600 text-white shadow-md'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+        >
+          <Warehouse className="w-3.5 h-3.5" />
+          Godown ({catalog.length})
+        </button>
       </div>
 
       {/* 4. TAB CONTENT: 1. INVOICES & PURCHASES LEDGER */}
@@ -1495,6 +1508,28 @@ export default function MaxxiPharmaPage() {
           invoices={allInvoices}
           manufacturingLogs={[]} // Maxxi Pharma doesn't have manufacturing logs right now
           onOpenOpeningStock={() => setActiveTab('opening-stock')}
+        />
+      )}
+
+      {/* 4. TAB CONTENT: 8. GODOWN WAREHOUSE REGISTER & MOVEMENTS */}
+      {activeTab === 'godown' && (
+        <MaxxiGodownTab
+          catalog={catalog}
+          companies={companies}
+          onUpdateCatalogItem={(updatedItem) => {
+            const cleanStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim()
+            const targetClean = cleanStr(updatedItem.name)
+            setCatalog(prev => {
+              const updated = prev.map(c => {
+                if (c.id === updatedItem.id || cleanStr(c.name) === targetClean) {
+                  return { ...c, ...updatedItem }
+                }
+                return c
+              })
+              saveCatalog(updated)
+              return updated
+            })
+          }}
         />
       )}
       </div>
