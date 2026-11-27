@@ -24,7 +24,8 @@ import {
   Truck,
   HelpCircle,
   FileSpreadsheet,
-  Loader2
+  Loader2,
+  Warehouse
 } from 'lucide-react'
 
 interface KiyavaInvoiceFormProps {
@@ -147,12 +148,13 @@ export default function KiyavaInvoiceForm({
   const [matCenter, setMatCenter] = useState<string>(initialInvoice?.matCenter || 'KSV Store')
   const [reverseCharge, setReverseCharge] = useState<'N' | 'Y'>(initialInvoice?.reverseCharge || 'N')
   const [invoiceType, setInvoiceType] = useState<'SALE' | 'PURCHASE'>(initialInvoice?.type || defaultInvoiceType || 'SALE')
+  const [targetGodown, setTargetGodown] = useState<string>(initialInvoice?.targetGodown || 'SOLAN OPD SALE')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // 4. Line Items Grid (Starts clean with 1 clean item row, no dummy data!)
   const [items, setItems] = useState<InvoiceItemRow[]>(
     initialInvoice?.items && initialInvoice.items.length > 0
-      ? initialInvoice.items
+      ? initialInvoice.items.map((it) => ({ ...it, godownSection: it.godownSection || initialInvoice.targetGodown || 'SOLAN OPD SALE' }))
       : [
           {
             id: '1',
@@ -163,7 +165,8 @@ export default function KiyavaInvoiceForm({
             rate: 0,
             taxRate: 5,
             discountPercent: 0,
-            amount: 0
+            amount: 0,
+            godownSection: initialInvoice?.targetGodown || 'SOLAN OPD SALE'
           }
         ]
   )
@@ -263,7 +266,8 @@ export default function KiyavaInvoiceForm({
         rate: 0,
         taxRate: 5,
         discountPercent: 0,
-        amount: 0
+        amount: 0,
+        godownSection: targetGodown || 'SOLAN OPD SALE'
       }
     ])
   }
@@ -281,7 +285,8 @@ export default function KiyavaInvoiceForm({
           rate: 0,
           taxRate: 5,
           discountPercent: 0,
-          amount: 0
+          amount: 0,
+          godownSection: targetGodown || 'SOLAN OPD SALE'
         }
       ])
       return
@@ -307,7 +312,8 @@ export default function KiyavaInvoiceForm({
           rate: 0,
           taxRate: 5,
           discountPercent: 0,
-          amount: 0
+          amount: 0,
+          godownSection: targetGodown || 'SOLAN OPD SALE'
         }
       ])
     }
@@ -397,6 +403,7 @@ export default function KiyavaInvoiceForm({
       quantity: Number(it.quantity) || 0,
       rate: Number(it.rate) || 0,
       discountPercent: Number(it.discountPercent) || 0,
+      godownSection: it.godownSection || targetGodown || 'SOLAN OPD SALE'
     }))
 
     const invoice: KiyavaInvoice = {
@@ -415,6 +422,7 @@ export default function KiyavaInvoiceForm({
       paymentTerms,
       totalBags,
       matCenter,
+      targetGodown: targetGodown || 'SOLAN OPD SALE',
       company: currentCompany,
       buyer: currentBuyer,
       shippedToSameAsBilled: true,
@@ -690,7 +698,7 @@ export default function KiyavaInvoiceForm({
         </div>
 
         {/* Transportation & Meta Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-slate-100 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 pt-2 border-t border-slate-100 text-xs">
           <div>
             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Ref. No. / PO</label>
             <input
@@ -700,6 +708,27 @@ export default function KiyavaInvoiceForm({
               placeholder="VPSF-101"
               className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-600"
             />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-amber-700 uppercase mb-1 block flex items-center gap-1">
+              <Warehouse className="w-3 h-3 text-amber-600" /> Godown Section
+            </label>
+            <select
+              value={targetGodown}
+              onChange={(e) => {
+                const val = e.target.value
+                setTargetGodown(val)
+                setItems((prev) => prev.map((it) => ({ ...it, godownSection: it.godownSection || val })))
+              }}
+              className="w-full px-2.5 py-1.5 bg-amber-50/70 border border-amber-300 rounded-lg text-xs font-bold text-amber-900 outline-none focus:border-amber-600 cursor-pointer"
+            >
+              <option value="SOLAN OPD SALE">🏥 SOLAN OPD</option>
+              <option value="SABATHU OPD SALE">🌿 SABATHU OPD</option>
+              <option value="COD SALE">📦 COD SALE</option>
+              <option value="ONLINE SALE">🌐 ONLINE SALE</option>
+              <option value="CENTRAL GODOWN">🏬 CENTRAL GODOWN</option>
+            </select>
           </div>
 
           <div>
@@ -783,6 +812,7 @@ export default function KiyavaInvoiceForm({
                 <th className="p-2.5 text-center w-8 rounded-tl-xl">#</th>
                 <th className="p-2.5 text-left">Description of Goods</th>
                 <th className="p-2.5 text-center w-24">HSN/SAC</th>
+                <th className="p-2.5 text-center w-36">Godown / Section</th>
                 <th className="p-2.5 text-right w-24">Quantity</th>
                 <th className="p-2.5 text-center w-16">Unit</th>
                 <th className="p-2.5 text-right w-24">Rate (₹)</th>
@@ -851,6 +881,21 @@ export default function KiyavaInvoiceForm({
                       placeholder="12119011"
                       className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-center text-slate-800 outline-none focus:border-blue-600"
                     />
+                  </td>
+
+                  {/* Destination Godown / Section per Item */}
+                  <td className="p-2">
+                    <select
+                      value={item.godownSection || targetGodown || 'SOLAN OPD SALE'}
+                      onChange={(e) => handleItemChange(item.id, 'godownSection', e.target.value)}
+                      className="w-full px-2 py-1.5 bg-amber-50/60 border border-amber-300 focus:border-amber-500 rounded-lg text-[11px] font-bold text-slate-900 outline-none cursor-pointer"
+                    >
+                      <option value="SOLAN OPD SALE">🏥 Solan OPD</option>
+                      <option value="SABATHU OPD SALE">🌿 Sabathu OPD</option>
+                      <option value="COD SALE">📦 COD Sale</option>
+                      <option value="ONLINE SALE">🌐 Online Sale</option>
+                      <option value="CENTRAL GODOWN">🏬 Central Godown</option>
+                    </select>
                   </td>
 
                   {/* Quantity */}

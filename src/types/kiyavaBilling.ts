@@ -64,6 +64,7 @@ export interface InvoiceItemRow {
   taxRate: number // Tax percentage e.g. 5, 12, 18, 0
   discountPercent: number
   amount: number // Final line total = Qty * Rate * (1 - Disc/100)
+  godownSection?: string // e.g. 'SOLAN OPD SALE', 'SABATHU OPD SALE', 'COD SALE', 'ONLINE SALE', 'CENTRAL GODOWN'
 }
 
 export interface HsnSummaryRow {
@@ -99,6 +100,7 @@ export interface KiyavaInvoice {
   totalBags?: string
   matCenter?: string
   disease?: string
+  targetGodown?: string // Destination Godown/Section for purchase stock (e.g. SOLAN OPD SALE)
 
   // Company / Seller info
   company: CompanyProfile

@@ -400,16 +400,71 @@ export default function MaxxiPharmaPage() {
     // Adjust inventory dynamically
     if (!isEditing) {
       let updatedCatalog = [...catalog];
+      let movementLogs: any[] = [];
+      try {
+        movementLogs = JSON.parse(localStorage.getItem('maxxi_godown_movement_logs') || '[]');
+      } catch (e) {
+        movementLogs = [];
+      }
+
       invoice.items.forEach(item => {
-        const catalogItemIndex = updatedCatalog.findIndex(c => c.name === item.description);
+        const itemSec = item.godownSection || invoice.targetGodown || 'SOLAN OPD SALE';
+        const itemQty = Number(item.quantity) || 0;
+        if (!item.description || itemQty <= 0) return;
+
+        const cleanStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+        const targetClean = cleanStr(item.description);
+
+        const catalogItemIndex = updatedCatalog.findIndex(c => cleanStr(c.name) === targetClean);
         if (catalogItemIndex !== -1) {
-          const currentQty = updatedCatalog[catalogItemIndex].quantity || 0;
+          const currentQty = Number(updatedCatalog[catalogItemIndex].quantity) || 0;
+          const newQty = invoice.type === 'PURCHASE' ? currentQty + itemQty : Math.max(0, currentQty - itemQty);
           updatedCatalog[catalogItemIndex] = {
             ...updatedCatalog[catalogItemIndex],
-            quantity: invoice.type === 'PURCHASE' ? currentQty + item.quantity : currentQty - item.quantity
+            quantity: newQty,
+            opdSection: itemSec
           };
+
+          // Sync to MongoDB in background
+          fetch(`${API_URL}/api/maxxi/catalog`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: updatedCatalog[catalogItemIndex].name,
+              hsnCode: updatedCatalog[catalogItemIndex].hsnCode,
+              defaultUnit: updatedCatalog[catalogItemIndex].defaultUnit,
+              defaultRate: updatedCatalog[catalogItemIndex].defaultRate,
+              defaultTaxRate: updatedCatalog[catalogItemIndex].defaultTaxRate,
+              description: updatedCatalog[catalogItemIndex].description,
+              category: updatedCatalog[catalogItemIndex].category,
+              quantity: newQty,
+              packing: updatedCatalog[catalogItemIndex].packing,
+              opdSection: itemSec
+            })
+          }).catch(() => {});
         }
+
+        // Record Godown Movement Log (INWARD for purchase, OUTWARD for sale)
+        movementLogs.unshift({
+          id: `glog_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          date: invoice.invoiceDate || new Date().toISOString().split('T')[0],
+          itemId: catalogItemIndex !== -1 ? updatedCatalog[catalogItemIndex].id : `item_${Date.now()}`,
+          itemName: item.description,
+          hsnCode: item.hsnSac || item.hsnCode || '',
+          type: invoice.type === 'PURCHASE' ? 'INWARD' : 'OUTWARD',
+          quantity: itemQty,
+          unit: item.unit || 'NOS',
+          section: itemSec,
+          sourceOrDestination: invoice.buyer?.name || (invoice.type === 'PURCHASE' ? 'Supplier Purchase' : 'Patient/Buyer'),
+          referenceNo: invoice.invoiceNo,
+          remarks: `Auto-recorded from ${invoice.type === 'PURCHASE' ? 'Purchase' : 'Sale'} Invoice #${invoice.invoiceNo}`,
+          timestamp: new Date().toISOString()
+        });
       });
+
+      try {
+        localStorage.setItem('maxxi_godown_movement_logs', JSON.stringify(movementLogs));
+      } catch (e) {}
       saveCatalog(updatedCatalog);
     }
 

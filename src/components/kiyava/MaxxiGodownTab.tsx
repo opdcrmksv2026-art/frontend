@@ -117,28 +117,70 @@ export default function MaxxiGodownTab({
     } catch (e) {}
   }
 
-  // Only items allocated to a Godown section or having physical stock belong in Godown
+  // Section-specific inventory derived from Catalog and Movement Logs
   const uniqueCatalog = useMemo(() => {
-    const seen = new Set<string>()
+    // 1. Calculate net stock per item per section from movement logs
+    const logStockMap = new Map<string, { qty: number; hsn?: string; unit?: string }>()
+    movementLogs.forEach((log) => {
+      const nameKey = (log.itemName || '').trim().toLowerCase()
+      const secKey = log.section || 'SOLAN OPD SALE'
+      if (!nameKey) return
+      const compositeKey = `${nameKey}:::${secKey}`
+      const existing = logStockMap.get(compositeKey) || { qty: 0, hsn: log.hsnCode, unit: log.unit }
+      const change = log.type === 'INWARD' ? Number(log.quantity) || 0 : -(Number(log.quantity) || 0)
+      logStockMap.set(compositeKey, {
+        qty: existing.qty + change,
+        hsn: log.hsnCode || existing.hsn,
+        unit: log.unit || existing.unit
+      })
+    })
+
     const result: CatalogItem[] = []
+    const processedComposite = new Set<string>()
+
+    // 2. Add entries from Movement Logs with positive stock
+    logStockMap.forEach((data, compositeKey) => {
+      if (data.qty <= 0) return
+      const [nameKey, secKey] = compositeKey.split(':::')
+      processedComposite.add(compositeKey)
+
+      const master = catalog.find((c) => (c.name || '').trim().toLowerCase() === nameKey)
+      result.push({
+        id: master?.id ? `${master.id}_${secKey}` : `sec_${Date.now()}_${nameKey}`,
+        name: master?.name || nameKey.toUpperCase(),
+        hsnCode: master?.hsnCode || data.hsn || '',
+        defaultUnit: master?.defaultUnit || data.unit || 'NOS',
+        defaultRate: master?.defaultRate || 0,
+        defaultTaxRate: master?.defaultTaxRate || 5,
+        category: master?.category || 'medicine',
+        description: master?.description || '',
+        quantity: Math.max(0, data.qty),
+        opdSection: secKey,
+        packing: master?.packing
+      })
+    })
+
+    // 3. Also include items from Catalog that have an explicit opdSection and stock > 0
     for (const it of catalog) {
-      const key = (it.name || '').trim().toLowerCase()
-      if (!key || seen.has(key)) continue
+      const nameKey = (it.name || '').trim().toLowerCase()
+      const secKey = it.opdSection
+      if (!nameKey || !secKey) continue
+      const compositeKey = `${nameKey}:::${secKey}`
+      if (processedComposite.has(compositeKey)) continue
 
-      // An item only belongs in Godown if it has an explicit section OR has physical stock
-      const hasSection = Boolean(it.opdSection && it.opdSection.trim())
-      const hasStock = Number(it.quantity || 0) > 0
-      if (!hasSection && !hasStock) continue
+      const qty = Number(it.quantity || 0)
+      if (qty <= 0) continue
 
-      seen.add(key)
+      processedComposite.add(compositeKey)
       result.push({
         ...it,
         name: it.name.trim(),
-        opdSection: it.opdSection || 'CENTRAL GODOWN'
+        opdSection: secKey
       })
     }
+
     return result
-  }, [catalog])
+  }, [catalog, movementLogs])
 
   // Section Counts
   const sectionCounts = useMemo(() => {
