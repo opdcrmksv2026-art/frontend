@@ -117,18 +117,24 @@ export default function MaxxiGodownTab({
     } catch (e) {}
   }
 
-  // Deduplicate catalog items
+  // Only items allocated to a Godown section or having physical stock belong in Godown
   const uniqueCatalog = useMemo(() => {
     const seen = new Set<string>()
     const result: CatalogItem[] = []
     for (const it of catalog) {
       const key = (it.name || '').trim().toLowerCase()
       if (!key || seen.has(key)) continue
+
+      // An item only belongs in Godown if it has an explicit section OR has physical stock
+      const hasSection = Boolean(it.opdSection && it.opdSection.trim())
+      const hasStock = Number(it.quantity || 0) > 0
+      if (!hasSection && !hasStock) continue
+
       seen.add(key)
       result.push({
         ...it,
         name: it.name.trim(),
-        opdSection: it.opdSection || 'SOLAN OPD SALE'
+        opdSection: it.opdSection || 'CENTRAL GODOWN'
       })
     }
     return result
@@ -137,8 +143,12 @@ export default function MaxxiGodownTab({
   // Section Counts
   const sectionCounts = useMemo(() => {
     const counts: Record<string, number> = { ALL: uniqueCatalog.length }
+    GODOWN_SECTIONS.forEach((sec) => {
+      counts[sec.id] = 0
+    })
+    counts['ALL'] = uniqueCatalog.length
     uniqueCatalog.forEach((item) => {
-      const sec = item.opdSection || 'SOLAN OPD SALE'
+      const sec = item.opdSection || 'CENTRAL GODOWN'
       counts[sec] = (counts[sec] || 0) + 1
     })
     return counts
@@ -247,9 +257,11 @@ export default function MaxxiGodownTab({
     } else if (filteredCatalog.length > 0) {
       setSelectedItemForAction(filteredCatalog[0])
       setFormItemId(filteredCatalog[0].id)
-    } else if (uniqueCatalog.length > 0) {
-      setSelectedItemForAction(uniqueCatalog[0])
-      setFormItemId(uniqueCatalog[0].id)
+      setFormSection(filteredCatalog[0].opdSection || targetSection)
+    } else if (catalog.length > 0) {
+      setSelectedItemForAction(catalog[0])
+      setFormItemId(catalog[0].id)
+      setFormSection(catalog[0].opdSection || targetSection)
     }
     setIsModalOpen(true)
   }
@@ -264,7 +276,7 @@ export default function MaxxiGodownTab({
       return
     }
 
-    const targetItem = uniqueCatalog.find((c) => c.id === formItemId)
+    const targetItem = catalog.find((c) => c.id === formItemId) || uniqueCatalog.find((c) => c.id === formItemId)
     if (!targetItem) return
 
     const currentQty = Number(targetItem.quantity || 0)
@@ -898,9 +910,9 @@ export default function MaxxiGodownTab({
                   <option value="" disabled>
                     -- Choose Product --
                   </option>
-                  {uniqueCatalog.map((c) => (
+                  {(catalog.length > 0 ? catalog : uniqueCatalog).map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} ({c.opdSection || 'Solan OPD'}) - Stock: {c.quantity || 0} {c.defaultUnit || 'NOS'}
+                      {c.name} {c.opdSection ? `(${c.opdSection})` : ''} - Stock: {c.quantity || 0} {c.defaultUnit || 'NOS'}
                     </option>
                   ))}
                 </select>

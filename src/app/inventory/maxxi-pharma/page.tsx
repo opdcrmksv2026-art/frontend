@@ -151,10 +151,13 @@ export default function MaxxiPharmaPage() {
       const deletedCompanies = new Set(
         (JSON.parse(localStorage.getItem('maxxi_deleted_companies') || '[]') as string[]).map(s => s.toLowerCase().trim())
       )
-      // Clear old deletion marks to ensure restored catalog products show up immediately
-      if (typeof window !== 'undefined' && localStorage.getItem('maxxi_godown_fresh_v2')) {
+      // Clear old deletion marks and refresh local cache so fresh DB values (zero old stock) load cleanly
+      if (typeof window !== 'undefined' && !localStorage.getItem('maxxi_godown_fresh_stock_v3')) {
+        localStorage.setItem('maxxi_godown_fresh_stock_v3', 'true')
         localStorage.removeItem('maxxi_godown_fresh_v2')
         localStorage.removeItem('maxxi_deleted_catalog')
+        localStorage.removeItem('maxxi_godown_movement_logs')
+        localStorage.removeItem('maxxi_app_catalog')
       }
 
       const deletedCatalog = new Set(
