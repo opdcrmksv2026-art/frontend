@@ -698,7 +698,7 @@ export default function KiyavaInvoiceForm({
         </div>
 
         {/* Transportation & Meta Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 pt-2 border-t border-slate-100 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-slate-100 text-xs">
           <div>
             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Ref. No. / PO</label>
             <input
@@ -708,27 +708,6 @@ export default function KiyavaInvoiceForm({
               placeholder="VPSF-101"
               className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-600"
             />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-bold text-amber-700 uppercase mb-1 block flex items-center gap-1">
-              <Warehouse className="w-3 h-3 text-amber-600" /> Godown Section
-            </label>
-            <select
-              value={targetGodown}
-              onChange={(e) => {
-                const val = e.target.value
-                setTargetGodown(val)
-                setItems((prev) => prev.map((it) => ({ ...it, godownSection: it.godownSection || val })))
-              }}
-              className="w-full px-2.5 py-1.5 bg-amber-50/70 border border-amber-300 rounded-lg text-xs font-bold text-amber-900 outline-none focus:border-amber-600 cursor-pointer"
-            >
-              <option value="SOLAN OPD SALE">🏥 SOLAN OPD</option>
-              <option value="SABATHU OPD SALE">🌿 SABATHU OPD</option>
-              <option value="COD SALE">📦 COD SALE</option>
-              <option value="ONLINE SALE">🌐 ONLINE SALE</option>
-              <option value="CENTRAL GODOWN">🏬 CENTRAL GODOWN</option>
-            </select>
           </div>
 
           <div>
