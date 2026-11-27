@@ -27,7 +27,8 @@ import {
   Tag,
   Store,
   Globe,
-  Layers
+  Layers,
+  Trash2
 } from 'lucide-react'
 import { API_URL } from '@/lib/apiConfig'
 
@@ -60,12 +61,16 @@ interface MaxxiGodownTabProps {
   catalog: CatalogItem[]
   companies: CompanyProfile[]
   onUpdateCatalogItem: (updatedItem: CatalogItem) => void
+  onDeleteCatalogItem?: (id: string) => void
+  onClearAllCatalog?: () => void
 }
 
 export default function MaxxiGodownTab({
   catalog,
   companies,
-  onUpdateCatalogItem
+  onUpdateCatalogItem,
+  onDeleteCatalogItem,
+  onClearAllCatalog
 }: MaxxiGodownTabProps) {
   // Navigation & Filter States
   const [activeSection, setActiveSection] = useState<string>('ALL')
@@ -448,6 +453,17 @@ export default function MaxxiGodownTab({
             <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
             Export Section Excel
           </button>
+          {onClearAllCatalog && catalog.length > 0 && (
+            <button
+              type="button"
+              onClick={onClearAllCatalog}
+              className="px-3.5 py-2.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 hover:text-white text-xs font-bold rounded-xl border border-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Delete all products from Godown"
+            >
+              <Trash2 className="w-4 h-4 text-rose-400" />
+              Clear All Data
+            </button>
+          )}
         </div>
       </div>
 
@@ -727,6 +743,16 @@ export default function MaxxiGodownTab({
                             >
                               <ArrowUpFromLine className="w-3 h-3" /> Dispatch
                             </button>
+                            {onDeleteCatalogItem && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteCatalogItem(item.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                                title="Delete product from Godown"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

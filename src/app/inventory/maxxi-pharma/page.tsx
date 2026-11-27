@@ -160,7 +160,7 @@ export default function MaxxiPharmaPage() {
 
       const storedCompanies = localStorage.getItem('maxxi_app_companies')
       const storedParties = localStorage.getItem('maxxi_app_parties')
-      const storedCatalog = localStorage.getItem('maxxi_app_catalog')
+      let storedCatalog = localStorage.getItem('maxxi_app_catalog')
       const storedInvoices = localStorage.getItem('maxxi_app_invoices')
       const storedOpeningStock = localStorage.getItem('maxxi_app_opening_stock')
 
@@ -179,6 +179,13 @@ export default function MaxxiPharmaPage() {
         return !deletedParties.has(pId) && !deletedParties.has(pName)
       })
       setParties(initialParties)
+
+      // User requested clean slate for Godown & Catalog (Start fresh with custom section allocation)
+      if (typeof window !== 'undefined' && !localStorage.getItem('maxxi_godown_fresh_v2')) {
+        localStorage.setItem('maxxi_godown_fresh_v2', 'true')
+        localStorage.removeItem('maxxi_app_catalog')
+        storedCatalog = null
+      }
 
       // Automatic dummy catalog purge - Strip out all seeded/dummy items
       let parsedCatalog: CatalogItem[] = []
@@ -700,6 +707,20 @@ export default function MaxxiPharmaPage() {
         }
       } catch (err) {
         console.warn('Could not delete catalog product from database:', err)
+      }
+    }
+  }
+
+  const handleClearAllCatalog = async () => {
+    if (confirm('Are you sure you want to delete ALL products from Godown & Catalog? This cannot be undone.')) {
+      setCatalog([])
+      saveCatalog([])
+      try {
+        localStorage.removeItem('maxxi_app_catalog')
+        localStorage.removeItem('maxxi_godown_movement_logs')
+        await fetch(`${API_URL}/api/maxxi/catalog`, { method: 'DELETE' })
+      } catch (err) {
+        console.warn('Could not clear catalog on backend:', err)
       }
     }
   }
@@ -1602,6 +1623,8 @@ export default function MaxxiPharmaPage() {
               return updated
             })
           }}
+          onDeleteCatalogItem={handleDeleteCatalogItem}
+          onClearAllCatalog={handleClearAllCatalog}
         />
       )}
       </div>
