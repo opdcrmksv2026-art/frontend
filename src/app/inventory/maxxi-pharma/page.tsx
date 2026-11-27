@@ -151,6 +151,12 @@ export default function MaxxiPharmaPage() {
       const deletedCompanies = new Set(
         (JSON.parse(localStorage.getItem('maxxi_deleted_companies') || '[]') as string[]).map(s => s.toLowerCase().trim())
       )
+      // Clear old deletion marks to ensure restored catalog products show up immediately
+      if (typeof window !== 'undefined' && localStorage.getItem('maxxi_godown_fresh_v2')) {
+        localStorage.removeItem('maxxi_godown_fresh_v2')
+        localStorage.removeItem('maxxi_deleted_catalog')
+      }
+
       const deletedCatalog = new Set(
         (JSON.parse(localStorage.getItem('maxxi_deleted_catalog') || '[]') as string[]).map(s => s.toLowerCase().trim())
       )
@@ -179,13 +185,6 @@ export default function MaxxiPharmaPage() {
         return !deletedParties.has(pId) && !deletedParties.has(pName)
       })
       setParties(initialParties)
-
-      // User requested clean slate for Godown & Catalog (Start fresh with custom section allocation)
-      if (typeof window !== 'undefined' && !localStorage.getItem('maxxi_godown_fresh_v2')) {
-        localStorage.setItem('maxxi_godown_fresh_v2', 'true')
-        localStorage.removeItem('maxxi_app_catalog')
-        storedCatalog = null
-      }
 
       // Automatic dummy catalog purge - Strip out all seeded/dummy items
       let parsedCatalog: CatalogItem[] = []
