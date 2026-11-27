@@ -49,6 +49,7 @@ export interface CatalogItem {
   category?: 'raw_material' | 'packaging' | 'herb' | 'medicine' | 'general'
   quantity?: number
   packing?: string
+  opdSection?: string // e.g. 'SOLAN OPD SALE', 'SABATHU OPD SALE', 'COD SALE', 'ONLINE SALE', 'CENTRAL GODOWN'
 }
 
 export interface InvoiceItemRow {

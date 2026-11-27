@@ -27,12 +27,16 @@ export default function CatalogModal({
     category: 'herb',
     description: '',
     quantity: 0,
-    packing: ''
+    packing: '',
+    opdSection: 'SOLAN OPD SALE'
   })
 
   useEffect(() => {
     if (initialData) {
-      setFormData(initialData)
+      setFormData({
+        ...initialData,
+        opdSection: initialData.opdSection || 'SOLAN OPD SALE'
+      })
     } else {
       setFormData({
         id: `cat_${Date.now()}`,
@@ -44,7 +48,8 @@ export default function CatalogModal({
         category: 'herb',
         description: '',
         quantity: 0,
-        packing: ''
+        packing: '',
+        opdSection: 'SOLAN OPD SALE'
       })
     }
   }, [initialData, isOpen])
@@ -99,6 +104,27 @@ export default function CatalogModal({
               placeholder="e.g. JADI BUTTI BAIL GIRI or 460 CC HDPE JAR"
               className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-amber-500"
             />
+          </div>
+
+          {/* Section / Stock Allocation Selector */}
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+              <span>Section / Bill Source *</span>
+              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                Stock Allocation
+              </span>
+            </label>
+            <select
+              value={formData.opdSection || 'SOLAN OPD SALE'}
+              onChange={(e) => setFormData({ ...formData, opdSection: e.target.value })}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-amber-500 cursor-pointer"
+            >
+              <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
+              <option value="SABATHU OPD SALE">SABATHU OPD SALE</option>
+              <option value="COD SALE">COD SALE</option>
+              <option value="ONLINE SALE">ONLINE SALE</option>
+              <option value="CENTRAL GODOWN">CENTRAL GODOWN (Warehouse)</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

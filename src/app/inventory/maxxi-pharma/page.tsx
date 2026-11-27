@@ -78,6 +78,7 @@ export default function MaxxiPharmaPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('')
   const [partySearchQuery, setPartySearchQuery] = useState('')
+  const [catalogSectionFilter, setCatalogSectionFilter] = useState<string>('ALL')
   const [filterCompany, setFilterCompany] = useState<string>('ALL')
   const [invoiceSummaryType, setInvoiceSummaryType] = useState<'SALE' | 'PURCHASE' | 'ALL'>('ALL')
 
@@ -617,7 +618,9 @@ export default function MaxxiPharmaPage() {
         defaultTaxRate: Number(item.defaultTaxRate) || 0,
         description: item.description || '',
         category: item.category || 'medicine',
-        quantity: Number(item.quantity) || 0
+        quantity: Number(item.quantity) || 0,
+        opdSection: item.opdSection || 'SOLAN OPD SALE',
+        packing: item.packing || ''
       }
 
       if (isEditing && originalId) {
@@ -1300,6 +1303,10 @@ export default function MaxxiPharmaPage() {
       {/* 4. TAB CONTENT: 5. PRODUCT CATALOG */}
       {activeTab === 'catalog' && (() => {
         const filteredCatalog = catalog.filter((item) => {
+          if (catalogSectionFilter !== 'ALL') {
+            const itemSec = item.opdSection || 'SOLAN OPD SALE'
+            if (itemSec !== catalogSectionFilter) return false
+          }
           if (!catalogSearchQuery.trim()) return true
           const q = catalogSearchQuery.toLowerCase()
           return (
@@ -1307,9 +1314,19 @@ export default function MaxxiPharmaPage() {
             item.description?.toLowerCase().includes(q) ||
             item.category?.toLowerCase().includes(q) ||
             item.hsnCode?.toLowerCase().includes(q) ||
-            item.defaultUnit?.toLowerCase().includes(q)
+            item.defaultUnit?.toLowerCase().includes(q) ||
+            (item.opdSection && item.opdSection.toLowerCase().includes(q))
           )
         })
+
+        const SECTION_TABS = [
+          { id: 'ALL', label: 'All Sections' },
+          { id: 'SOLAN OPD SALE', label: 'Solan OPD' },
+          { id: 'SABATHU OPD SALE', label: 'Sabathu OPD' },
+          { id: 'COD SALE', label: 'COD Sale' },
+          { id: 'ONLINE SALE', label: 'Online Sale' },
+          { id: 'CENTRAL GODOWN', label: 'Central Godown' }
+        ]
 
         return (
           <div className="space-y-4 animate-in fade-in duration-300">
@@ -1349,6 +1366,36 @@ export default function MaxxiPharmaPage() {
               </div>
             </div>
 
+            {/* Section Filter Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {SECTION_TABS.map((tab) => {
+                const count = tab.id === 'ALL'
+                  ? catalog.length
+                  : catalog.filter((c) => (c.opdSection || 'SOLAN OPD SALE') === tab.id).length
+                const isActive = catalogSectionFilter === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setCatalogSectionFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? 'bg-amber-500 text-white shadow-sm shadow-amber-200'
+                        : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        isActive ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
@@ -1356,6 +1403,7 @@ export default function MaxxiPharmaPage() {
                     <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
                       <th className="p-3">Product Name</th>
                       <th className="p-3">Category</th>
+                      <th className="p-3">Section / OPD</th>
                       <th className="p-3">HSN Code</th>
                       <th className="p-3 text-right">Stock Qty</th>
                       <th className="p-3 text-right">Default Unit</th>
@@ -1367,54 +1415,78 @@ export default function MaxxiPharmaPage() {
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {filteredCatalog.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-400">
+                        <td colSpan={9} className="p-8 text-center text-slate-400">
                           {catalogSearchQuery.trim()
                             ? 'No matching items found.'
                             : 'No catalog products found. Click "Add Catalog Product" to add your own product.'}
                         </td>
                       </tr>
                     ) : (
-                      filteredCatalog.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="p-3">
-                            <div className="font-bold text-slate-900">{item.name}</div>
-                            {item.description && <div className="text-[10px] text-slate-400">{item.description}</div>}
-                          </td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-[10px] font-bold rounded-md uppercase border border-cyan-200/60">
-                              {item.category || 'Pharma'}
-                            </span>
-                          </td>
-                          <td className="p-3 font-mono text-slate-600">{item.hsnCode}</td>
-                          <td className="p-3 text-right font-extrabold text-blue-600">
-                            {item.quantity || 0}
-                          </td>
-                          <td className="p-3 text-right font-semibold uppercase">{item.defaultUnit}</td>
-                          <td className="p-3 text-right font-mono font-bold text-slate-900">
-                            ₹{item.defaultRate?.toLocaleString('en-IN')}
-                          </td>
-                          <td className="p-3 text-right font-mono text-slate-600">{item.defaultTaxRate}%</td>
-                          <td className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => {
-                                  setEditingCatalogItem(item)
-                                  setIsCatalogModalOpen(true)
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteCatalogItem(item.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                      filteredCatalog.map((item) => {
+                        const sec = item.opdSection || 'SOLAN OPD SALE'
+                        const secBadgeStyle =
+                          sec === 'SOLAN OPD SALE'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : sec === 'SABATHU OPD SALE'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : sec === 'COD SALE'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : sec === 'ONLINE SALE'
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="p-3">
+                              <div className="font-bold text-slate-900">{item.name}</div>
+                              {item.description && <div className="text-[10px] text-slate-400">{item.description}</div>}
+                            </td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-[10px] font-bold rounded-md uppercase border border-cyan-200/60">
+                                {item.category || 'Pharma'}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${secBadgeStyle}`}>
+                                {sec}
+                              </span>
+                              {item.packing && (
+                                <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                  {item.packing}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3 font-mono text-slate-600">{item.hsnCode}</td>
+                            <td className="p-3 text-right font-extrabold text-blue-600">
+                              {item.quantity || 0}
+                            </td>
+                            <td className="p-3 text-right font-semibold uppercase">{item.defaultUnit}</td>
+                            <td className="p-3 text-right font-mono font-bold text-slate-900">
+                              ₹{item.defaultRate?.toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3 text-right font-mono text-slate-600">{item.defaultTaxRate}%</td>
+                            <td className="p-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setEditingCatalogItem(item)
+                                    setIsCatalogModalOpen(true)
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition-colors"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCatalogItem(item.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
                     )}
                   </tbody>
                 </table>
