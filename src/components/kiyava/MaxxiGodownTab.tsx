@@ -466,88 +466,62 @@ export default function MaxxiGodownTab({
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      {/* 1. Top Header Banner with Action Buttons */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center border border-white/15 shadow-inner shrink-0">
-            <Warehouse className="w-7 h-7 text-emerald-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-xl font-black tracking-tight text-white">Maxxi Godown &amp; Department Stock</h2>
-              <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-extrabold rounded-full uppercase tracking-wider">
-                Multi-Section Inventory
-              </span>
-            </div>
-            <p className="text-xs text-slate-300 mt-1 max-w-xl">
-              Track and allocate real-time inventory across Solan OPD, Sabathu OPD, COD, Online Sale &amp; Central Godown.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => openActionModal('INWARD')}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
-          >
-            <ArrowDownToLine className="w-4 h-4" />
-            + Inward Stock (Maal Aaya)
-          </button>
-          <button
-            onClick={() => openActionModal('OUTWARD')}
-            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
-          >
-            <ArrowUpFromLine className="w-4 h-4" />
-            ⇄ Outward / Dispatch (Maal Nikla)
-          </button>
-          <button
-            onClick={handleExportCSV}
-            className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-            Export Section Excel
-          </button>
-          {onClearAllCatalog && catalog.length > 0 && (
-            <button
-              type="button"
-              onClick={onClearAllCatalog}
-              className="px-3.5 py-2.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 hover:text-white text-xs font-bold rounded-xl border border-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
-              title="Delete all products from Godown"
-            >
-              <Trash2 className="w-4 h-4 text-rose-400" />
-              Clear All Data
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 2. SECTION TABS (The user's requested tabs: Solan OPD, Sabathu OPD, COD, Online, Central Godown) */}
-      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 overflow-x-auto custom-scrollbar">
-        {GODOWN_SECTIONS.map((sec) => {
-          const count = sectionCounts[sec.id] || 0
-          const isActive = activeSection === sec.id
-          return (
-            <button
-              key={sec.id}
-              onClick={() => setActiveSection(sec.id)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
-                isActive
-                  ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20 scale-[1.02]'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <span className="text-sm">{sec.icon}</span>
-              <span>{sec.label}</span>
-              <span
-                className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+      {/* SECTION TABS & ACTION BUTTONS TOOLBAR */}
+      <div className="bg-white p-2.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1 sm:pb-0">
+          {GODOWN_SECTIONS.map((sec) => {
+            const count = sectionCounts[sec.id] || 0
+            const isActive = activeSection === sec.id
+            return (
+              <button
+                key={sec.id}
+                onClick={() => setActiveSection(sec.id)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                  isActive
+                    ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                {count}
-              </span>
-            </button>
-          )
-        })}
+                <span className="text-sm">{sec.icon}</span>
+                <span>{sec.label}</span>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+          <button
+            type="button"
+            onClick={() => openActionModal('INWARD')}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+          >
+            <ArrowDownToLine className="w-3.5 h-3.5" />
+            + Inward Stock
+          </button>
+          <button
+            type="button"
+            onClick={() => openActionModal('OUTWARD')}
+            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+          >
+            <ArrowUpFromLine className="w-3.5 h-3.5" />
+            ⇄ Dispatch
+          </button>
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            Export Excel
+          </button>
+        </div>
       </div>
 
       {/* 3. KPI Summary Cards (Reflects active section) */}
