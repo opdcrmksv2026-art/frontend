@@ -1500,11 +1500,11 @@ export default function CreateInvoicePage() {
                     onChange={(e) => handleTreatmentSectionChange(treatment.id, e.target.value)}
                     className="w-full px-4 py-3 bg-white border-2 border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-extrabold text-blue-900 cursor-pointer shadow-xs transition-all"
                   >
-                    <option value="SOLAN OPD SALE">🏥 SOLAN OPD SALE</option>
-                    <option value="SABATHU OPD SALE">🌿 SABATHU OPD SALE</option>
-                    <option value="COD SALE">📦 COD SALE</option>
-                    <option value="ONLINE SALE">🌐 ONLINE SALE</option>
-                    <option value="CENTRAL GODOWN">🏬 CENTRAL GODOWN</option>
+                    <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
+                    <option value="SABATHU OPD SALE">SABATHU OPD SALE</option>
+                    <option value="COD SALE">COD SALE</option>
+                    <option value="ONLINE SALE">ONLINE SALE</option>
+                    <option value="CENTRAL GODOWN">CENTRAL GODOWN</option>
                   </select>
                   <span className="text-[11px] text-slate-400 mt-1 font-medium">Is treatment kit ki medicines is section se dispatch hongi</span>
                 </div>
@@ -1664,19 +1664,19 @@ export default function CreateInvoicePage() {
                                     className={`text-xs font-black bg-transparent outline-none cursor-pointer pr-1 ${secStock <= 0 ? 'text-rose-700' : 'text-blue-700'}`}
                                   >
                                     <option value="SOLAN OPD SALE">
-                                      🏥 Solan OPD {stockSolan > 0 ? `(${stockSolan} in stock)` : `(0 - Out of Stock)`}
+                                      Solan OPD {stockSolan > 0 ? `(${stockSolan} in stock)` : `(0 - Out of Stock)`}
                                     </option>
                                     <option value="SABATHU OPD SALE">
-                                      🌿 Sabathu OPD {stockSabathu > 0 ? `(${stockSabathu} in stock)` : `(0 - Out of Stock)`}
+                                      Sabathu OPD {stockSabathu > 0 ? `(${stockSabathu} in stock)` : `(0 - Out of Stock)`}
                                     </option>
                                     <option value="COD SALE">
-                                      📦 COD Sale {stockCod > 0 ? `(${stockCod} in stock)` : `(0 - Out of Stock)`}
+                                      COD Sale {stockCod > 0 ? `(${stockCod} in stock)` : `(0 - Out of Stock)`}
                                     </option>
                                     <option value="ONLINE SALE">
-                                      🌐 Online Sale {stockOnline > 0 ? `(${stockOnline} in stock)` : `(0 - Out of Stock)`}
+                                      Online Sale {stockOnline > 0 ? `(${stockOnline} in stock)` : `(0 - Out of Stock)`}
                                     </option>
                                     <option value="CENTRAL GODOWN">
-                                      🏬 Central Godown {stockCentral > 0 ? `(${stockCentral} in stock)` : `(0 - Out of Stock)`}
+                                      Central Godown {stockCentral > 0 ? `(${stockCentral} in stock)` : `(0 - Out of Stock)`}
                                     </option>
                                   </select>
                                 </div>

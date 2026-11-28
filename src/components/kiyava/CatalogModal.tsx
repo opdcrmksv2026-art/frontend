@@ -121,11 +121,11 @@ export default function CatalogModal({
                   onChange={(e) => setFormData({ ...formData, opdSection: e.target.value })}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-amber-500 cursor-pointer"
                 >
-                  <option value="SOLAN OPD SALE">🏥 SOLAN OPD SALE</option>
-                  <option value="SABATHU OPD SALE">🌿 SABATHU OPD SALE</option>
-                  <option value="COD SALE">📦 COD SALE</option>
-                  <option value="ONLINE SALE">🌐 ONLINE SALE</option>
-                  <option value="CENTRAL GODOWN">🏬 CENTRAL GODOWN (Warehouse)</option>
+                  <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
+                  <option value="SABATHU OPD SALE">SABATHU OPD SALE</option>
+                  <option value="COD SALE">COD SALE</option>
+                  <option value="ONLINE SALE">ONLINE SALE</option>
+                  <option value="CENTRAL GODOWN">CENTRAL GODOWN (Warehouse)</option>
                 </select>
               </div>
               <div className="sm:col-span-1">

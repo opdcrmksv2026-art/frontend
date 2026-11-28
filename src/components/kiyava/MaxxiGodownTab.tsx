@@ -50,12 +50,12 @@ export interface GodownMovementLog {
 }
 
 export const GODOWN_SECTIONS = [
-  { id: 'ALL', label: 'All Sections', icon: '🏢', badgeColor: 'bg-slate-900 text-white' },
-  { id: 'SOLAN OPD SALE', label: 'Solan OPD Sale', icon: '🏥', badgeColor: 'bg-blue-600 text-white' },
-  { id: 'SABATHU OPD SALE', label: 'Sabathu OPD Sale', icon: '🌿', badgeColor: 'bg-emerald-600 text-white' },
-  { id: 'COD SALE', label: 'COD Sale', icon: '📦', badgeColor: 'bg-purple-600 text-white' },
-  { id: 'ONLINE SALE', label: 'Online Sale', icon: '🌐', badgeColor: 'bg-cyan-600 text-white' },
-  { id: 'CENTRAL GODOWN', label: 'Central Godown', icon: '🏬', badgeColor: 'bg-amber-600 text-white' }
+  { id: 'ALL', label: 'All Sections', icon: '', badgeColor: 'bg-slate-900 text-white' },
+  { id: 'SOLAN OPD SALE', label: 'Solan OPD Sale', icon: '', badgeColor: 'bg-blue-600 text-white' },
+  { id: 'SABATHU OPD SALE', label: 'Sabathu OPD Sale', icon: '', badgeColor: 'bg-emerald-600 text-white' },
+  { id: 'COD SALE', label: 'COD Sale', icon: '', badgeColor: 'bg-purple-600 text-white' },
+  { id: 'ONLINE SALE', label: 'Online Sale', icon: '', badgeColor: 'bg-cyan-600 text-white' },
+  { id: 'CENTRAL GODOWN', label: 'Central Godown', icon: '', badgeColor: 'bg-amber-600 text-white' }
 ]
 
 interface MaxxiGodownTabProps {
@@ -508,7 +508,7 @@ export default function MaxxiGodownTab({
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
               >
-                <span className="text-sm">{sec.icon}</span>
+                {sec.icon ? <span className="text-sm">{sec.icon}</span> : null}
                 <span>{sec.label}</span>
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'

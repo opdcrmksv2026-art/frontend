@@ -936,19 +936,19 @@ export default function KiyavaInvoiceForm({
                             className={`w-full px-2 py-1.5 rounded-lg text-[11px] font-bold outline-none cursor-pointer border ${hasDesc && stockVal <= 0 ? 'bg-rose-50/70 border-rose-300 text-rose-900 focus:border-rose-500' : 'bg-amber-50/60 border-amber-300 focus:border-amber-500 text-slate-900'}`}
                           >
                             <option value="SOLAN OPD SALE">
-                              🏥 Solan OPD {stockSolan !== null ? (stockSolan > 0 ? `(${stockSolan} in stock)` : `(0 - Out of Stock)`) : ''}
+                              Solan OPD {stockSolan !== null ? (stockSolan > 0 ? `(${stockSolan} in stock)` : `(0 - Out of Stock)`) : ''}
                             </option>
                             <option value="SABATHU OPD SALE">
-                              🌿 Sabathu OPD {stockSabathu !== null ? (stockSabathu > 0 ? `(${stockSabathu} in stock)` : `(0 - Out of Stock)`) : ''}
+                              Sabathu OPD {stockSabathu !== null ? (stockSabathu > 0 ? `(${stockSabathu} in stock)` : `(0 - Out of Stock)`) : ''}
                             </option>
                             <option value="COD SALE">
-                              📦 COD Sale {stockCod !== null ? (stockCod > 0 ? `(${stockCod} in stock)` : `(0 - Out of Stock)`) : ''}
+                              COD Sale {stockCod !== null ? (stockCod > 0 ? `(${stockCod} in stock)` : `(0 - Out of Stock)`) : ''}
                             </option>
                             <option value="ONLINE SALE">
-                              🌐 Online Sale {stockOnline !== null ? (stockOnline > 0 ? `(${stockOnline} in stock)` : `(0 - Out of Stock)`) : ''}
+                              Online Sale {stockOnline !== null ? (stockOnline > 0 ? `(${stockOnline} in stock)` : `(0 - Out of Stock)`) : ''}
                             </option>
                             <option value="CENTRAL GODOWN">
-                              🏬 Central Godown {stockCentral !== null ? (stockCentral > 0 ? `(${stockCentral} in stock)` : `(0 - Out of Stock)`) : ''}
+                              Central Godown {stockCentral !== null ? (stockCentral > 0 ? `(${stockCentral} in stock)` : `(0 - Out of Stock)`) : ''}
                             </option>
                           </select>
 
