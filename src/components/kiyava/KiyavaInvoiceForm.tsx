@@ -41,6 +41,7 @@ interface KiyavaInvoiceFormProps {
   initialInvoice?: KiyavaInvoice | null
   onCancel?: () => void
   defaultInvoiceType?: 'SALE' | 'PURCHASE'
+  isMaxxi?: boolean
 }
 
 export default function KiyavaInvoiceForm({
@@ -55,7 +56,8 @@ export default function KiyavaInvoiceForm({
   onSaveParty,
   initialInvoice,
   onCancel,
-  defaultInvoiceType
+  defaultInvoiceType,
+  isMaxxi = false
 }: KiyavaInvoiceFormProps) {
   // 1. Company / Seller
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(
@@ -845,7 +847,7 @@ export default function KiyavaInvoiceForm({
                 <th className="p-2.5 text-center w-8 rounded-tl-xl">#</th>
                 <th className="p-2.5 text-left">Description of Goods</th>
                 <th className="p-2.5 text-center w-24">HSN/SAC</th>
-                <th className="p-2.5 text-center w-36">Godown / Section</th>
+                {isMaxxi && <th className="p-2.5 text-center w-36">Godown / Section</th>}
                 <th className="p-2.5 text-right w-24">Quantity</th>
                 <th className="p-2.5 text-center w-16">Unit</th>
                 <th className="p-2.5 text-right w-24">Rate (₹)</th>
@@ -916,60 +918,62 @@ export default function KiyavaInvoiceForm({
                     />
                   </td>
 
-                  {/* Destination Godown / Section per Item */}
-                  <td className="p-2 min-w-[190px]">
-                    {(() => {
-                      const curSec = item.godownSection || targetGodown || 'SOLAN OPD SALE'
-                      const hasDesc = (item.description || '').trim().length > 0
-                      const stockVal = hasDesc ? getSectionStock(item.description, curSec) : 0
-                      const stockSolan = hasDesc ? getSectionStock(item.description, 'SOLAN OPD SALE') : null
-                      const stockSabathu = hasDesc ? getSectionStock(item.description, 'SABATHU OPD SALE') : null
-                      const stockCod = hasDesc ? getSectionStock(item.description, 'COD SALE') : null
-                      const stockOnline = hasDesc ? getSectionStock(item.description, 'ONLINE SALE') : null
-                      const stockCentral = hasDesc ? getSectionStock(item.description, 'CENTRAL GODOWN') : null
+                  {/* Destination Godown / Section per Item (Maxxi only) */}
+                  {isMaxxi && (
+                    <td className="p-2 min-w-[190px]">
+                      {(() => {
+                        const curSec = item.godownSection || targetGodown || 'SOLAN OPD SALE'
+                        const hasDesc = (item.description || '').trim().length > 0
+                        const stockVal = hasDesc ? getSectionStock(item.description, curSec) : 0
+                        const stockSolan = hasDesc ? getSectionStock(item.description, 'SOLAN OPD SALE') : null
+                        const stockSabathu = hasDesc ? getSectionStock(item.description, 'SABATHU OPD SALE') : null
+                        const stockCod = hasDesc ? getSectionStock(item.description, 'COD SALE') : null
+                        const stockOnline = hasDesc ? getSectionStock(item.description, 'ONLINE SALE') : null
+                        const stockCentral = hasDesc ? getSectionStock(item.description, 'CENTRAL GODOWN') : null
 
-                      return (
-                        <div>
-                          <select
-                            value={curSec}
-                            onChange={(e) => handleItemChange(item.id, 'godownSection', e.target.value)}
-                            className={`w-full px-2 py-1.5 rounded-lg text-[11px] font-bold outline-none cursor-pointer border ${hasDesc && stockVal <= 0 ? 'bg-rose-50/70 border-rose-300 text-rose-900 focus:border-rose-500' : 'bg-amber-50/60 border-amber-300 focus:border-amber-500 text-slate-900'}`}
-                          >
-                            <option value="SOLAN OPD SALE">
-                              Solan OPD {stockSolan !== null ? (stockSolan > 0 ? `(${stockSolan} in stock)` : `(0 - Out of Stock)`) : ''}
-                            </option>
-                            <option value="SABATHU OPD SALE">
-                              Sabathu OPD {stockSabathu !== null ? (stockSabathu > 0 ? `(${stockSabathu} in stock)` : `(0 - Out of Stock)`) : ''}
-                            </option>
-                            <option value="COD SALE">
-                              COD Sale {stockCod !== null ? (stockCod > 0 ? `(${stockCod} in stock)` : `(0 - Out of Stock)`) : ''}
-                            </option>
-                            <option value="ONLINE SALE">
-                              Online Sale {stockOnline !== null ? (stockOnline > 0 ? `(${stockOnline} in stock)` : `(0 - Out of Stock)`) : ''}
-                            </option>
-                            <option value="CENTRAL GODOWN">
-                              Central Godown {stockCentral !== null ? (stockCentral > 0 ? `(${stockCentral} in stock)` : `(0 - Out of Stock)`) : ''}
-                            </option>
-                          </select>
+                        return (
+                          <div>
+                            <select
+                              value={curSec}
+                              onChange={(e) => handleItemChange(item.id, 'godownSection', e.target.value)}
+                              className={`w-full px-2 py-1.5 rounded-lg text-[11px] font-bold outline-none cursor-pointer border ${hasDesc && stockVal <= 0 ? 'bg-rose-50/70 border-rose-300 text-rose-900 focus:border-rose-500' : 'bg-amber-50/60 border-amber-300 focus:border-amber-500 text-slate-900'}`}
+                            >
+                              <option value="SOLAN OPD SALE">
+                                Solan OPD {stockSolan !== null ? (stockSolan > 0 ? `(${stockSolan} in stock)` : `(0 - Out of Stock)`) : ''}
+                              </option>
+                              <option value="SABATHU OPD SALE">
+                                Sabathu OPD {stockSabathu !== null ? (stockSabathu > 0 ? `(${stockSabathu} in stock)` : `(0 - Out of Stock)`) : ''}
+                              </option>
+                              <option value="COD SALE">
+                                COD Sale {stockCod !== null ? (stockCod > 0 ? `(${stockCod} in stock)` : `(0 - Out of Stock)`) : ''}
+                              </option>
+                              <option value="ONLINE SALE">
+                                Online Sale {stockOnline !== null ? (stockOnline > 0 ? `(${stockOnline} in stock)` : `(0 - Out of Stock)`) : ''}
+                              </option>
+                              <option value="CENTRAL GODOWN">
+                                Central Godown {stockCentral !== null ? (stockCentral > 0 ? `(${stockCentral} in stock)` : `(0 - Out of Stock)`) : ''}
+                              </option>
+                            </select>
 
-                          {/* Live stock indicator / Product not in this godown warning */}
-                          {hasDesc && (
-                            <div className="mt-1">
-                              {stockVal <= 0 ? (
-                                <div className="px-1.5 py-0.5 bg-rose-50 border border-rose-200 rounded text-[9.5px] font-bold text-rose-600 flex items-center gap-1 leading-tight animate-in fade-in">
-                                  <span>⚠️ Product not in this godown (0 Stock) — Pls Add</span>
-                                </div>
-                              ) : (
-                                <div className="px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-[9.5px] font-bold text-emerald-700 flex items-center gap-1 leading-tight animate-in fade-in">
-                                  <span>✓ Stock in godown: {stockVal} {item.unit || 'NOS'}</span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })()}
-                  </td>
+                            {/* Live stock indicator / Product not in this godown warning */}
+                            {hasDesc && (
+                              <div className="mt-1">
+                                {stockVal <= 0 ? (
+                                  <div className="px-1.5 py-0.5 bg-rose-50 border border-rose-200 rounded text-[9.5px] font-bold text-rose-600 flex items-center gap-1 leading-tight animate-in fade-in">
+                                    <span>⚠️ Product not in this godown (0 Stock) — Pls Add</span>
+                                  </div>
+                                ) : (
+                                  <div className="px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-[9.5px] font-bold text-emerald-700 flex items-center gap-1 leading-tight animate-in fade-in">
+                                    <span>✓ Stock in godown: {stockVal} {item.unit || 'NOS'}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </td>
+                  )}
 
                   {/* Quantity */}
                   <td className="p-2">

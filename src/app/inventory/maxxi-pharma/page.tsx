@@ -1230,6 +1230,7 @@ export default function MaxxiPharmaPage() {
       {(activeTab === 'create-sell' || activeTab === 'create-purchase') && (
         <KiyavaInvoiceForm
           key={activeTab}
+          isMaxxi={true}
           defaultInvoiceType={activeTab === 'create-purchase' ? 'PURCHASE' : 'SALE'}
           companies={companies}
           parties={parties}
@@ -1762,6 +1763,7 @@ export default function MaxxiPharmaPage() {
         onSave={handleSaveCatalogItem}
         initialData={editingCatalogItem}
         catalog={catalog}
+        isMaxxi={true}
       />
 
       <OpeningStockModal
