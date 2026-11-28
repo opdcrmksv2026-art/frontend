@@ -225,7 +225,7 @@ export const ALL_DEFAULT_MEDICINES: CatalogProduct[] = [
     "name": "STONVAIDHA KSS 72 CHURAN",
     "hsnCode": "30039011",
     "defaultUnit": "NOS",
-    "defaultRate": 0,
+    "defaultRate": 4761.9,
     "defaultTaxRate": 5,
     "category": "medicine",
     "description": "KSS 72 CHURAN"
@@ -245,7 +245,7 @@ export const ALL_DEFAULT_MEDICINES: CatalogProduct[] = [
     "name": "VIDHUVAIDHA TR 30 CHURAN",
     "hsnCode": "30039011",
     "defaultUnit": "NOS",
-    "defaultRate": 0,
+    "defaultRate": 285.71,
     "defaultTaxRate": 5,
     "category": "medicine",
     "description": "TR 30 CHURAN"

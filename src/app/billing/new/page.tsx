@@ -251,11 +251,12 @@ export default function CreateInvoicePage() {
       const mergedMap = new Map<string, any>()
 
       const mergeItem = (item: any) => {
-        const k = (item.name || "").toLowerCase().trim()
+        const k = (item.name || item.description || item.itemName || "").toLowerCase().trim()
         if (!k) return
         const existing = mergedMap.get(k)
-        const incomingRate = item.defaultRate !== undefined && item.defaultRate !== null && item.defaultRate !== ""
-          ? (parseFloat(item.defaultRate) || 0)
+        const rawRate = item.defaultRate ?? item.rate ?? item.unitRate ?? item.sellingRate ?? item.price
+        const incomingRate = (rawRate !== undefined && rawRate !== null && rawRate !== "")
+          ? (parseFloat(rawRate) || 0)
           : undefined
         const incomingTax = item.defaultTaxRate !== undefined && item.defaultTaxRate !== null
           ? (parseFloat(item.defaultTaxRate) || 5)
@@ -264,6 +265,7 @@ export default function CreateInvoicePage() {
         if (!existing) {
           mergedMap.set(k, {
             ...item,
+            name: item.name || item.description || item.itemName,
             defaultRate: incomingRate !== undefined ? incomingRate : 0,
             defaultTaxRate: incomingTax,
             hsnCode: item.hsnCode || item.hsnSac || "30049011"
@@ -278,6 +280,7 @@ export default function CreateInvoicePage() {
           mergedMap.set(k, {
             ...existing,
             ...item,
+            name: existing.name || item.name || item.description || item.itemName,
             defaultRate: finalRate,
             defaultTaxRate: incomingTax || existing.defaultTaxRate || 5,
             hsnCode: item.hsnCode || item.hsnSac || existing.hsnCode || "30049011"
@@ -285,10 +288,10 @@ export default function CreateInvoicePage() {
         }
       }
 
-      // 1. Base static medicines (166 items)
+      // 1. Base static medicines (166 items with latest verified stock rates)
       ALL_DEFAULT_MEDICINES.forEach(mergeItem)
 
-      // 2. Read local storage catalogs if available
+      // 2. Read local storage catalogs, stock registers & invoices if available
       try {
         const ksvLocal = localStorage.getItem("ksv_app_catalog")
         if (ksvLocal) {
@@ -299,6 +302,45 @@ export default function CreateInvoicePage() {
         if (maxxiLocal) {
           const parsed = JSON.parse(maxxiLocal)
           if (Array.isArray(parsed)) parsed.forEach(mergeItem)
+        }
+
+        // Also check if rates were recorded in local invoices or purchase entries
+        const maxxiInvoices = localStorage.getItem("maxxi_app_invoices")
+        if (maxxiInvoices) {
+          const parsed = JSON.parse(maxxiInvoices)
+          if (Array.isArray(parsed)) {
+            parsed.forEach((inv: any) => {
+              if (Array.isArray(inv.items)) {
+                inv.items.forEach((it: any) => {
+                  if (it.description && (it.rate || it.defaultRate)) {
+                    mergeItem({
+                      name: it.description,
+                      defaultRate: it.rate || it.defaultRate,
+                      hsnCode: it.hsnCode || it.hsnSac,
+                      defaultTaxRate: it.taxRate
+                    })
+                  }
+                })
+              }
+            })
+          }
+        }
+
+        // Also check godown movement logs where inward stock rates are stored
+        const movementLogs = localStorage.getItem("maxxi_godown_movement_logs")
+        if (movementLogs) {
+          const parsed = JSON.parse(movementLogs)
+          if (Array.isArray(parsed)) {
+            parsed.forEach((log: any) => {
+              if (log.itemName && (log.rate || log.unitRate || log.defaultRate)) {
+                mergeItem({
+                  name: log.itemName,
+                  defaultRate: log.rate || log.unitRate || log.defaultRate,
+                  hsnCode: log.hsnCode
+                })
+              }
+            })
+          }
         }
       } catch (e) {
         console.warn("Could not read local catalogs:", e)
@@ -335,18 +377,20 @@ export default function CreateInvoicePage() {
   const handleSelectProduct = (treatmentId: string, product: any) => {
     setTreatments(prev => prev.map(t => {
       if (t.id === treatmentId) {
+        const rawRate = product.defaultRate ?? product.rate ?? product.unitRate ?? product.sellingRate ?? product.price ?? 0
+        const productRate = Number(rawRate) || 0
         const newProducts = [
           ...t.products,
           {
             name: product.name,
             quantity: "1",
-            rate: product.defaultRate || 0,
+            rate: productRate,
             hsnCode: product.hsnCode || "30049011",
             taxRate: product.defaultTaxRate || 5
           }
         ]
         const newPrice = newProducts.reduce(
-          (sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate),
+          (sum, p) => sum + ((parseFloat(p.quantity || "0") || 0) * (p.rate || 0)),
           0
         ).toString()
         return { ...t, kitName: "", products: newProducts, price: newPrice }
