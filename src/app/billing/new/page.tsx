@@ -500,6 +500,62 @@ export default function CreateInvoicePage() {
     }))
   }
 
+  // Real-time stock calculation per medicine per Godown Section in billing
+  const getSectionStock = (itemName?: string, section?: string): number => {
+    if (!itemName || !itemName.trim()) return 0
+    const cleanStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim()
+    const targetClean = cleanStr(itemName)
+    const targetSec = (section || formData.opdSection || 'SOLAN OPD SALE').trim().toUpperCase()
+
+    let stock = 0
+
+    // 1. Calculate from local invoices (Purchases & Sales)
+    try {
+      const storedInvoices = JSON.parse(localStorage.getItem('maxxi_app_invoices') || '[]')
+      if (Array.isArray(storedInvoices)) {
+        storedInvoices.forEach((inv: any) => {
+          const isPurchase = (inv.type || 'SALE').toUpperCase() === 'PURCHASE'
+          const isSale = (inv.type || 'SALE').toUpperCase() === 'SALE'
+          if (!isPurchase && !isSale) return
+
+          (inv.items || []).forEach((row: any) => {
+            const rClean = cleanStr(row.description || row.name)
+            const rSec = (row.godownSection || inv.targetGodown || 'SOLAN OPD SALE').trim().toUpperCase()
+            if (rClean === targetClean && rSec === targetSec) {
+              const q = Number(row.quantity) || 0
+              stock += isPurchase ? q : -q
+            }
+          })
+        })
+      }
+    } catch (_) {}
+
+    // 2. Calculate from Godown Movement Logs (localStorage)
+    try {
+      const storedLogs = JSON.parse(localStorage.getItem('maxxi_godown_movement_logs') || '[]')
+      if (Array.isArray(storedLogs)) {
+        storedLogs.forEach((log: any) => {
+          const lClean = cleanStr(log.itemName)
+          const lSec = (log.section || 'SOLAN OPD SALE').trim().toUpperCase()
+          if (lClean === targetClean && lSec === targetSec) {
+            const q = Number(log.quantity) || 0
+            stock += log.type === 'INWARD' ? q : -q
+          }
+        })
+      }
+    } catch (_) {}
+
+    // 3. Fallback to catalog if item has explicit opdSection
+    if (stock === 0) {
+      const matched = catalog.find((c: any) => cleanStr(c.name) === targetClean && (c.opdSection || 'SOLAN OPD SALE').trim().toUpperCase() === targetSec)
+      if (matched && matched.quantity !== undefined) {
+        stock = Number(matched.quantity) || 0
+      }
+    }
+
+    return Math.max(0, stock)
+  }
+
   const handleProductQuantityChange = (treatmentId: string, productIndex: number, newQuantity: string) => {
     setTreatments(prev => prev.map(t => {
       if (t.id === treatmentId) {
@@ -1567,24 +1623,65 @@ export default function CreateInvoicePage() {
                                 GST {p.taxRate || 5}%
                               </span>
                             </div>
+
+                            {/* Real-time stock status badge */}
+                            {(() => {
+                              const curSec = p.godownSection || treatment.section || formData.opdSection || "SOLAN OPD SALE";
+                              const secStock = getSectionStock(p.name, curSec);
+                              return (
+                                <div className="mt-1">
+                                  {secStock <= 0 ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded leading-tight animate-in fade-in">
+                                      ⚠️ Product not in this godown (0 Stock) — Pls Add Stock
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded leading-tight animate-in fade-in">
+                                      ✓ Available in godown: {secStock} NOS
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
                             {/* GODOWN SECTION SELECTOR PER MEDICINE */}
-                            <div className="flex items-center gap-1 bg-white px-2 py-1.5 rounded-lg border border-slate-200 shadow-xs">
-                              <span className="text-[10px] uppercase font-bold text-slate-400">Godown:</span>
-                              <select
-                                value={p.godownSection || treatment.section || formData.opdSection || "SOLAN OPD SALE"}
-                                onChange={(e) => handleProductSectionChange(treatment.id, idx, e.target.value)}
-                                className="text-xs font-black text-blue-700 bg-transparent outline-none cursor-pointer pr-1"
-                              >
-                                <option value="SOLAN OPD SALE">🏥 Solan OPD</option>
-                                <option value="SABATHU OPD SALE">🌿 Sabathu OPD</option>
-                                <option value="COD SALE">📦 COD Sale</option>
-                                <option value="ONLINE SALE">🌐 Online Sale</option>
-                                <option value="CENTRAL GODOWN">🏬 Central Godown</option>
-                              </select>
-                            </div>
+                            {(() => {
+                              const curSec = p.godownSection || treatment.section || formData.opdSection || "SOLAN OPD SALE";
+                              const secStock = getSectionStock(p.name, curSec);
+                              const stockSolan = getSectionStock(p.name, 'SOLAN OPD SALE');
+                              const stockSabathu = getSectionStock(p.name, 'SABATHU OPD SALE');
+                              const stockCod = getSectionStock(p.name, 'COD SALE');
+                              const stockOnline = getSectionStock(p.name, 'ONLINE SALE');
+                              const stockCentral = getSectionStock(p.name, 'CENTRAL GODOWN');
+
+                              return (
+                                <div className={`flex items-center gap-1 px-2 py-1.5 rounded-lg border shadow-xs ${secStock <= 0 ? 'bg-rose-50/70 border-rose-300' : 'bg-white border-slate-200'}`}>
+                                  <span className="text-[10px] uppercase font-bold text-slate-400">Godown:</span>
+                                  <select
+                                    value={curSec}
+                                    onChange={(e) => handleProductSectionChange(treatment.id, idx, e.target.value)}
+                                    className={`text-xs font-black bg-transparent outline-none cursor-pointer pr-1 ${secStock <= 0 ? 'text-rose-700' : 'text-blue-700'}`}
+                                  >
+                                    <option value="SOLAN OPD SALE">
+                                      🏥 Solan OPD {stockSolan > 0 ? `(${stockSolan} in stock)` : `(0 - Out of Stock)`}
+                                    </option>
+                                    <option value="SABATHU OPD SALE">
+                                      🌿 Sabathu OPD {stockSabathu > 0 ? `(${stockSabathu} in stock)` : `(0 - Out of Stock)`}
+                                    </option>
+                                    <option value="COD SALE">
+                                      📦 COD Sale {stockCod > 0 ? `(${stockCod} in stock)` : `(0 - Out of Stock)`}
+                                    </option>
+                                    <option value="ONLINE SALE">
+                                      🌐 Online Sale {stockOnline > 0 ? `(${stockOnline} in stock)` : `(0 - Out of Stock)`}
+                                    </option>
+                                    <option value="CENTRAL GODOWN">
+                                      🏬 Central Godown {stockCentral > 0 ? `(${stockCentral} in stock)` : `(0 - Out of Stock)`}
+                                    </option>
+                                  </select>
+                                </div>
+                              );
+                            })()}
 
                             {/* QTY INPUT */}
                             <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-xs">

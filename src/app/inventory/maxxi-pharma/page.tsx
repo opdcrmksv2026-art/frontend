@@ -1188,6 +1188,7 @@ export default function MaxxiPharmaPage() {
           companies={companies}
           parties={parties}
           catalog={catalog}
+          invoices={invoices}
           onSaveInvoice={handleSaveInvoice}
           onOpenCompanyModal={() => {
             setEditingCompany(null)

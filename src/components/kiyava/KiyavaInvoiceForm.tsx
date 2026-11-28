@@ -32,6 +32,7 @@ interface KiyavaInvoiceFormProps {
   companies: CompanyProfile[]
   parties: PartyProfile[]
   catalog: CatalogItem[]
+  invoices?: KiyavaInvoice[]
   onSaveInvoice: (invoice: KiyavaInvoice, shouldPrint?: boolean) => void
   onOpenCompanyModal: () => void
   onOpenPartyModal: () => void
@@ -46,6 +47,7 @@ export default function KiyavaInvoiceForm({
   companies,
   parties,
   catalog,
+  invoices,
   onSaveInvoice,
   onOpenCompanyModal,
   onOpenPartyModal,
@@ -150,6 +152,58 @@ export default function KiyavaInvoiceForm({
   const [invoiceType, setInvoiceType] = useState<'SALE' | 'PURCHASE'>(initialInvoice?.type || defaultInvoiceType || 'SALE')
   const [targetGodown, setTargetGodown] = useState<string>(initialInvoice?.targetGodown || 'SOLAN OPD SALE')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Real-time Stock calculation per medicine per Godown Section
+  const getSectionStock = (itemName?: string, section?: string): number => {
+    if (!itemName || !itemName.trim()) return 0
+    const cleanStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim()
+    const targetClean = cleanStr(itemName)
+    const targetSec = (section || targetGodown || 'SOLAN OPD SALE').trim().toUpperCase()
+
+    let stock = 0
+
+    // 1. Calculate from Invoices (Purchases & Sales)
+    ;(invoices || []).forEach((inv) => {
+      const isPurchase = (inv.type || 'SALE').toUpperCase() === 'PURCHASE'
+      const isSale = (inv.type || 'SALE').toUpperCase() === 'SALE'
+      if (!isPurchase && !isSale) return
+
+      (inv.items || []).forEach((row: any) => {
+        const rClean = cleanStr(row.description || row.name)
+        const rSec = (row.godownSection || (inv as any).targetGodown || 'SOLAN OPD SALE').trim().toUpperCase()
+        if (rClean === targetClean && rSec === targetSec) {
+          const q = Number(row.quantity) || 0
+          stock += isPurchase ? q : -q
+        }
+      })
+    })
+
+    // 2. Calculate from Godown Movement Logs (localStorage)
+    try {
+      const storedLogs = JSON.parse(localStorage.getItem('maxxi_godown_movement_logs') || '[]')
+      if (Array.isArray(storedLogs)) {
+        storedLogs.forEach((log: any) => {
+          if (log.referenceNo && (invoices || []).some(inv => inv.invoiceNo === log.referenceNo)) return
+          const lClean = cleanStr(log.itemName)
+          const lSec = (log.section || 'SOLAN OPD SALE').trim().toUpperCase()
+          if (lClean === targetClean && lSec === targetSec) {
+            const q = Number(log.quantity) || 0
+            stock += log.type === 'INWARD' ? q : -q
+          }
+        })
+      }
+    } catch (_) {}
+
+    // 3. Fallback to catalog item with matching opdSection if no invoice history
+    if (stock === 0) {
+      const matched = catalog.find(c => cleanStr(c.name) === targetClean && (c.opdSection || 'SOLAN OPD SALE').trim().toUpperCase() === targetSec)
+      if (matched && matched.quantity !== undefined) {
+        stock = Number(matched.quantity) || 0
+      }
+    }
+
+    return Math.max(0, stock)
+  }
 
   // 4. Line Items Grid (Starts clean with 1 clean item row, no dummy data!)
   const [items, setItems] = useState<InvoiceItemRow[]>(
@@ -863,18 +917,58 @@ export default function KiyavaInvoiceForm({
                   </td>
 
                   {/* Destination Godown / Section per Item */}
-                  <td className="p-2">
-                    <select
-                      value={item.godownSection || targetGodown || 'SOLAN OPD SALE'}
-                      onChange={(e) => handleItemChange(item.id, 'godownSection', e.target.value)}
-                      className="w-full px-2 py-1.5 bg-amber-50/60 border border-amber-300 focus:border-amber-500 rounded-lg text-[11px] font-bold text-slate-900 outline-none cursor-pointer"
-                    >
-                      <option value="SOLAN OPD SALE">🏥 Solan OPD</option>
-                      <option value="SABATHU OPD SALE">🌿 Sabathu OPD</option>
-                      <option value="COD SALE">📦 COD Sale</option>
-                      <option value="ONLINE SALE">🌐 Online Sale</option>
-                      <option value="CENTRAL GODOWN">🏬 Central Godown</option>
-                    </select>
+                  <td className="p-2 min-w-[190px]">
+                    {(() => {
+                      const curSec = item.godownSection || targetGodown || 'SOLAN OPD SALE'
+                      const hasDesc = (item.description || '').trim().length > 0
+                      const stockVal = hasDesc ? getSectionStock(item.description, curSec) : 0
+                      const stockSolan = hasDesc ? getSectionStock(item.description, 'SOLAN OPD SALE') : null
+                      const stockSabathu = hasDesc ? getSectionStock(item.description, 'SABATHU OPD SALE') : null
+                      const stockCod = hasDesc ? getSectionStock(item.description, 'COD SALE') : null
+                      const stockOnline = hasDesc ? getSectionStock(item.description, 'ONLINE SALE') : null
+                      const stockCentral = hasDesc ? getSectionStock(item.description, 'CENTRAL GODOWN') : null
+
+                      return (
+                        <div>
+                          <select
+                            value={curSec}
+                            onChange={(e) => handleItemChange(item.id, 'godownSection', e.target.value)}
+                            className={`w-full px-2 py-1.5 rounded-lg text-[11px] font-bold outline-none cursor-pointer border ${hasDesc && stockVal <= 0 ? 'bg-rose-50/70 border-rose-300 text-rose-900 focus:border-rose-500' : 'bg-amber-50/60 border-amber-300 focus:border-amber-500 text-slate-900'}`}
+                          >
+                            <option value="SOLAN OPD SALE">
+                              🏥 Solan OPD {stockSolan !== null ? (stockSolan > 0 ? `(${stockSolan} in stock)` : `(0 - Out of Stock)`) : ''}
+                            </option>
+                            <option value="SABATHU OPD SALE">
+                              🌿 Sabathu OPD {stockSabathu !== null ? (stockSabathu > 0 ? `(${stockSabathu} in stock)` : `(0 - Out of Stock)`) : ''}
+                            </option>
+                            <option value="COD SALE">
+                              📦 COD Sale {stockCod !== null ? (stockCod > 0 ? `(${stockCod} in stock)` : `(0 - Out of Stock)`) : ''}
+                            </option>
+                            <option value="ONLINE SALE">
+                              🌐 Online Sale {stockOnline !== null ? (stockOnline > 0 ? `(${stockOnline} in stock)` : `(0 - Out of Stock)`) : ''}
+                            </option>
+                            <option value="CENTRAL GODOWN">
+                              🏬 Central Godown {stockCentral !== null ? (stockCentral > 0 ? `(${stockCentral} in stock)` : `(0 - Out of Stock)`) : ''}
+                            </option>
+                          </select>
+
+                          {/* Live stock indicator / Product not in this godown warning */}
+                          {hasDesc && (
+                            <div className="mt-1">
+                              {stockVal <= 0 ? (
+                                <div className="px-1.5 py-0.5 bg-rose-50 border border-rose-200 rounded text-[9.5px] font-bold text-rose-600 flex items-center gap-1 leading-tight animate-in fade-in">
+                                  <span>⚠️ Product not in this godown (0 Stock) — Pls Add</span>
+                                </div>
+                              ) : (
+                                <div className="px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-[9.5px] font-bold text-emerald-700 flex items-center gap-1 leading-tight animate-in fade-in">
+                                  <span>✓ Stock in godown: {stockVal} {item.unit || 'NOS'}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </td>
 
                   {/* Quantity */}
