@@ -40,6 +40,7 @@ interface TreatmentProduct {
   rate: number
   hsnCode?: string
   taxRate?: number
+  godownSection?: string
 }
 
 interface TreatmentItem {
@@ -49,6 +50,7 @@ interface TreatmentItem {
   products: TreatmentProduct[]
   durationDays: string
   price: string
+  section?: string
 }
 
 interface Patient {
@@ -120,7 +122,7 @@ const formatFollowUpDate = (dateVal?: any) => {
     if (!isNaN(d.getTime())) {
       return d.toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })
     }
-  } catch (e) {}
+  } catch (e) { }
   return String(dateVal)
 }
 
@@ -152,7 +154,7 @@ export default function CreateInvoicePage() {
 
   // Treatments list (multiple diseases support)
   const [treatments, setTreatments] = useState<TreatmentItem[]>([
-    { id: "1", disease: "", kitName: "", products: [], durationDays: "30", price: "0" }
+    { id: "1", disease: "", kitName: "", products: [], durationDays: "30", price: "0", section: "SOLAN OPD SALE" }
   ])
 
   // Printable Modal state
@@ -217,7 +219,7 @@ export default function CreateInvoicePage() {
         setPatients(list)
         setLoadingPatients(false)
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // 2. Background revalidation with 4500ms timeout
     async function fetchPatients() {
@@ -231,7 +233,7 @@ export default function CreateInvoicePage() {
           setPatients(data)
           try {
             localStorage.setItem("ksv_cached_patients", JSON.stringify(data))
-          } catch (e) {}
+          } catch (e) { }
         }
       } catch (err) {
         // Silent background fallback
@@ -379,6 +381,7 @@ export default function CreateInvoicePage() {
       if (t.id === treatmentId) {
         const rawRate = product.defaultRate ?? product.rate ?? product.unitRate ?? product.sellingRate ?? product.price ?? 0
         const productRate = Number(rawRate) || 0
+        const defaultSec = product.opdSection || t.section || formData.opdSection || "SOLAN OPD SALE"
         const newProducts = [
           ...t.products,
           {
@@ -386,7 +389,8 @@ export default function CreateInvoicePage() {
             quantity: "1",
             rate: productRate,
             hsnCode: product.hsnCode || "30049011",
-            taxRate: product.defaultTaxRate || 5
+            taxRate: product.defaultTaxRate || 5,
+            godownSection: defaultSec
           }
         ]
         const newPrice = newProducts.reduce(
@@ -419,7 +423,7 @@ export default function CreateInvoicePage() {
         description: 'Auto-added from OPD Billing',
         quantity: 0
       })
-    }).catch(() => {})
+    }).catch(() => { })
 
     setCatalog(prev => {
       if (prev.some(c => (c.name || '').toLowerCase() === cleanName.toLowerCase())) return prev
@@ -428,6 +432,7 @@ export default function CreateInvoicePage() {
 
     setTreatments(prev => prev.map(t => {
       if (t.id === treatmentId) {
+        const defaultSec = t.section || formData.opdSection || "SOLAN OPD SALE"
         const newProducts = [
           ...t.products,
           {
@@ -435,11 +440,12 @@ export default function CreateInvoicePage() {
             quantity: "1",
             rate: 0,
             hsnCode: "30049011",
-            taxRate: 5
+            taxRate: 5,
+            godownSection: defaultSec
           }
         ]
         const newPrice = newProducts.reduce(
-          (sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate),
+          (sum, p) => sum + ((parseFloat(p.quantity || "0") || 0) * (p.rate || 0)),
           0
         ).toString()
         return { ...t, kitName: "", products: newProducts, price: newPrice }
@@ -453,8 +459,45 @@ export default function CreateInvoicePage() {
   const handleAddTreatment = () => {
     setTreatments(prev => [
       ...prev,
-      { id: Date.now().toString(), disease: "", kitName: "", products: [], durationDays: "30", price: "0" }
+      {
+        id: Date.now().toString(),
+        disease: "",
+        kitName: "",
+        products: [],
+        durationDays: "30",
+        price: "0",
+        section: formData.opdSection || "SOLAN OPD SALE"
+      }
     ])
+  }
+
+  const handleProductSectionChange = (treatmentId: string, productIndex: number, newSection: string) => {
+    setTreatments(prev => prev.map(t => {
+      if (t.id === treatmentId) {
+        const updatedProducts = [...t.products]
+        if (updatedProducts[productIndex]) {
+          updatedProducts[productIndex] = {
+            ...updatedProducts[productIndex],
+            godownSection: newSection
+          }
+        }
+        return { ...t, products: updatedProducts }
+      }
+      return t
+    }))
+  }
+
+  const handleTreatmentSectionChange = (treatmentId: string, newSection: string) => {
+    setTreatments(prev => prev.map(t => {
+      if (t.id === treatmentId) {
+        const updatedProducts = t.products.map(p => ({
+          ...p,
+          godownSection: newSection
+        }))
+        return { ...t, section: newSection, products: updatedProducts }
+      }
+      return t
+    }))
   }
 
   const handleProductQuantityChange = (treatmentId: string, productIndex: number, newQuantity: string) => {
@@ -500,7 +543,7 @@ export default function CreateInvoicePage() {
       return t;
     }))
   }
-  
+
   const handleRemoveProduct = (treatmentId: string, productIndex: number) => {
     setTreatments(prev => prev.map(t => {
       if (t.id === treatmentId) {
@@ -628,7 +671,7 @@ export default function CreateInvoicePage() {
   const handleNumericChange = (name: string, value: string) => {
     setFormData(prev => {
       const updated = { ...prev, [name]: value }
-      
+
       const baseCalc = calculateGSTInvoice(
         treatments as any,
         0,
@@ -696,7 +739,7 @@ export default function CreateInvoicePage() {
         setError("Kam se kam 1 Bimari ya Kit Name enter karein")
         return
       }
-      
+
       // Auto-fill Cash Collected to full amount by default if not already set
       setFormData(prev => {
         const cash = parseFloat(prev.amountCash || "0");
@@ -832,7 +875,7 @@ export default function CreateInvoicePage() {
         const existingOffline = JSON.parse(localStorage.getItem("ksv_offline_bills") || "[]")
         existingOffline.unshift(billData)
         localStorage.setItem("ksv_offline_bills", JSON.stringify(existingOffline))
-        
+
         // Also deduct inventory from Maxxi Pharma catalog
         const maxxiCat = JSON.parse(localStorage.getItem("maxxi_app_catalog") || "[]")
         let updatedCatalog = [...maxxiCat]
@@ -871,7 +914,8 @@ export default function CreateInvoicePage() {
               rate: p.rate || 0,
               discountPercent: 0,
               taxRate: p.taxRate || 0,
-              amount: (parseFloat(p.quantity || "1") || 1) * (p.rate || 0)
+              amount: (parseFloat(p.quantity || "1") || 1) * (p.rate || 0),
+              godownSection: p.godownSection || t.section || formData.opdSection || "SOLAN OPD SALE"
             }))
           )
           if (clinicInvItems.length > 0 && !maxxiInvoices.some((inv: any) => inv.invoiceNo === invoiceNo)) {
@@ -892,10 +936,38 @@ export default function CreateInvoicePage() {
             maxxiInvoices.unshift(maxxiInv)
             localStorage.setItem("maxxi_app_invoices", JSON.stringify(maxxiInvoices))
           }
+
+          // Record outward godown movement logs per medicine and section so godown register stays in sync
+          try {
+            const storedMovementLogs = JSON.parse(localStorage.getItem("maxxi_godown_movement_logs") || "[]")
+            const updatedMovementLogs = [...storedMovementLogs]
+            treatments.forEach(t => {
+              (t.products || []).forEach((p, idx) => {
+                const sec = p.godownSection || t.section || formData.opdSection || "SOLAN OPD SALE"
+                updatedMovementLogs.unshift({
+                  id: `log_bill_${invoiceNo}_${idx}_${Date.now()}`,
+                  date: formData.date || new Date().toISOString().split("T")[0],
+                  type: "OUTWARD",
+                  itemName: p.name,
+                  hsnCode: p.hsnCode || "",
+                  quantity: parseFloat(p.quantity || "1") || 1,
+                  unit: "NOS",
+                  rate: p.rate || 0,
+                  section: sec,
+                  sourceDestination: `Patient OPD: ${formData.name || 'Patient'} (#${invoiceNo})`,
+                  refNo: invoiceNo,
+                  remarks: `Prescribed in OPD (${t.disease || "Treatment"})`
+                })
+              })
+            })
+            localStorage.setItem("maxxi_godown_movement_logs", JSON.stringify(updatedMovementLogs))
+          } catch (logErr) {
+            console.warn("Could not record outward godown log:", logErr)
+          }
         } catch (mErr) {
           console.warn("Could not sync clinic sale to Maxxi invoices:", mErr)
         }
-        
+
       } catch (e) {
         console.warn("Local storage write error:", e)
       }
@@ -1312,7 +1384,7 @@ export default function CreateInvoicePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="flex flex-col">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Bimari / Disease Condition *</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Bimari / Disease Condition *</label>
                   <textarea
                     rows={2}
                     value={treatment.disease}
@@ -1320,6 +1392,25 @@ export default function CreateInvoicePage() {
                     placeholder="e.g. Sugar / Diabetes, BP, Joint Pain, Liver..."
                     className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-semibold text-slate-700 placeholder-slate-400 resize-none"
                   />
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                    <span>🏢 Godown / Department Section</span>
+                    <span className="text-[10px] text-blue-600 font-extrabold">Dispatch Location</span>
+                  </label>
+                  <select
+                    value={treatment.section || formData.opdSection || "SOLAN OPD SALE"}
+                    onChange={(e) => handleTreatmentSectionChange(treatment.id, e.target.value)}
+                    className="w-full px-4 py-3 bg-white border-2 border-slate-200 focus:border-blue-500 rounded-xl outline-none text-sm font-extrabold text-blue-900 cursor-pointer shadow-xs transition-all"
+                  >
+                    <option value="SOLAN OPD SALE">🏥 SOLAN OPD SALE</option>
+                    <option value="SABATHU OPD SALE">🌿 SABATHU OPD SALE</option>
+                    <option value="COD SALE">📦 COD SALE</option>
+                    <option value="ONLINE SALE">🌐 ONLINE SALE</option>
+                    <option value="CENTRAL GODOWN">🏬 CENTRAL GODOWN</option>
+                  </select>
+                  <span className="text-[11px] text-slate-400 mt-1 font-medium">Is treatment kit ki medicines is section se dispatch hongi</span>
                 </div>
 
                 <div className="flex flex-col relative md:col-span-2">
@@ -1361,10 +1452,10 @@ export default function CreateInvoicePage() {
                     const matches = qWords.length === 0
                       ? catalog.slice(0, 15)
                       : catalog.filter(c => {
-                          const cName = (c.name || '').toLowerCase()
-                          const cHsn = (c.hsnCode || '').toLowerCase()
-                          return qWords.every(word => cName.includes(word) || cHsn.includes(word))
-                        }).slice(0, 40)
+                        const cName = (c.name || '').toLowerCase()
+                        const cHsn = (c.hsnCode || '').toLowerCase()
+                        return qWords.every(word => cName.includes(word) || cHsn.includes(word))
+                      }).slice(0, 40)
 
                     return (
                       <div className="absolute z-50 left-0 top-[80px] w-full bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto custom-scrollbar">
@@ -1438,7 +1529,23 @@ export default function CreateInvoicePage() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap">
+                          <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
+                            {/* GODOWN SECTION SELECTOR PER MEDICINE */}
+                            <div className="flex items-center gap-1 bg-white px-2 py-1.5 rounded-lg border border-slate-200 shadow-xs">
+                              <span className="text-[10px] uppercase font-bold text-slate-400">Godown:</span>
+                              <select
+                                value={p.godownSection || treatment.section || formData.opdSection || "SOLAN OPD SALE"}
+                                onChange={(e) => handleProductSectionChange(treatment.id, idx, e.target.value)}
+                                className="text-xs font-black text-blue-700 bg-transparent outline-none cursor-pointer pr-1"
+                              >
+                                <option value="SOLAN OPD SALE">🏥 Solan OPD</option>
+                                <option value="SABATHU OPD SALE">🌿 Sabathu OPD</option>
+                                <option value="COD SALE">📦 COD Sale</option>
+                                <option value="ONLINE SALE">🌐 Online Sale</option>
+                                <option value="CENTRAL GODOWN">🏬 Central Godown</option>
+                              </select>
+                            </div>
+
                             {/* QTY INPUT */}
                             <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-xs">
                               <span className="text-[10px] uppercase font-bold text-slate-400">Qty:</span>
@@ -1796,10 +1903,15 @@ export default function CreateInvoicePage() {
                     {t.products && t.products.length > 0 ? (
                       <div className="mt-1">
                         {t.products.map((p, pIdx) => (
-                           <div key={pIdx} className="flex justify-between items-center text-[10px] text-slate-500 font-semibold mt-0.5">
-                             <span>{p.quantity}x {p.name} (HSN: {p.hsnCode || "-"})</span>
-                             <span>GST: {p.taxRate || 0}% | ₹{(parseFloat(p.quantity || "1") * p.rate).toLocaleString("en-IN")}</span>
-                           </div>
+                          <div key={pIdx} className="flex justify-between items-center text-[10px] text-slate-500 font-semibold mt-0.5">
+                            <div className="flex items-center gap-1 truncate max-w-[170px]">
+                              <span>{p.quantity}x {p.name}</span>
+                              <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-100">
+                                {p.godownSection || t.section || formData.opdSection || "SOLAN OPD SALE"}
+                              </span>
+                            </div>
+                            <span>₹{(parseFloat(p.quantity || "1") * p.rate).toLocaleString("en-IN")}</span>
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -1815,33 +1927,33 @@ export default function CreateInvoicePage() {
               <div className="border-t border-slate-100 pt-3 space-y-2 font-semibold">
                 <div className="flex justify-between text-slate-500">
                   <span>Gross Medicines:</span>
-                  <span>₹{priceVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  <span>₹{priceVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 {gstVal > 0 && (
                   <div className="flex justify-between text-indigo-600">
                     <span>GST (Product-wise):</span>
-                    <span>+ ₹{gstVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    <span>+ ₹{gstVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 {consultancyVal > 0 && (
                   <div className="flex justify-between text-slate-700">
                     <span>Consultancy Charges:</span>
-                    <span>+ ₹{consultancyVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    <span>+ ₹{consultancyVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-slate-700 font-bold border-t border-slate-100/80 pt-1">
                   <span>Original Bill Total:</span>
-                  <span>₹{originalBillTotal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  <span>₹{originalBillTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 {discountVal > 0 && (
                   <div className="flex justify-between text-rose-500">
                     <span>Product Discount:</span>
-                    <span>- ₹{discountVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    <span>- ₹{discountVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-extrabold text-sm border-t border-slate-100 pt-2 text-slate-800">
                   <span>Final Amount Payable:</span>
-                  <span className="text-blue-600 text-base">₹{totalDueVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  <span className="text-blue-600 text-base">₹{totalDueVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
 
@@ -1918,105 +2030,105 @@ export default function CreateInvoicePage() {
       <div className="print:hidden">
         {/* Sleek Compact Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-3 border-b border-slate-200/60">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="p-2 text-slate-400 hover:text-slate-700 bg-white border border-slate-200/80 hover:bg-slate-50 rounded-xl transition-all shadow-sm"
-            title="Back to Dashboard"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">Create Invoice</h1>
-        </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="p-2 text-slate-400 hover:text-slate-700 bg-white border border-slate-200/80 hover:bg-slate-50 rounded-xl transition-all shadow-sm"
+              title="Back to Dashboard"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">Create Invoice</h1>
+          </div>
 
-        {/* Compact Stepper Pills */}
-        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100 text-xs">
-          <button
-            type="button"
-            onClick={() => setCurrentStep(1)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${currentStep === 1
-              ? "bg-white text-blue-600 font-extrabold shadow-sm"
-              : currentStep > 1
-                ? "text-emerald-600 font-bold"
+          {/* Compact Stepper Pills */}
+          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100 text-xs">
+            <button
+              type="button"
+              onClick={() => setCurrentStep(1)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${currentStep === 1
+                ? "bg-white text-blue-600 font-extrabold shadow-sm"
+                : currentStep > 1
+                  ? "text-emerald-600 font-bold"
+                  : "text-slate-400 font-medium"
+                }`}
+            >
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${currentStep === 1
+                ? "bg-blue-600 text-white font-bold"
+                : currentStep > 1
+                  ? "bg-emerald-500 text-white font-bold"
+                  : "bg-slate-200 text-slate-500"
+                }`}>
+                {currentStep > 1 ? <Check className="w-2.5 h-2.5" /> : "1"}
+              </span>
+              <span>Patient</span>
+            </button>
+
+            <span className="text-slate-300">•</span>
+
+            <button
+              type="button"
+              onClick={() => currentStep > 1 && setCurrentStep(2)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${currentStep === 2
+                ? "bg-white text-blue-600 font-extrabold shadow-sm"
+                : currentStep > 2
+                  ? "text-emerald-600 font-bold"
+                  : "text-slate-400 font-medium"
+                }`}
+            >
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${currentStep === 2
+                ? "bg-blue-600 text-white font-bold"
+                : currentStep > 2
+                  ? "bg-emerald-500 text-white font-bold"
+                  : "bg-slate-200 text-slate-500"
+                }`}>
+                {currentStep > 2 ? <Check className="w-2.5 h-2.5" /> : "2"}
+              </span>
+              <span>Treatment</span>
+            </button>
+
+            <span className="text-slate-300">•</span>
+
+            <button
+              type="button"
+              onClick={() => currentStep > 2 && setCurrentStep(3)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${currentStep === 3
+                ? "bg-white text-blue-600 font-extrabold shadow-sm"
                 : "text-slate-400 font-medium"
-              }`}
-          >
-            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${currentStep === 1
-              ? "bg-blue-600 text-white font-bold"
-              : currentStep > 1
-                ? "bg-emerald-500 text-white font-bold"
+                }`}
+            >
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${currentStep === 3
+                ? "bg-blue-600 text-white font-bold"
                 : "bg-slate-200 text-slate-500"
-              }`}>
-              {currentStep > 1 ? <Check className="w-2.5 h-2.5" /> : "1"}
-            </span>
-            <span>Patient</span>
-          </button>
-
-          <span className="text-slate-300">•</span>
-
-          <button
-            type="button"
-            onClick={() => currentStep > 1 && setCurrentStep(2)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${currentStep === 2
-              ? "bg-white text-blue-600 font-extrabold shadow-sm"
-              : currentStep > 2
-                ? "text-emerald-600 font-bold"
-                : "text-slate-400 font-medium"
-              }`}
-          >
-            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${currentStep === 2
-              ? "bg-blue-600 text-white font-bold"
-              : currentStep > 2
-                ? "bg-emerald-500 text-white font-bold"
-                : "bg-slate-200 text-slate-500"
-              }`}>
-              {currentStep > 2 ? <Check className="w-2.5 h-2.5" /> : "2"}
-            </span>
-            <span>Treatment</span>
-          </button>
-
-          <span className="text-slate-300">•</span>
-
-          <button
-            type="button"
-            onClick={() => currentStep > 2 && setCurrentStep(3)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${currentStep === 3
-              ? "bg-white text-blue-600 font-extrabold shadow-sm"
-              : "text-slate-400 font-medium"
-              }`}
-          >
-            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${currentStep === 3
-              ? "bg-blue-600 text-white font-bold"
-              : "bg-slate-200 text-slate-500"
-              }`}>
-              3
-            </span>
-            <span>Payment</span>
-          </button>
+                }`}>
+                3
+              </span>
+              <span>Payment</span>
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Messaging alerts */}
-      {error && (
-        <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3 text-rose-700 font-medium text-sm">
-          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-          <div>{error}</div>
-        </div>
-      )}
+        {/* Messaging alerts */}
+        {error && (
+          <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3 text-rose-700 font-medium text-sm">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div>{error}</div>
+          </div>
+        )}
 
-      {success && (
-        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3 text-emerald-700 font-medium text-sm">
-          <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
-          <div>{success}</div>
-        </div>
-      )}
+        {success && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3 text-emerald-700 font-medium text-sm">
+            <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+            <div>{success}</div>
+          </div>
+        )}
 
-      {/* Main Wizard Form wrapper */}
-      <form onSubmit={handleSubmit}>
-        {currentStep === 1 && renderStep1()}
-        {currentStep === 2 && renderStep2()}
-        {currentStep === 3 && renderStep3()}
-      </form>
+        {/* Main Wizard Form wrapper */}
+        <form onSubmit={handleSubmit}>
+          {currentStep === 1 && renderStep1()}
+          {currentStep === 2 && renderStep2()}
+          {currentStep === 3 && renderStep3()}
+        </form>
       </div>
 
       {/* PRINTABLE RECEIPT MODAL TEMPLATE */}
@@ -2094,15 +2206,14 @@ export default function CreateInvoicePage() {
                   </div>
                   <div className="text-right space-y-1">
                     <div className="flex items-center gap-2 justify-end flex-wrap">
-                      <div className={`text-[11px] font-black px-2.5 py-1 rounded-lg border ${
-                        generatedBill.opdSection === "COD SALE" || generatedBill.opdSection === "COD & ONLINE SALE"
-                          ? "text-amber-700 bg-amber-50 border-amber-200"
-                          : generatedBill.opdSection === "ONLINE SALE"
+                      <div className={`text-[11px] font-black px-2.5 py-1 rounded-lg border ${generatedBill.opdSection === "COD SALE" || generatedBill.opdSection === "COD & ONLINE SALE"
+                        ? "text-amber-700 bg-amber-50 border-amber-200"
+                        : generatedBill.opdSection === "ONLINE SALE"
                           ? "text-indigo-700 bg-indigo-50 border-indigo-200"
                           : generatedBill.opdSection === "SABATHU OPD SALE" || generatedBill.opdSection === "SABATHU OPD SALES"
-                          ? "text-teal-700 bg-teal-50 border-teal-200"
-                          : "text-emerald-700 bg-emerald-50 border-emerald-200"
-                      }`}>
+                            ? "text-teal-700 bg-teal-50 border-teal-200"
+                            : "text-emerald-700 bg-emerald-50 border-emerald-200"
+                        }`}>
                         {generatedBill.opdSection || "SOLAN OPD SALE"}
                       </div>
                       <div className="text-xs font-black text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg print:border-slate-800 print:text-black print:bg-white">
@@ -2196,10 +2307,10 @@ export default function CreateInvoicePage() {
                         {(() => {
                           let flatIdx = 0;
                           return generatedBill.treatments.map((t: any, idx: number) => {
-                            const products = t.products && t.products.length > 0 
-                              ? t.products 
+                            const products = t.products && t.products.length > 0
+                              ? t.products
                               : [{}]; // Dummy for iteration
-                            
+
                             return products.map((p: any, pIdx: number) => {
                               const calcLine = generatedBill.calcResult?.lines[flatIdx++];
                               if (!calcLine) return null;
@@ -2215,13 +2326,13 @@ export default function CreateInvoicePage() {
                                   <td className="py-3 px-3 text-slate-600">{calcLine.name}</td>
                                   <td className="py-3 px-3 text-slate-500 font-mono text-[10px]">{calcLine.hsnCode || "-"}</td>
                                   <td className="py-3 px-3 text-center text-slate-600">{calcLine.qty}</td>
-                                  <td className="py-3 px-3 text-right text-slate-500">₹{calcLine.rate.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                  <td className="py-3 px-3 text-right text-slate-500">₹{calcLine.rate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   <td className="py-3 px-3 text-center text-slate-500">{calcLine.taxRate}%</td>
                                   <td className="py-3 px-3 text-right text-slate-500">
-                                    ₹{(calcLine.grossAmount * calcLine.taxRate / 100).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                    ₹{(calcLine.grossAmount * calcLine.taxRate / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   <td className="py-3 px-3 text-right font-extrabold text-slate-800">
-                                    ₹{(calcLine.grossAmount + (calcLine.grossAmount * calcLine.taxRate / 100)).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                    ₹{(calcLine.grossAmount + (calcLine.grossAmount * calcLine.taxRate / 100)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                 </tr>
                               );
@@ -2276,42 +2387,42 @@ export default function CreateInvoicePage() {
                           {generatedBill.calcResult.hsnSummary.map((hsn: any, idx: number) => (
                             <tr key={idx}>
                               <td className="py-1.5 px-2 text-left font-mono">{hsn.hsn}</td>
-                              <td className="py-1.5 px-2">₹{hsn.taxableValue.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                              <td className="py-1.5 px-2">₹{hsn.taxableValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                               {generatedBill.calcResult.isInterState ? (
                                 <>
                                   <td className="py-1.5 px-2 text-center text-slate-400">{hsn.taxRate}%</td>
-                                  <td className="py-1.5 px-2">₹{hsn.igstAmount.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                  <td className="py-1.5 px-2">₹{hsn.igstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </>
                               ) : (
                                 <>
                                   <td className="py-1.5 px-2 text-center text-slate-400">{hsn.taxRate > 0 ? `${(hsn.taxRate / 2).toFixed(2).replace(/\.?0+$/, '')}%` : '0%'}</td>
-                                  <td className="py-1.5 px-2">₹{hsn.cgstAmount.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                  <td className="py-1.5 px-2">₹{hsn.cgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   <td className="py-1.5 px-2 text-center text-slate-400">{hsn.taxRate > 0 ? `${(hsn.taxRate / 2).toFixed(2).replace(/\.?0+$/, '')}%` : '0%'}</td>
-                                  <td className="py-1.5 px-2">₹{hsn.sgstAmount.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                  <td className="py-1.5 px-2">₹{hsn.sgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </>
                               )}
-                              <td className="py-1.5 px-2 font-extrabold text-slate-800">₹{hsn.totalTax.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                              <td className="py-1.5 px-2 font-extrabold text-slate-800">₹{hsn.totalTax.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-900">
                           <tr>
                             <td className="py-2 px-2 text-left font-black uppercase text-[10px]">Total</td>
-                            <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalTaxableValue.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                            <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalTaxableValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             {generatedBill.calcResult.isInterState ? (
                               <>
                                 <td className="py-2 px-2 text-center text-slate-400">-</td>
-                                <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalIgst.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalIgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                               </>
                             ) : (
                               <>
                                 <td className="py-2 px-2 text-center text-slate-400">-</td>
-                                <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalCgst.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalCgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 <td className="py-2 px-2 text-center text-slate-400">-</td>
-                                <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalSgst.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                                <td className="py-2 px-2 font-black">₹{generatedBill.calcResult.totalSgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                               </>
                             )}
-                            <td className="py-2 px-2 font-black text-slate-900">₹{generatedBill.calcResult.totalTax.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                            <td className="py-2 px-2 font-black text-slate-900">₹{generatedBill.calcResult.totalTax.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -2321,72 +2432,72 @@ export default function CreateInvoicePage() {
                   <div className="w-full sm:w-72 space-y-1.5 text-[11px] font-semibold text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
                     <div className="flex justify-between">
                       <span>Gross Medicines:</span>
-                      <span>₹{generatedBill.calcResult?.grossAmount.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      <span>₹{generatedBill.calcResult?.grossAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     {generatedBill.consultancyVal > 0 && (
                       <div className="flex justify-between text-slate-700">
                         <span>Consultation Charges:</span>
-                        <span>+ ₹{generatedBill.consultancyVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        <span>+ ₹{generatedBill.consultancyVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     )}
                     <div className="flex justify-between border-t border-slate-200 pt-1.5 mt-1.5 font-bold text-slate-800">
                       <span>{generatedBill.consultancyVal > 0 ? "Taxable Value (incl. Consult.):" : "Taxable Value:"}</span>
-                      <span>₹{generatedBill.calcResult?.totalTaxableValue.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      <span>₹{generatedBill.calcResult?.totalTaxableValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     {generatedBill.calcResult?.isInterState ? (
                       <div className="flex justify-between text-indigo-600">
                         <span>IGST:</span>
-                        <span>₹{generatedBill.calcResult?.totalIgst.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        <span>₹{generatedBill.calcResult?.totalIgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     ) : (
                       <>
                         <div className="flex justify-between text-indigo-600">
                           <span>CGST:</span>
-                          <span>₹{generatedBill.calcResult?.totalCgst.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                          <span>₹{generatedBill.calcResult?.totalCgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between text-indigo-600">
                           <span>SGST:</span>
-                          <span>₹{generatedBill.calcResult?.totalSgst.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                          <span>₹{generatedBill.calcResult?.totalSgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                       </>
                     )}
                     <div className="flex justify-between border-t border-slate-200/80 pt-1 font-bold text-slate-700">
                       <span>Original Bill Total:</span>
-                      <span>₹{generatedBill.calcResult?.originalInvoiceTotal?.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      <span>₹{generatedBill.calcResult?.originalInvoiceTotal?.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     {generatedBill.discountVal > 0 && (
                       <div className="flex justify-between text-rose-500 font-semibold">
                         <span>Product Discount:</span>
-                        <span>- ₹{generatedBill.discountVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        <span>- ₹{generatedBill.discountVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     )}
                     {generatedBill.calcResult?.roundOff !== 0 && (
                       <div className="flex justify-between text-slate-500">
                         <span>Round Off:</span>
-                        <span>{generatedBill.calcResult?.roundOff > 0 ? "+" : ""} ₹{generatedBill.calcResult?.roundOff.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        <span>{generatedBill.calcResult?.roundOff > 0 ? "+" : ""} ₹{generatedBill.calcResult?.roundOff.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     )}
                     <div className="border-t border-slate-300 pt-2 flex justify-between font-extrabold text-[13px] text-slate-900">
                       <span>Final Payable:</span>
-                      <span className="text-blue-600 font-black">₹{generatedBill.totalDueVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      <span className="text-blue-600 font-black">₹{generatedBill.totalDueVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     <div className="border-t border-slate-200/80 pt-2 mt-2 space-y-1">
                       <div className="flex justify-between text-slate-500">
                         <span>Cash Paid:</span>
-                        <span>₹{generatedBill.cashVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        <span>₹{generatedBill.cashVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className="flex justify-between text-slate-500">
                         <span>Online / UPI Paid:</span>
-                        <span>₹{generatedBill.onlineVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        <span>₹{generatedBill.onlineVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className="flex justify-between font-bold text-emerald-600 border-t border-slate-200/60 pt-1">
                         <span>Total Paid:</span>
-                        <span>₹{generatedBill.totalPaidVal.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        <span>₹{generatedBill.totalPaidVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       {Math.max(0, generatedBill.totalDueVal - generatedBill.totalPaidVal) > 0 && (
                         <div className="flex justify-between font-bold text-amber-600 pt-1">
                           <span>Balance Due:</span>
-                          <span>₹{Math.max(0, generatedBill.totalDueVal - generatedBill.totalPaidVal).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                          <span>₹{Math.max(0, generatedBill.totalDueVal - generatedBill.totalPaidVal).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                       )}
                     </div>
