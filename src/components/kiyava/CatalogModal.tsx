@@ -106,7 +106,7 @@ export default function CatalogModal({
             />
           </div>
 
-          {/* Section / Stock Allocation Selector */}
+          {/* Section / Stock Allocation Selector & Qty */}
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
               <span>Section / Bill Source *</span>
@@ -114,17 +114,37 @@ export default function CatalogModal({
                 Stock Allocation
               </span>
             </label>
-            <select
-              value={formData.opdSection || 'SOLAN OPD SALE'}
-              onChange={(e) => setFormData({ ...formData, opdSection: e.target.value })}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-amber-500 cursor-pointer"
-            >
-              <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
-              <option value="SABATHU OPD SALE">SABATHU OPD SALE</option>
-              <option value="COD SALE">COD SALE</option>
-              <option value="ONLINE SALE">ONLINE SALE</option>
-              <option value="CENTRAL GODOWN">CENTRAL GODOWN (Warehouse)</option>
-            </select>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="sm:col-span-2">
+                <select
+                  value={formData.opdSection || 'SOLAN OPD SALE'}
+                  onChange={(e) => setFormData({ ...formData, opdSection: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="SOLAN OPD SALE">🏥 SOLAN OPD SALE</option>
+                  <option value="SABATHU OPD SALE">🌿 SABATHU OPD SALE</option>
+                  <option value="COD SALE">📦 COD SALE</option>
+                  <option value="ONLINE SALE">🌐 ONLINE SALE</option>
+                  <option value="CENTRAL GODOWN">🏬 CENTRAL GODOWN (Warehouse)</option>
+                </select>
+              </div>
+              <div className="sm:col-span-1">
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={formData.quantity === 0 ? '' : formData.quantity}
+                    onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) || 0 })}
+                    placeholder="Qty"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-800 outline-none focus:border-amber-500 text-center"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase pointer-events-none">
+                    {formData.defaultUnit || 'NOS'}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -232,34 +252,17 @@ export default function CatalogModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Quantity
-              </label>
-              <input
-                type="number"
-                step="any"
-                min="0"
-                value={formData.quantity}
-                onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) || 0 })}
-                placeholder="0"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-800 outline-none focus:border-amber-500 text-right"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Description / Notes
-              </label>
-              <input
-                type="text"
-                value={formData.description || ''}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="e.g. Dry Bael Giri Herb A-grade"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:border-amber-500"
-              />
-            </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+              Description / Notes
+            </label>
+            <input
+              type="text"
+              value={formData.description || ''}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="e.g. Dry Bael Giri Herb A-grade"
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:border-amber-500"
+            />
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
