@@ -1050,7 +1050,9 @@ export default function CreateInvoicePage() {
                   unit: "NOS",
                   rate: p.rate || 0,
                   section: sec,
+                  sourceOrDestination: `Patient OPD: ${formData.name || 'Patient'} (#${invoiceNo})`,
                   sourceDestination: `Patient OPD: ${formData.name || 'Patient'} (#${invoiceNo})`,
+                  referenceNo: invoiceNo,
                   refNo: invoiceNo,
                   remarks: `Prescribed in OPD (${t.disease || "Treatment"})`
                 })

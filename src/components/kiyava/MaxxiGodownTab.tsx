@@ -36,17 +36,19 @@ import { API_URL } from '@/lib/apiConfig'
 export interface GodownMovementLog {
   id: string
   date: string
-  itemId: string
+  itemId?: string
   itemName: string
   hsnCode?: string
   type: 'INWARD' | 'OUTWARD'
   quantity: number
-  unit: string
+  unit?: string
   section?: string
-  sourceOrDestination: string
+  sourceOrDestination?: string
+  sourceDestination?: string
   referenceNo?: string
+  refNo?: string
   remarks?: string
-  timestamp: string
+  timestamp?: string
 }
 
 export const GODOWN_SECTIONS = [
@@ -149,7 +151,8 @@ export default function MaxxiGodownTab({
 
     // B. Calculate from manual movement logs (prevent double counting with invoices that have matching referenceNo)
     movementLogs.forEach((log) => {
-      if (log.referenceNo && (invoices || []).some(inv => inv.invoiceNo === log.referenceNo)) return
+      const logRef = log.referenceNo || log.refNo
+      if (logRef && (invoices || []).some(inv => inv.invoiceNo === logRef)) return
 
       const nameKey = (log.itemName || '').trim().toLowerCase()
       const secKey = log.section || 'SOLAN OPD SALE'
@@ -241,10 +244,10 @@ export default function MaxxiGodownTab({
       const q = searchQuery.toLowerCase().trim()
       const matchesSearch =
         !q ||
-        item.name.toLowerCase().includes(q) ||
-        (item.hsnCode && item.hsnCode.toLowerCase().includes(q)) ||
-        (item.category && item.category.toLowerCase().includes(q)) ||
-        itemSec.toLowerCase().includes(q)
+        ((item.name || '').toLowerCase().includes(q)) ||
+        ((item.hsnCode || '').toLowerCase().includes(q)) ||
+        ((item.category || '').toLowerCase().includes(q)) ||
+        (itemSec.toLowerCase().includes(q))
 
       const matchesCat = categoryFilter === 'ALL' || item.category === categoryFilter
 
@@ -265,13 +268,19 @@ export default function MaxxiGodownTab({
         activeSection === 'ALL' || !log.section || log.section === activeSection
 
       const q = searchQuery.toLowerCase().trim()
+      const itemName = (log.itemName || '').toLowerCase()
+      const refNo = (log.referenceNo || log.refNo || '').toLowerCase()
+      const srcDest = (log.sourceOrDestination || log.sourceDestination || '').toLowerCase()
+      const remarks = (log.remarks || '').toLowerCase()
+      const section = (log.section || '').toLowerCase()
+
       const matchesSearch =
         !q ||
-        log.itemName.toLowerCase().includes(q) ||
-        (log.referenceNo && log.referenceNo.toLowerCase().includes(q)) ||
-        log.sourceOrDestination.toLowerCase().includes(q) ||
-        (log.remarks && log.remarks.toLowerCase().includes(q)) ||
-        (log.section && log.section.toLowerCase().includes(q))
+        itemName.includes(q) ||
+        refNo.includes(q) ||
+        srcDest.includes(q) ||
+        remarks.includes(q) ||
+        section.includes(q)
 
       return matchesSection && matchesSearch
     })
@@ -849,8 +858,8 @@ export default function MaxxiGodownTab({
                           <span className="text-[10px] font-normal text-slate-400 uppercase">{log.unit}</span>
                         </span>
                       </td>
-                      <td className="py-3 px-3.5 text-slate-700 font-medium">{log.sourceOrDestination || '-'}</td>
-                      <td className="py-3 px-3.5 font-mono text-slate-600">{log.referenceNo || '-'}</td>
+                      <td className="py-3 px-3.5 text-slate-700 font-medium">{log.sourceOrDestination || log.sourceDestination || '-'}</td>
+                      <td className="py-3 px-3.5 font-mono text-slate-600">{log.referenceNo || log.refNo || '-'}</td>
                       <td className="py-3 px-3.5 text-slate-500 max-w-xs truncate">{log.remarks || '-'}</td>
                     </tr>
                   ))

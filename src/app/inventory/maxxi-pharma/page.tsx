@@ -783,7 +783,9 @@ export default function MaxxiPharmaPage() {
             unit: item.defaultUnit || 'NOS',
             rate: Number(item.defaultRate) || 0,
             section: alloc.section || 'SOLAN OPD SALE',
+            sourceOrDestination: 'Catalog Stock Allocation',
             sourceDestination: 'Catalog Stock Allocation',
+            referenceNo: 'CATALOG_INIT',
             refNo: 'CATALOG_INIT',
             remarks: `Stock allocated to ${alloc.section || 'SOLAN OPD SALE'}`
           })
