@@ -250,33 +250,55 @@ export default function CreateInvoicePage() {
     const loadCatalogs = async () => {
       const mergedMap = new Map<string, any>()
 
-      // 1. Base static medicines (166 items: STONVAIDHA KSG, ALLERVAIDHA, VIDHUVAIDHA, CHURAN, SYRUP, etc.)
-      ALL_DEFAULT_MEDICINES.forEach((item) => {
-        const key = item.name.toLowerCase().trim()
-        if (key) mergedMap.set(key, item)
-      })
+      const mergeItem = (item: any) => {
+        const k = (item.name || "").toLowerCase().trim()
+        if (!k) return
+        const existing = mergedMap.get(k)
+        const incomingRate = item.defaultRate !== undefined && item.defaultRate !== null && item.defaultRate !== ""
+          ? (parseFloat(item.defaultRate) || 0)
+          : undefined
+        const incomingTax = item.defaultTaxRate !== undefined && item.defaultTaxRate !== null
+          ? (parseFloat(item.defaultTaxRate) || 5)
+          : (parseFloat(item.taxRate) || 5)
+
+        if (!existing) {
+          mergedMap.set(k, {
+            ...item,
+            defaultRate: incomingRate !== undefined ? incomingRate : 0,
+            defaultTaxRate: incomingTax,
+            hsnCode: item.hsnCode || item.hsnSac || "30049011"
+          })
+        } else {
+          // If incoming item has a rate > 0, prefer it over existing rate if existing was 0
+          const existingRate = parseFloat(existing.defaultRate || "0") || 0
+          const finalRate = (incomingRate !== undefined && incomingRate > 0)
+            ? incomingRate
+            : (existingRate > 0 ? existingRate : (incomingRate || 0))
+
+          mergedMap.set(k, {
+            ...existing,
+            ...item,
+            defaultRate: finalRate,
+            defaultTaxRate: incomingTax || existing.defaultTaxRate || 5,
+            hsnCode: item.hsnCode || item.hsnSac || existing.hsnCode || "30049011"
+          })
+        }
+      }
+
+      // 1. Base static medicines (166 items)
+      ALL_DEFAULT_MEDICINES.forEach(mergeItem)
 
       // 2. Read local storage catalogs if available
       try {
         const ksvLocal = localStorage.getItem("ksv_app_catalog")
         if (ksvLocal) {
           const parsed = JSON.parse(ksvLocal)
-          if (Array.isArray(parsed)) {
-            parsed.forEach((c: any) => {
-              const k = (c.name || "").toLowerCase().trim()
-              if (k && !mergedMap.has(k)) mergedMap.set(k, c)
-            })
-          }
+          if (Array.isArray(parsed)) parsed.forEach(mergeItem)
         }
         const maxxiLocal = localStorage.getItem("maxxi_app_catalog")
         if (maxxiLocal) {
           const parsed = JSON.parse(maxxiLocal)
-          if (Array.isArray(parsed)) {
-            parsed.forEach((c: any) => {
-              const k = (c.name || "").toLowerCase().trim()
-              if (k && !mergedMap.has(k)) mergedMap.set(k, c)
-            })
-          }
+          if (Array.isArray(parsed)) parsed.forEach(mergeItem)
         }
       } catch (e) {
         console.warn("Could not read local catalogs:", e)
@@ -290,21 +312,11 @@ export default function CreateInvoicePage() {
         ])
         if (ksvRes && ksvRes.ok) {
           const ksvData = await ksvRes.json()
-          if (Array.isArray(ksvData)) {
-            ksvData.forEach((c: any) => {
-              const k = (c.name || "").toLowerCase().trim()
-              if (k) mergedMap.set(k, { ...c, defaultRate: c.defaultRate || 0 })
-            })
-          }
+          if (Array.isArray(ksvData)) ksvData.forEach(mergeItem)
         }
         if (maxxiRes && maxxiRes.ok) {
           const maxxiData = await maxxiRes.json()
-          if (Array.isArray(maxxiData)) {
-            maxxiData.forEach((c: any) => {
-              const k = (c.name || "").toLowerCase().trim()
-              if (k && !mergedMap.has(k)) mergedMap.set(k, { ...c, defaultRate: c.defaultRate || 0 })
-            })
-          }
+          if (Array.isArray(maxxiData)) maxxiData.forEach(mergeItem)
         }
       } catch (err) {
         console.warn("Live catalog fetch warning:", err)
@@ -405,8 +417,40 @@ export default function CreateInvoicePage() {
     setTreatments(prev => prev.map(t => {
       if (t.id === treatmentId) {
         const updatedProducts = [...t.products];
-        updatedProducts[productIndex].quantity = newQuantity;
-        const newPrice = updatedProducts.reduce((sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate), 0).toString();
+        if (updatedProducts[productIndex]) {
+          updatedProducts[productIndex] = {
+            ...updatedProducts[productIndex],
+            quantity: newQuantity
+          };
+        }
+        const newPrice = updatedProducts.reduce((sum, p) => sum + ((parseFloat(p.quantity || "0") || 0) * (p.rate || 0)), 0).toString();
+        return { ...t, products: updatedProducts, price: newPrice };
+      }
+      return t;
+    }))
+  }
+
+  const handleProductRateChange = (treatmentId: string, productIndex: number, newRate: string) => {
+    const parsedRate = Math.max(0, parseFloat(newRate) || 0);
+    setTreatments(prev => prev.map(t => {
+      if (t.id === treatmentId) {
+        const updatedProducts = [...t.products];
+        if (updatedProducts[productIndex]) {
+          const prodName = updatedProducts[productIndex].name;
+          updatedProducts[productIndex] = {
+            ...updatedProducts[productIndex],
+            rate: parsedRate
+          };
+          // Also remember this rate in current session catalog if > 0
+          if (parsedRate > 0) {
+            setCatalog(cList => cList.map(c =>
+              c.name.toLowerCase().trim() === prodName.toLowerCase().trim()
+                ? { ...c, defaultRate: parsedRate }
+                : c
+            ));
+          }
+        }
+        const newPrice = updatedProducts.reduce((sum, p) => sum + ((parseFloat(p.quantity || "0") || 0) * (p.rate || 0)), 0).toString();
         return { ...t, products: updatedProducts, price: newPrice };
       }
       return t;
@@ -417,7 +461,7 @@ export default function CreateInvoicePage() {
     setTreatments(prev => prev.map(t => {
       if (t.id === treatmentId) {
         const updatedProducts = t.products.filter((_, i) => i !== productIndex);
-        const newPrice = updatedProducts.reduce((sum, p) => sum + (parseFloat(p.quantity || "0") * p.rate), 0).toString();
+        const newPrice = updatedProducts.reduce((sum, p) => sum + ((parseFloat(p.quantity || "0") || 0) * (p.rate || 0)), 0).toString();
         return { ...t, products: updatedProducts, price: newPrice };
       }
       return t;
@@ -430,7 +474,28 @@ export default function CreateInvoicePage() {
   }
 
   const handleTreatmentChange = (id: string, field: keyof TreatmentItem, value: string) => {
-    setTreatments(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t))
+    setTreatments(prev => prev.map(t => {
+      if (t.id !== id) return t;
+      if (field === "price") {
+        const valNum = Math.max(0, parseFloat(value) || 0);
+        if (t.products.length === 1) {
+          const q = parseFloat(t.products[0].quantity || "1") || 1;
+          const updatedProds = [{ ...t.products[0], rate: valNum / q }];
+          return { ...t, price: value, products: updatedProds };
+        } else if (t.products.length > 1) {
+          const allZero = t.products.every(p => !p.rate || p.rate === 0);
+          if (allZero && valNum > 0) {
+            const perProd = valNum / t.products.length;
+            const updatedProds = t.products.map(p => {
+              const q = parseFloat(p.quantity || "1") || 1;
+              return { ...p, rate: Math.round((perProd / q) * 100) / 100 };
+            });
+            return { ...t, price: value, products: updatedProds };
+          }
+        }
+      }
+      return { ...t, [field]: value };
+    }))
   }
 
   // Filter patients based on query (uniqueId or name)
@@ -1279,7 +1344,11 @@ export default function CreateInvoicePage() {
                               {c.hsnCode && <span className="text-[10px] text-slate-400 font-mono ml-2">HSN: {c.hsnCode}</span>}
                             </div>
                             <div className="flex items-center gap-2">
-                              {c.defaultRate > 0 && <span className="text-emerald-700 font-mono font-extrabold">₹{c.defaultRate}</span>}
+                              {c.defaultRate > 0 ? (
+                                <span className="text-emerald-700 font-mono font-extrabold text-xs">₹{c.defaultRate}</span>
+                              ) : (
+                                <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Rate: ₹0</span>
+                              )}
                               <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md font-bold">+ Add</span>
                             </div>
                           </div>
@@ -1305,20 +1374,68 @@ export default function CreateInvoicePage() {
                   {/* Selected Products List */}
                   {treatment.products.length > 0 && (
                     <div className="mt-3 space-y-2">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between px-1">
+                        <span>Selected Medicines ({treatment.products.length})</span>
+                        <span className="text-[10px] text-blue-600 font-bold">✓ Price &amp; Qty Editable</span>
+                      </div>
                       {treatment.products.map((p, idx) => (
-                        <div key={idx} className="flex items-center justify-between bg-slate-50 border border-slate-200 p-2.5 rounded-xl shadow-sm">
-                          <span className="text-sm font-extrabold text-slate-700 flex-1 truncate pr-4" title={p.name}>{p.name}</span>
-                          <div className="flex items-center gap-4 shrink-0">
-                             <div className="flex items-center gap-2">
-                               <span className="text-[10px] uppercase font-bold text-slate-400">Qty:</span>
-                               <input type="number" min="1" value={p.quantity} onChange={(e) => handleProductQuantityChange(treatment.id, idx, e.target.value)} className="w-16 px-2 py-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-sm text-center font-bold outline-none" />
-                             </div>
-                             <div className="text-sm font-black text-slate-800 w-20 text-right">
-                               ₹{(parseFloat(p.quantity || "0") * p.rate).toLocaleString("en-IN")}
-                             </div>
-                             <button type="button" onClick={() => handleRemoveProduct(treatment.id, idx)} className="text-rose-400 hover:text-rose-600 p-1.5 hover:bg-rose-50 rounded-lg transition-colors" title="Remove Product">
-                               <Trash2 className="w-4 h-4" />
-                             </button>
+                        <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 bg-slate-50 border border-slate-200 p-2.5 rounded-xl shadow-sm hover:border-slate-300 transition-all">
+                          <div className="flex-1 min-w-[160px]">
+                            <span className="text-sm font-extrabold text-slate-800 block truncate" title={p.name}>
+                              {p.name}
+                            </span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {p.hsnCode && (
+                                <span className="text-[10px] text-slate-400 font-mono">HSN: {p.hsnCode}</span>
+                              )}
+                              <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.2 rounded">
+                                GST {p.taxRate || 5}%
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap">
+                            {/* QTY INPUT */}
+                            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-xs">
+                              <span className="text-[10px] uppercase font-bold text-slate-400">Qty:</span>
+                              <input
+                                type="number"
+                                min="1"
+                                value={p.quantity}
+                                onChange={(e) => handleProductQuantityChange(treatment.id, idx, e.target.value)}
+                                className="w-12 text-sm text-center font-extrabold text-slate-800 outline-none"
+                              />
+                            </div>
+
+                            {/* RATE (PRICE PER UNIT) INPUT */}
+                            <div className={`flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-lg border ${(!p.rate || p.rate === 0) ? 'border-amber-400 bg-amber-50/40 ring-2 ring-amber-100' : 'border-slate-200'} shadow-xs`}>
+                              <span className="text-[10px] uppercase font-bold text-slate-400">Rate ₹:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={p.rate === 0 ? "" : p.rate}
+                                placeholder="0"
+                                onChange={(e) => handleProductRateChange(treatment.id, idx, e.target.value)}
+                                className="w-20 text-sm text-right font-black text-slate-800 outline-none placeholder-slate-400"
+                                title="Unit Rate / Price"
+                              />
+                            </div>
+
+                            {/* TOTAL AMOUNT FOR THIS PRODUCT */}
+                            <div className="text-sm font-black text-slate-900 w-24 text-right">
+                              ₹{(((parseFloat(p.quantity || "0") || 0) * (p.rate || 0))).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+
+                            {/* REMOVE BUTTON */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProduct(treatment.id, idx)}
+                              className="text-rose-400 hover:text-rose-600 p-1.5 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Remove Product"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       ))}

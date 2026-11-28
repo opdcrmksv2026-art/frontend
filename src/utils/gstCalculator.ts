@@ -152,13 +152,26 @@ export function calculateGSTInvoice(
   const flatProducts: any[] = [];
 
   treatments.forEach((t, idx) => {
-    const tQty = parseFloat(t.quantity?.toString() || "1");
+    const tQty = parseFloat(t.quantity?.toString() || "1") || 1;
     if (t.products && t.products.length > 0) {
+      const treatmentPrice = parseFloat(t.price?.toString() || "0") || 0;
+      const totalExplicitProductSum = t.products.reduce((acc, p) => {
+        const q = parseFloat(p.quantity?.toString() || "1") || 1;
+        const r = parseFloat(p.rate?.toString() || "0") || 0;
+        return acc + (q * r);
+      }, 0);
+
       t.products.forEach((p) => {
-        const pQty = parseFloat(p.quantity?.toString() || "1");
-        const rate = p.rate !== undefined && p.rate !== null 
-          ? parseFloat(p.rate.toString()) 
-          : parseFloat(t.price?.toString() || "0") / pQty;
+        const pQty = parseFloat(p.quantity?.toString() || "1") || 1;
+        let rate = p.rate !== undefined && p.rate !== null && p.rate !== ""
+          ? (parseFloat(p.rate.toString()) || 0)
+          : 0;
+
+        // If product rates in this kit sum to 0, but the doctor typed an overall Treatment Price > 0,
+        // divide the treatment price among the products so the bill is never erroneously ₹0
+        if (totalExplicitProductSum === 0 && treatmentPrice > 0) {
+          rate = round2(treatmentPrice / t.products!.length / pQty);
+        }
 
         const amount = round2(pQty * rate);
         flatProducts.push({
