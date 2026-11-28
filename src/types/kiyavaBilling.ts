@@ -50,6 +50,7 @@ export interface CatalogItem {
   quantity?: number
   packing?: string
   opdSection?: string // e.g. 'SOLAN OPD SALE', 'SABATHU OPD SALE', 'COD SALE', 'ONLINE SALE', 'CENTRAL GODOWN'
+  sectionAllocations?: { section: string; quantity: number }[]
 }
 
 export interface InvoiceItemRow {

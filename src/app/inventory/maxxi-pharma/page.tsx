@@ -746,33 +746,37 @@ export default function MaxxiPharmaPage() {
       saveOpeningStock([...openingStock, newStockEntry])
     }
 
-    // Sync with Godown Section inventory logs so it is immediately reflected in that section
-    if (Number(item.quantity) > 0) {
-      try {
-        const storedLogs = JSON.parse(localStorage.getItem('maxxi_godown_movement_logs') || '[]')
-        const newLog = {
-          id: `log_init_${item.id || Date.now()}`,
-          date: new Date().toISOString().split('T')[0],
-          type: 'INWARD',
-          itemName: item.name.trim(),
-          hsnCode: item.hsnCode || '',
-          quantity: Number(item.quantity) || 0,
-          unit: item.defaultUnit || 'NOS',
-          rate: Number(item.defaultRate) || 0,
-          section: item.opdSection || 'SOLAN OPD SALE',
-          sourceDestination: 'Catalog Stock Allocation',
-          refNo: 'CATALOG_INIT',
-          remarks: `Stock allocated to ${item.opdSection || 'SOLAN OPD SALE'}`
+    // Sync with Godown Section inventory logs so it is immediately reflected in each section
+    try {
+      const storedLogs = JSON.parse(localStorage.getItem('maxxi_godown_movement_logs') || '[]')
+      const allocs = (item.sectionAllocations && item.sectionAllocations.length > 0)
+        ? item.sectionAllocations
+        : [{ section: item.opdSection || 'SOLAN OPD SALE', quantity: Number(item.quantity) || 0 }]
+
+      let updatedLogs = storedLogs.filter((l: any) =>
+        !(l.refNo === 'CATALOG_INIT' && l.itemName?.toLowerCase().trim() === item.name.toLowerCase().trim())
+      )
+
+      allocs.forEach((alloc, i) => {
+        if (Number(alloc.quantity) > 0) {
+          updatedLogs.unshift({
+            id: `log_init_${item.id || Date.now()}_${i}`,
+            date: new Date().toISOString().split('T')[0],
+            type: 'INWARD',
+            itemName: item.name.trim(),
+            hsnCode: item.hsnCode || '',
+            quantity: Number(alloc.quantity) || 0,
+            unit: item.defaultUnit || 'NOS',
+            rate: Number(item.defaultRate) || 0,
+            section: alloc.section || 'SOLAN OPD SALE',
+            sourceDestination: 'Catalog Stock Allocation',
+            refNo: 'CATALOG_INIT',
+            remarks: `Stock allocated to ${alloc.section || 'SOLAN OPD SALE'}`
+          })
         }
-        const existingIdx = storedLogs.findIndex((l: any) => l.refNo === 'CATALOG_INIT' && l.itemName?.toLowerCase().trim() === item.name.toLowerCase().trim() && l.section === (item.opdSection || 'SOLAN OPD SALE'))
-        if (existingIdx !== -1) {
-          storedLogs[existingIdx] = newLog
-        } else {
-          storedLogs.unshift(newLog)
-        }
-        localStorage.setItem('maxxi_godown_movement_logs', JSON.stringify(storedLogs))
-      } catch (_) {}
-    }
+      })
+      localStorage.setItem('maxxi_godown_movement_logs', JSON.stringify(updatedLogs))
+    } catch (_) {}
   }
 
   const handleDeleteCatalogItem = async (id: string) => {

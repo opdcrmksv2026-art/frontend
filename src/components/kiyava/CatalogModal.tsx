@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { CatalogItem } from '@/types/kiyavaBilling'
-import { X, Package, Save } from 'lucide-react'
+import { X, Package, Save, Plus, Trash2 } from 'lucide-react'
 
 interface CatalogModalProps {
   isOpen: boolean
@@ -21,15 +21,19 @@ export default function CatalogModal({
     id: '',
     name: '',
     hsnCode: '',
-    defaultUnit: 'kg',
+    defaultUnit: 'NOS',
     defaultRate: 0,
     defaultTaxRate: 5,
-    category: 'herb',
+    category: 'medicine',
     description: '',
     quantity: 0,
     packing: '',
     opdSection: 'SOLAN OPD SALE'
   })
+
+  const [sections, setSections] = useState<{ section: string; quantity: number }[]>([
+    { section: 'SOLAN OPD SALE', quantity: 0 }
+  ])
 
   useEffect(() => {
     if (initialData) {
@@ -37,31 +41,85 @@ export default function CatalogModal({
         ...initialData,
         opdSection: initialData.opdSection || 'SOLAN OPD SALE'
       })
+
+      // Check if existing section allocations are in initialData or in movement logs
+      let existingAllocs = initialData.sectionAllocations
+      if (!existingAllocs || existingAllocs.length === 0) {
+        try {
+          const logs = JSON.parse(localStorage.getItem('maxxi_godown_movement_logs') || '[]')
+          const itemLogs = logs.filter((l: any) => l.itemName?.toLowerCase().trim() === initialData.name?.toLowerCase().trim() && l.refNo === 'CATALOG_INIT')
+          if (itemLogs.length > 0) {
+            existingAllocs = itemLogs.map((l: any) => ({
+              section: l.section || 'SOLAN OPD SALE',
+              quantity: Number(l.quantity) || 0
+            }))
+          }
+        } catch (_) {}
+      }
+
+      if (existingAllocs && existingAllocs.length > 0) {
+        setSections(existingAllocs)
+      } else {
+        setSections([
+          { section: initialData.opdSection || 'SOLAN OPD SALE', quantity: Number(initialData.quantity) || 0 }
+        ])
+      }
     } else {
       setFormData({
         id: `cat_${Date.now()}`,
         name: '',
         hsnCode: '12119011',
-        defaultUnit: 'kg',
+        defaultUnit: 'NOS',
         defaultRate: 0,
         defaultTaxRate: 5,
-        category: 'herb',
+        category: 'medicine',
         description: '',
         quantity: 0,
         packing: '',
         opdSection: 'SOLAN OPD SALE'
       })
+      setSections([
+        { section: 'SOLAN OPD SALE', quantity: 0 }
+      ])
     }
   }, [initialData, isOpen])
 
   if (!isOpen) return null
 
+  const handleAddSection = () => {
+    const usedSections = sections.map(s => s.section)
+    const allOptions = ['SOLAN OPD SALE', 'SABATHU OPD SALE', 'COD SALE', 'ONLINE SALE', 'CENTRAL GODOWN']
+    const nextUnused = allOptions.find(o => !usedSections.includes(o)) || 'SABATHU OPD SALE'
+    setSections(prev => [...prev, { section: nextUnused, quantity: 0 }])
+  }
+
+  const handleRemoveSection = (index: number) => {
+    if (sections.length <= 1) return
+    setSections(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSectionChange = (index: number, field: 'section' | 'quantity', val: any) => {
+    setSections(prev => {
+      const copy = [...prev]
+      if (copy[index]) {
+        copy[index] = { ...copy[index], [field]: val }
+      }
+      return copy
+    })
+  }
+
+  const totalAllocatedQty = sections.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0)
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.name.trim()) return
+    const primarySection = sections[0]?.section || formData.opdSection || 'SOLAN OPD SALE'
     onSave({
       ...formData,
-      id: formData.id || `cat_${Date.now()}`
+      id: formData.id || `cat_${Date.now()}`,
+      opdSection: primarySection,
+      quantity: totalAllocatedQty,
+      sectionAllocations: sections
     })
     onClose()
   }
@@ -106,44 +164,72 @@ export default function CatalogModal({
             />
           </div>
 
-          {/* Section / Stock Allocation Selector & Qty */}
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-              <span>Section / Bill Source *</span>
-              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                Stock Allocation
-              </span>
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div className="sm:col-span-2">
-                <select
-                  value={formData.opdSection || 'SOLAN OPD SALE'}
-                  onChange={(e) => setFormData({ ...formData, opdSection: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
-                  <option value="SABATHU OPD SALE">SABATHU OPD SALE</option>
-                  <option value="COD SALE">COD SALE</option>
-                  <option value="ONLINE SALE">ONLINE SALE</option>
-                  <option value="CENTRAL GODOWN">CENTRAL GODOWN (Warehouse)</option>
-                </select>
-              </div>
-              <div className="sm:col-span-1">
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={formData.quantity === 0 ? '' : formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) || 0 })}
-                    placeholder="Qty"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-800 outline-none focus:border-amber-500 text-center"
-                  />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase pointer-events-none">
-                    {formData.defaultUnit || 'NOS'}
-                  </span>
+          {/* Multi-Section Stock Allocation */}
+          <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <span>Section / Godown Allocation *</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleAddSection}
+                className="text-[11px] font-bold text-amber-800 hover:text-amber-900 bg-amber-100 hover:bg-amber-200/80 px-2.5 py-1 rounded-lg border border-amber-300 flex items-center gap-1 transition-all cursor-pointer active:scale-95 shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Section
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {sections.map((alloc, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <select
+                    value={alloc.section}
+                    onChange={(e) => handleSectionChange(idx, 'section', e.target.value)}
+                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-amber-500 cursor-pointer shadow-xs"
+                  >
+                    <option value="SOLAN OPD SALE">SOLAN OPD SALE</option>
+                    <option value="SABATHU OPD SALE">SABATHU OPD SALE</option>
+                    <option value="COD SALE">COD SALE</option>
+                    <option value="ONLINE SALE">ONLINE SALE</option>
+                    <option value="CENTRAL GODOWN">CENTRAL GODOWN (Warehouse)</option>
+                  </select>
+
+                  <div className="relative w-28 shrink-0">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={alloc.quantity === 0 ? '' : alloc.quantity}
+                      onChange={(e) => handleSectionChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                      placeholder="Qty"
+                      className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 outline-none focus:border-amber-500 text-center shadow-xs"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase pointer-events-none">
+                      {formData.defaultUnit || 'NOS'}
+                    </span>
+                  </div>
+
+                  {sections.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSection(idx)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                      title="Remove section"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
-              </div>
+              ))}
+            </div>
+
+            {/* Total Quantity Indicator */}
+            <div className="flex items-center justify-between pt-2 border-t border-amber-200/70 text-xs">
+              <span className="font-bold text-slate-600">Total Stock (All Sections):</span>
+              <span className="font-mono font-black text-amber-900 bg-amber-100/90 border border-amber-300/80 px-2.5 py-0.5 rounded-md text-sm">
+                {totalAllocatedQty} {formData.defaultUnit || 'NOS'}
+              </span>
             </div>
           </div>
 
