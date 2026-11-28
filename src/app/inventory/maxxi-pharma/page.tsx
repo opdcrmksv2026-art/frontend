@@ -202,6 +202,40 @@ export default function MaxxiPharmaPage() {
         const id = (item.id || '').toLowerCase().trim()
         return !deletedCatalog.has(id)
       })
+
+      // Self-heal multi-section items recorded in movement logs (e.g. Stonvaidha KSG-80 with 3 in Solan, 3 in Sabathu, 3 in COD)
+      try {
+        const storedLogs = JSON.parse(localStorage.getItem('maxxi_godown_movement_logs') || '[]')
+        const initLogs = storedLogs.filter((l: any) => l.refNo === 'CATALOG_INIT')
+        if (initLogs.length > 0) {
+          const groupByName = new Map<string, any[]>()
+          initLogs.forEach((l: any) => {
+            const k = (l.itemName || '').trim().toLowerCase()
+            if (!k) return
+            const arr = groupByName.get(k) || []
+            arr.push(l)
+            groupByName.set(k, arr)
+          })
+
+          groupByName.forEach((logs, nameKey) => {
+            if (logs.length > 1) {
+              const base = parsedCatalog.find(c => (c.name || '').trim().toLowerCase() === nameKey)
+              if (base) {
+                parsedCatalog = parsedCatalog.filter(c => (c.name || '').trim().toLowerCase() !== nameKey)
+                logs.forEach((l, i) => {
+                  parsedCatalog.push({
+                    ...base,
+                    id: `${base.id}_${l.section || i}`,
+                    opdSection: l.section || 'SOLAN OPD SALE',
+                    quantity: Number(l.quantity) || 0
+                  })
+                })
+              }
+            }
+          })
+        }
+      } catch (_) {}
+
       setCatalog(parsedCatalog)
 
       // Automatic dummy invoices purge - Strip out any test/seeded invoices
@@ -247,20 +281,24 @@ export default function MaxxiPharmaPage() {
               const seenDb = new Set<string>()
               const cleanCatalog: CatalogItem[] = []
               for (const item of dbCatalog) {
-                const key = (item.name || '').trim().toLowerCase()
+                const nameKey = (item.name || '').trim().toLowerCase()
+                const secKey = (item.opdSection || 'SOLAN OPD SALE').trim().toUpperCase()
+                const compositeKey = `${nameKey}:::${secKey}`
                 const id = (item.id || '').toLowerCase().trim()
-                if (!key || seenDb.has(key) || deletedCatalog.has(id) || deletedCatalog.has(key)) continue
-                seenDb.add(key)
-                cleanCatalog.push({ ...item, name: item.name.trim() })
+                if (!nameKey || seenDb.has(compositeKey) || deletedCatalog.has(id) || deletedCatalog.has(nameKey)) continue
+                seenDb.add(compositeKey)
+                cleanCatalog.push({ ...item, name: item.name.trim(), opdSection: secKey })
               }
               // Preserve locally added products so they are never lost on page refresh
               const currentLocal: CatalogItem[] = JSON.parse(localStorage.getItem('maxxi_app_catalog') || '[]')
               const unsyncedItems: CatalogItem[] = []
               for (const loc of currentLocal) {
-                const locKey = (loc.name || '').trim().toLowerCase()
+                const locName = (loc.name || '').trim().toLowerCase()
+                const locSec = (loc.opdSection || 'SOLAN OPD SALE').trim().toUpperCase()
+                const locComposite = `${locName}:::${locSec}`
                 const locId = (loc.id || '').toLowerCase().trim()
-                if (locKey && !seenDb.has(locKey) && !deletedCatalog.has(locId) && !deletedCatalog.has(locKey)) {
-                  seenDb.add(locKey)
+                if (locName && !seenDb.has(locComposite) && !deletedCatalog.has(locId) && !deletedCatalog.has(locName)) {
+                  seenDb.add(locComposite)
                   cleanCatalog.push(loc)
                   unsyncedItems.push(loc)
                 }
@@ -652,109 +690,85 @@ export default function MaxxiPharmaPage() {
   // Catalog Handlers - Integrated with Database (MongoDB) and LocalStorage
   const handleSaveCatalogItem = async (item: CatalogItem) => {
     const isEditing = Boolean(editingCatalogItem && editingCatalogItem.id)
-    const originalId = editingCatalogItem?.id || item.id
+    const cleanTarget = (item.name || '').trim().toLowerCase()
 
-    // 1. Optimistic Update in State & LocalStorage
-    let updated: CatalogItem[]
-    if (isEditing) {
-      updated = catalog.map((cat) => (cat.id === originalId ? item : cat))
-    } else {
-      updated = [...catalog, { ...item, id: item.id || `cat_${Date.now()}` }]
-    }
-    saveCatalog(updated)
+    const allocs = (item.sectionAllocations && item.sectionAllocations.length > 0)
+      ? item.sectionAllocations
+      : [{ section: item.opdSection || 'SOLAN OPD SALE', quantity: Number(item.quantity) || 0 }]
+
+    // 1. Remove all old section entries for this item name so new allocations take over cleanly
+    const otherItems = catalog.filter((c) => (c.name || '').trim().toLowerCase() !== cleanTarget)
+
+    const sectionItems: CatalogItem[] = allocs.map((alloc, idx) => ({
+      ...item,
+      id: isEditing && idx === 0 && editingCatalogItem?.id ? editingCatalogItem.id : `cat_${Date.now()}_${idx}`,
+      name: item.name.trim(),
+      opdSection: alloc.section || 'SOLAN OPD SALE',
+      quantity: Number(alloc.quantity) || 0,
+      sectionAllocations: allocs
+    }))
+
+    const updatedCatalog = [...otherItems, ...sectionItems]
+    saveCatalog(updatedCatalog)
 
     try {
       const deleted = JSON.parse(localStorage.getItem('maxxi_deleted_catalog') || '[]')
-      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name && d !== (item.name || '').toLowerCase().trim())
+      const filtered = deleted.filter((d: string) => d !== item.id && d !== item.name && d !== cleanTarget)
       localStorage.setItem('maxxi_deleted_catalog', JSON.stringify(filtered))
     } catch (e) {}
 
     setIsCatalogModalOpen(false)
     setEditingCatalogItem(null)
 
-    // 2. Persist to Backend Database (MongoDB via Prisma)
+    // 2. Persist to Backend Database (MongoDB via Prisma) for each section
     try {
-      const payload = {
-        name: item.name.trim(),
-        hsnCode: item.hsnCode || '',
-        defaultUnit: item.defaultUnit || 'NOS',
-        defaultRate: Number(item.defaultRate) || 0,
-        defaultTaxRate: Number(item.defaultTaxRate) || 0,
-        description: item.description || '',
-        category: item.category || 'medicine',
-        quantity: Number(item.quantity) || 0,
-        opdSection: item.opdSection || 'SOLAN OPD SALE',
-        packing: item.packing || ''
-      }
-
-      if (isEditing && originalId) {
-        // Update in DB
-        const res = await fetch(`${API_URL}/api/maxxi/catalog/${originalId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-        if (res.ok) {
-          const savedData = await res.json()
-          setCatalog((prev) =>
-            prev.map((c) => (c.id === originalId ? { ...c, ...savedData, id: savedData.id || originalId } : c))
-          )
+      for (const secItem of sectionItems) {
+        const payload = {
+          name: secItem.name.trim(),
+          hsnCode: secItem.hsnCode || '',
+          defaultUnit: secItem.defaultUnit || 'NOS',
+          defaultRate: Number(secItem.defaultRate) || 0,
+          defaultTaxRate: Number(secItem.defaultTaxRate) || 0,
+          description: secItem.description || '',
+          category: secItem.category || 'medicine',
+          quantity: Number(secItem.quantity) || 0,
+          opdSection: secItem.opdSection || 'SOLAN OPD SALE',
+          packing: secItem.packing || ''
         }
-      } else {
-        // Create in DB
-        const res = await fetch(`${API_URL}/api/maxxi/catalog`, {
+
+        fetch(`${API_URL}/api/maxxi/catalog`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
-        })
-        if (res.ok) {
-          const savedData = await res.json()
-          if (savedData && savedData.id) {
-            // Replace temporary ID with MongoDB ObjectID
-            const finalList = updated.map((c) =>
-              c.name.trim().toLowerCase() === item.name.trim().toLowerCase() && (!c.id || c.id.startsWith('cat_')) ? { ...item, id: savedData.id } : c
-            )
-            saveCatalog(finalList)
-          }
-        }
+        }).catch(() => {})
       }
     } catch (err) {
       console.warn('Backend database sync offline, product saved locally:', err)
     }
 
-    // Sync with Opening Stock
-    const isStockMatch = (s: OpeningStockEntry) =>
-      s.itemId === item.id ||
-      (s.itemName && item.name && s.itemName.trim().toLowerCase() === item.name.trim().toLowerCase())
-    const existingStock = openingStock.find(isStockMatch)
-    if (existingStock) {
-      const updatedStock = openingStock.map((s) =>
-        isStockMatch(s)
-          ? { ...s, itemId: item.id, quantity: Number(item.quantity) || 0, itemName: item.name, unit: item.defaultUnit }
-          : s
-      )
-      saveOpeningStock(updatedStock)
-    } else if (item.quantity) {
-      const newStockEntry: OpeningStockEntry = {
-        id: `os_${Date.now()}`,
-        itemId: item.id,
-        itemName: item.name,
-        date: new Date().toISOString().split('T')[0],
-        unit: item.defaultUnit,
-        quantity: Number(item.quantity) || 0
-      }
-      saveOpeningStock([...openingStock, newStockEntry])
-    }
+    // 3. Sync with Opening Stock
+    try {
+      let stockList = [...openingStock].filter(s => (s.itemName || '').trim().toLowerCase() !== cleanTarget)
+      sectionItems.forEach((secItem) => {
+        if (Number(secItem.quantity) > 0) {
+          stockList.push({
+            id: `os_${Date.now()}_${secItem.opdSection}`,
+            itemId: secItem.id,
+            itemName: `${secItem.name} (${secItem.opdSection})`,
+            date: new Date().toISOString().split('T')[0],
+            unit: secItem.defaultUnit,
+            quantity: Number(secItem.quantity) || 0
+          })
+        }
+      })
+      saveOpeningStock(stockList)
+    } catch (_) {}
 
-    // Sync with Godown Section inventory logs so it is immediately reflected in each section
+    // 4. Sync with Godown Section inventory logs so it is immediately reflected in each section
     try {
       const storedLogs = JSON.parse(localStorage.getItem('maxxi_godown_movement_logs') || '[]')
-      const allocs = (item.sectionAllocations && item.sectionAllocations.length > 0)
-        ? item.sectionAllocations
-        : [{ section: item.opdSection || 'SOLAN OPD SALE', quantity: Number(item.quantity) || 0 }]
-
       let updatedLogs = storedLogs.filter((l: any) =>
-        !(l.refNo === 'CATALOG_INIT' && l.itemName?.toLowerCase().trim() === item.name.toLowerCase().trim())
+        !(l.refNo === 'CATALOG_INIT' && (l.itemName || '').trim().toLowerCase() === cleanTarget)
       )
 
       allocs.forEach((alloc, i) => {
@@ -1747,6 +1761,7 @@ export default function MaxxiPharmaPage() {
         onClose={() => setIsCatalogModalOpen(false)}
         onSave={handleSaveCatalogItem}
         initialData={editingCatalogItem}
+        catalog={catalog}
       />
 
       <OpeningStockModal

@@ -9,13 +9,15 @@ interface CatalogModalProps {
   onClose: () => void
   onSave: (item: CatalogItem) => void
   initialData?: CatalogItem | null
+  catalog?: CatalogItem[]
 }
 
 export default function CatalogModal({
   isOpen,
   onClose,
   onSave,
-  initialData
+  initialData,
+  catalog
 }: CatalogModalProps) {
   const [formData, setFormData] = useState<CatalogItem>({
     id: '',
@@ -42,12 +44,23 @@ export default function CatalogModal({
         opdSection: initialData.opdSection || 'SOLAN OPD SALE'
       })
 
-      // Check if existing section allocations are in initialData or in movement logs
-      let existingAllocs = initialData.sectionAllocations
-      if (!existingAllocs || existingAllocs.length === 0) {
+      const cleanTarget = (initialData.name || '').trim().toLowerCase()
+      const matchingInCatalog = (catalog || []).filter(
+        c => (c.name || '').trim().toLowerCase() === cleanTarget && Number(c.quantity || 0) > 0
+      )
+
+      let existingAllocs: { section: string; quantity: number }[] = []
+      if (matchingInCatalog.length > 1) {
+        existingAllocs = matchingInCatalog.map(c => ({
+          section: c.opdSection || 'SOLAN OPD SALE',
+          quantity: Number(c.quantity) || 0
+        }))
+      } else if (initialData.sectionAllocations && initialData.sectionAllocations.length > 0) {
+        existingAllocs = initialData.sectionAllocations
+      } else {
         try {
           const logs = JSON.parse(localStorage.getItem('maxxi_godown_movement_logs') || '[]')
-          const itemLogs = logs.filter((l: any) => l.itemName?.toLowerCase().trim() === initialData.name?.toLowerCase().trim() && l.refNo === 'CATALOG_INIT')
+          const itemLogs = logs.filter((l: any) => l.itemName?.toLowerCase().trim() === cleanTarget && l.refNo === 'CATALOG_INIT')
           if (itemLogs.length > 0) {
             existingAllocs = itemLogs.map((l: any) => ({
               section: l.section || 'SOLAN OPD SALE',
@@ -57,7 +70,7 @@ export default function CatalogModal({
         } catch (_) {}
       }
 
-      if (existingAllocs && existingAllocs.length > 0) {
+      if (existingAllocs.length > 0) {
         setSections(existingAllocs)
       } else {
         setSections([
