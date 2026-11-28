@@ -890,16 +890,49 @@ export default function CreateInvoicePage() {
                 return cClean === pClean || (cClean && pClean && (cClean.includes(pClean) || pClean.includes(cClean)));
               });
               if (index !== -1) {
-                const currentQty = updatedCatalog[index].quantity || 0;
+                const currentQty = Number(updatedCatalog[index].quantity) || 0;
+                const newQty = Math.max(0, currentQty - qtyToDeduct);
                 updatedCatalog[index] = {
                   ...updatedCatalog[index],
-                  quantity: currentQty - qtyToDeduct
+                  quantity: newQty
                 }
+
+                // Persist updated deducted quantity to MongoDB backend for both Maxxi and KSV catalogs
+                const catalogPayload = {
+                  name: updatedCatalog[index].name,
+                  hsnCode: updatedCatalog[index].hsnCode,
+                  defaultUnit: updatedCatalog[index].defaultUnit || 'NOS',
+                  defaultRate: updatedCatalog[index].defaultRate,
+                  defaultTaxRate: updatedCatalog[index].defaultTaxRate,
+                  description: updatedCatalog[index].description,
+                  category: updatedCatalog[index].category || 'medicine',
+                  quantity: newQty,
+                  packing: updatedCatalog[index].packing,
+                  opdSection: p.godownSection || t.section || formData.opdSection || 'SOLAN OPD SALE'
+                };
+                fetch(`${API_URL}/api/maxxi/catalog`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(catalogPayload)
+                }).catch(() => {});
+                fetch(`${API_URL}/api/ksv/catalog`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(catalogPayload)
+                }).catch(() => {});
               }
             })
           }
         })
         localStorage.setItem("maxxi_app_catalog", JSON.stringify(updatedCatalog))
+        try {
+          const ksvCat = JSON.parse(localStorage.getItem("ksv_app_catalog") || "[]")
+          const updatedKsv = ksvCat.map((c: any) => {
+            const match = updatedCatalog.find((uc: any) => uc.name?.toLowerCase().trim() === c.name?.toLowerCase().trim())
+            return match ? { ...c, quantity: match.quantity } : c
+          })
+          localStorage.setItem("ksv_app_catalog", JSON.stringify(updatedKsv))
+        } catch (_) {}
 
         // Also record this clinic sale in Maxxi Pharma invoices so Live Stock Register updates in real-time
         try {
@@ -935,6 +968,13 @@ export default function CreateInvoicePage() {
             }
             maxxiInvoices.unshift(maxxiInv)
             localStorage.setItem("maxxi_app_invoices", JSON.stringify(maxxiInvoices))
+
+            // Sync clinic sale invoice directly to MongoDB backend
+            fetch(`${API_URL}/api/maxxi/invoices`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(maxxiInv)
+            }).catch(e => console.warn("Failed to sync sale invoice to backend:", e))
           }
 
           // Record outward godown movement logs per medicine and section so godown register stays in sync

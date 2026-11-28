@@ -3,7 +3,8 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import {
   CatalogItem,
-  CompanyProfile
+  CompanyProfile,
+  KiyavaInvoice
 } from '@/types/kiyavaBilling'
 import {
   Warehouse,
@@ -60,6 +61,7 @@ export const GODOWN_SECTIONS = [
 interface MaxxiGodownTabProps {
   catalog: CatalogItem[]
   companies: CompanyProfile[]
+  invoices?: KiyavaInvoice[]
   onUpdateCatalogItem: (updatedItem: CatalogItem) => void
   onDeleteCatalogItem?: (id: string) => void
   onClearAllCatalog?: () => void
@@ -68,6 +70,7 @@ interface MaxxiGodownTabProps {
 export default function MaxxiGodownTab({
   catalog,
   companies,
+  invoices = [],
   onUpdateCatalogItem,
   onDeleteCatalogItem,
   onClearAllCatalog
@@ -114,33 +117,59 @@ export default function MaxxiGodownTab({
     setMovementLogs(newLogs)
     try {
       localStorage.setItem('maxxi_godown_movement_logs', JSON.stringify(newLogs))
-    } catch (e) {}
+    } catch (e) { }
   }
 
-  // Section-specific inventory derived from Catalog and Movement Logs
+  // Section-specific inventory derived from Invoices, Movement Logs, and Catalog
   const uniqueCatalog = useMemo(() => {
-    // 1. Calculate net stock per item per section from movement logs
-    const logStockMap = new Map<string, { qty: number; hsn?: string; unit?: string }>()
+    // 1. Calculate net stock per item per section from invoices AND movement logs
+    const logStockMap = new Map<string, { qty: number; hsn?: string; unit?: string; defaultRate?: number }>();
+
+    // A. Calculate Inward and Outward directly from invoices per godown section
+    (invoices || []).forEach((inv: KiyavaInvoice) => {
+      const isPurchase = (inv.type || 'SALE').toUpperCase() === 'PURCHASE'
+      const isSale = (inv.type || 'SALE').toUpperCase() === 'SALE'
+      if (!isPurchase && !isSale) return
+
+      (inv.items || []).forEach((row: any) => {
+        const nameKey = (row.description || row.name || '').trim().toLowerCase()
+        const secKey = row.godownSection || (inv as any).targetGodown || 'SOLAN OPD SALE'
+        if (!nameKey) return
+        const compositeKey = `${nameKey}:::${secKey}`
+        const existing = logStockMap.get(compositeKey) || { qty: 0, hsn: row.hsnSac || row.hsnCode, unit: row.unit, defaultRate: Number(row.rate) || 0 }
+        const change = isPurchase ? (Number(row.quantity) || 0) : -(Number(row.quantity) || 0)
+        logStockMap.set(compositeKey, {
+          qty: existing.qty + change,
+          hsn: row.hsnSac || row.hsnCode || existing.hsn,
+          unit: row.unit || existing.unit,
+          defaultRate: existing.defaultRate || Number(row.rate) || 0
+        })
+      })
+    })
+
+    // B. Calculate from manual movement logs (prevent double counting with invoices that have matching referenceNo)
     movementLogs.forEach((log) => {
+      if (log.referenceNo && (invoices || []).some(inv => inv.invoiceNo === log.referenceNo)) return
+
       const nameKey = (log.itemName || '').trim().toLowerCase()
       const secKey = log.section || 'SOLAN OPD SALE'
       if (!nameKey) return
       const compositeKey = `${nameKey}:::${secKey}`
       const existing = logStockMap.get(compositeKey) || { qty: 0, hsn: log.hsnCode, unit: log.unit }
-      const change = log.type === 'INWARD' ? Number(log.quantity) || 0 : -(Number(log.quantity) || 0)
+      const change = log.type === 'INWARD' ? (Number(log.quantity) || 0) : -(Number(log.quantity) || 0)
       logStockMap.set(compositeKey, {
         qty: existing.qty + change,
         hsn: log.hsnCode || existing.hsn,
-        unit: log.unit || existing.unit
+        unit: log.unit || existing.unit,
+        defaultRate: existing.defaultRate
       })
     })
 
     const result: CatalogItem[] = []
     const processedComposite = new Set<string>()
 
-    // 2. Add entries from Movement Logs with positive stock
-    logStockMap.forEach((data, compositeKey) => {
-      if (data.qty <= 0) return
+    // 2. Add entries from Movement Logs & Invoices
+    logStockMap.forEach((data: any, compositeKey: string) => {
       const [nameKey, secKey] = compositeKey.split(':::')
       processedComposite.add(compositeKey)
 
@@ -150,7 +179,7 @@ export default function MaxxiGodownTab({
         name: master?.name || nameKey.toUpperCase(),
         hsnCode: master?.hsnCode || data.hsn || '',
         defaultUnit: master?.defaultUnit || data.unit || 'NOS',
-        defaultRate: master?.defaultRate || 0,
+        defaultRate: master?.defaultRate || data.defaultRate || 0,
         defaultTaxRate: master?.defaultTaxRate || 5,
         category: master?.category || 'medicine',
         description: master?.description || '',
@@ -160,7 +189,7 @@ export default function MaxxiGodownTab({
       })
     })
 
-    // 3. Also include items from Catalog that have an explicit opdSection and stock > 0
+    // 3. Also include items from Catalog that have an explicit opdSection
     for (const it of catalog) {
       const nameKey = (it.name || '').trim().toLowerCase()
       const secKey = it.opdSection
@@ -168,19 +197,17 @@ export default function MaxxiGodownTab({
       const compositeKey = `${nameKey}:::${secKey}`
       if (processedComposite.has(compositeKey)) continue
 
-      const qty = Number(it.quantity || 0)
-      if (qty <= 0) continue
-
       processedComposite.add(compositeKey)
       result.push({
         ...it,
         name: it.name.trim(),
+        quantity: Math.max(0, Number(it.quantity || 0)),
         opdSection: secKey
       })
     }
 
     return result
-  }, [catalog, movementLogs])
+  }, [catalog, movementLogs, invoices])
 
   // Section Counts
   const sectionCounts = useMemo(() => {
@@ -476,18 +503,16 @@ export default function MaxxiGodownTab({
               <button
                 key={sec.id}
                 onClick={() => setActiveSection(sec.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
-                  isActive
-                    ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${isActive
+                  ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
               >
                 <span className="text-sm">{sec.icon}</span>
                 <span>{sec.label}</span>
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-                  }`}
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                    }`}
                 >
                   {count}
                 </span>
@@ -581,22 +606,20 @@ export default function MaxxiGodownTab({
         <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
           <button
             onClick={() => setViewMode('REGISTER')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              viewMode === 'REGISTER'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${viewMode === 'REGISTER'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+              }`}
           >
             <Boxes className="w-3.5 h-3.5 text-emerald-600" />
             Stock Register ({filteredCatalog.length})
           </button>
           <button
             onClick={() => setViewMode('LOGS')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              viewMode === 'LOGS'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${viewMode === 'LOGS'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+              }`}
           >
             <Clock className="w-3.5 h-3.5 text-indigo-600" />
             Movement History Logs ({filteredLogs.length})
@@ -722,8 +745,8 @@ export default function MaxxiGodownTab({
                               isOut
                                 ? 'text-rose-600'
                                 : isLow
-                                ? 'text-amber-600'
-                                : 'text-emerald-700'
+                                  ? 'text-amber-600'
+                                  : 'text-emerald-700'
                             }
                           >
                             {qty.toLocaleString('en-IN', { maximumFractionDigits: 1 })}{' '}
@@ -871,11 +894,10 @@ export default function MaxxiGodownTab({
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div
-              className={`p-5 text-white flex items-center justify-between ${
-                modalType === 'INWARD'
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-700'
-                  : 'bg-gradient-to-r from-rose-600 to-pink-700'
-              }`}
+              className={`p-5 text-white flex items-center justify-between ${modalType === 'INWARD'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-700'
+                : 'bg-gradient-to-r from-rose-600 to-pink-700'
+                }`}
             >
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -1042,9 +1064,8 @@ export default function MaxxiGodownTab({
                   <span className="text-slate-400">➔</span>
                   <span className="text-slate-500">New Expected Stock:</span>
                   <span
-                    className={`font-mono font-bold ${
-                      modalType === 'INWARD' ? 'text-emerald-700' : 'text-rose-700'
-                    }`}
+                    className={`font-mono font-bold ${modalType === 'INWARD' ? 'text-emerald-700' : 'text-rose-700'
+                      }`}
                   >
                     {modalType === 'INWARD'
                       ? Number(selectedItemForAction.quantity || 0) + (parseFloat(String(formQuantity)) || 0)
@@ -1066,18 +1087,17 @@ export default function MaxxiGodownTab({
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`px-5 py-2 font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer text-white ${
-                    modalType === 'INWARD'
-                      ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-95'
-                      : 'bg-rose-600 hover:bg-rose-500 active:scale-95'
-                  }`}
+                  className={`px-5 py-2 font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer text-white ${modalType === 'INWARD'
+                    ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-95'
+                    : 'bg-rose-600 hover:bg-rose-500 active:scale-95'
+                    }`}
                 >
                   <Save className="w-4 h-4" />
                   {isSubmitting
                     ? 'Saving...'
                     : modalType === 'INWARD'
-                    ? 'Save Inward (+)'
-                    : 'Save Dispatch (-)'}
+                      ? 'Save Inward (+)'
+                      : 'Save Dispatch (-)'}
                 </button>
               </div>
             </form>

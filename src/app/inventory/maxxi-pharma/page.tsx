@@ -1666,6 +1666,7 @@ export default function MaxxiPharmaPage() {
         <MaxxiGodownTab
           catalog={catalog}
           companies={companies}
+          invoices={invoices}
           onUpdateCatalogItem={(updatedItem) => {
             const cleanStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim()
             const targetClean = cleanStr(updatedItem.name)
